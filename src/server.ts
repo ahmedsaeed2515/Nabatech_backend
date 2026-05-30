@@ -20,4 +20,4 @@ const startServer = async () => {
   }
 };
 
-startServer();
+startServer(); // Trigger dev server reload to connect to MongoDB
