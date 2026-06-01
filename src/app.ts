@@ -11,6 +11,11 @@ import communityRouter from "./routers/community_router";
 import exploreRouter from "./routers/explore_router";
 import diagnosisRouter from "./routers/diagnosis_router";
 import historyRouter from "./routers/history_router";
+import plantLibraryRouter from "./routers/plant_library_router";
+import homeToolsRouter from "./routers/home_tools_router";
+import aiModelsRouter from "./routers/ai_models_router";
+import aiSettingsRouter from "./routers/ai_settings_router";
+import aiAssistantRouter from "./routers/ai_assistant_router";
 import { protect } from "./middlewares/auth_middleware";
 const app = express();
 import swaggerUi from 'swagger-ui-express';
@@ -32,12 +37,20 @@ app.use("/api/community", communityRouter);
 app.use("/api/explore", exploreRouter);
 app.use("/api/diagnosis", diagnosisRouter);
 app.use("/api/history", historyRouter);
+app.use("/api/plant-library", plantLibraryRouter);
+app.use("/api/home-tools", homeToolsRouter);
+app.use("/api/ai-models", aiModelsRouter);
+app.use("/api/admin/ai-settings", aiSettingsRouter);
+app.use("/api/ai", aiAssistantRouter);
 app.get("/", (req: Request, res: Response) => {
-  res.send("Express + TypeScript is working ");
+  res.status(200).json({ success: true, data: { message: "Express + TypeScript is working" } });
 });
 
 app.get("/profile", protect , (req: Request, res: Response) => {
-  res.send(`Hello user with ID: ${(req as any).user.id}`);
+  res.status(200).json({
+    success: true,
+    data: { message: `Hello user with ID: ${(req as any).user.id}` }
+  });
 });
 export default app;
 

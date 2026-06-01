@@ -1,46 +1,57 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import { MongoMemoryServer } from "mongodb-memory-server";
 
-// Load default env variables
 dotenv.config();
 
-// Override for testing
-process.env.MONGO_URI = "mongodb://127.0.0.1:27018/nabatech_test";
-process.env.JWT_SECRET = "testsecretjwtkey12345!";
+process.env.MONGODB_URI_TEST =
+  process.env.MONGODB_URI_TEST ||
+  process.env.MONGODB_URI ||
+  process.env.MONGO_URI ||
+  "mongodb://127.0.0.1:27017/nabatech_test";
+process.env.MONGO_URI = process.env.MONGODB_URI_TEST;
+process.env.JWT_SECRET = process.env.JWT_SECRET || "testsecretjwtkey12345!";
+
+let connectPromise: Promise<typeof mongoose> | null = null;
+let memoryServer: MongoMemoryServer | null = null;
 
 export const connectTestDB = async () => {
-  try {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.MONGO_URI as string);
-    }
-  } catch (error) {
-    console.error("Test DB Connection Error:", error);
-    throw error;
+  if (mongoose.connection.readyState === 1) return;
+  if (!memoryServer) {
+    memoryServer = await MongoMemoryServer.create({
+      instance: {
+        dbName: "nabatech_test",
+        launchTimeout: 60000
+      }
+    });
+    process.env.MONGODB_URI_TEST = memoryServer.getUri();
+    process.env.MONGO_URI = process.env.MONGODB_URI_TEST;
   }
+  if (!connectPromise) {
+    connectPromise = mongoose.connect(process.env.MONGODB_URI_TEST as string, {
+      serverSelectionTimeoutMS: 5000
+    });
+  }
+  await connectPromise;
 };
 
 export const disconnectTestDB = async () => {
-  try {
-    // Drop test database to clean up completely after all tests
-    if (mongoose.connection.readyState !== 0) {
-      await mongoose.connection.db?.dropDatabase();
-      await mongoose.connection.close();
-    }
-  } catch (error) {
-    console.error("Test DB Disconnect Error:", error);
+  if (mongoose.connection.readyState === 1) {
+    await mongoose.connection.db?.dropDatabase();
+    await mongoose.connection.close();
   }
+  if (memoryServer) {
+    await memoryServer.stop();
+    memoryServer = null;
+  }
+  connectPromise = null;
 };
 
 export const clearTestDB = async () => {
-  try {
-    if (mongoose.connection.readyState !== 0) {
-      const collections = mongoose.connection.collections;
-      for (const key in collections) {
-        const collection = collections[key];
-        await collection.deleteMany({});
-      }
+  if (mongoose.connection.readyState === 1) {
+    const collections = mongoose.connection.collections;
+    for (const key in collections) {
+      await collections[key].deleteMany({});
     }
-  } catch (error) {
-    console.error("Test DB Clear Error:", error);
   }
 };

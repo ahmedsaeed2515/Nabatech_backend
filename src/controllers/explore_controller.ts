@@ -49,17 +49,20 @@ export const getStoreProducts = async (req: Request, res: Response) => {
       products = await StoreProduct.find();
     }
 
-    res.status(200).json(products.map(p => ({
-      id: p._id,
-      name: p.name,
-      category: p.category,
-      price: p.price,
-      rating: p.rating,
-      subtitle: p.subtitle,
-      imageUrl: p.imageUrl || ""
-    })));
+    res.status(200).json({
+      success: true,
+      data: products.map(p => ({
+        id: p._id,
+        name: p.name,
+        category: p.category,
+        price: p.price,
+        rating: p.rating,
+        subtitle: p.subtitle,
+        imageUrl: p.imageUrl || ""
+      }))
+    });
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch store products", error });
+    res.status(500).json({ success: false, message: "Failed to fetch store products", error });
   }
 };
 
@@ -101,16 +104,20 @@ export const getExperts = async (req: Request, res: Response) => {
       experts = await Expert.find();
     }
 
-    res.status(200).json(experts.map(e => ({
-      name: e.name,
-      specialty: e.specialty,
-      rating: e.rating,
-      sessions: e.sessions,
-      fee: e.fee,
-      online: e.online,
-    })));
+    res.status(200).json({
+      success: true,
+      data: experts.map(e => ({
+        id: e._id,
+        name: e.name,
+        specialty: e.specialty,
+        rating: e.rating,
+        sessions: e.sessions,
+        fee: e.fee,
+        online: e.online,
+      }))
+    });
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch experts", error });
+    res.status(500).json({ success: false, message: "Failed to fetch experts", error });
   }
 };
 
@@ -158,19 +165,22 @@ export const getOutbreaks = async (req: Request, res: Response) => {
       spots = await OutbreakSpot.find();
     }
 
-    res.status(200).json(spots.map(s => ({
-      id: s._id,
-      region: s.region,
-      disease: s.disease,
-      severity: s.severity,
-      cases: s.cases,
-      trendPercent: s.trendPercent,
-      mapX: s.mapX,
-      mapY: s.mapY,
-      colorHex: s.colorHex,
-    })));
+    res.status(200).json({
+      success: true,
+      data: spots.map(s => ({
+        id: s._id,
+        region: s.region,
+        disease: s.disease,
+        severity: s.severity,
+        cases: s.cases,
+        trendPercent: s.trendPercent,
+        mapX: s.mapX,
+        mapY: s.mapY,
+        colorHex: s.colorHex,
+      }))
+    });
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch outbreaks", error });
+    res.status(500).json({ success: false, message: "Failed to fetch outbreaks", error });
   }
 };
 
@@ -181,7 +191,7 @@ export const createStoreProduct = async (req: Request, res: Response) => {
   try {
     const { name, category, price, subtitle, imageUrl } = req.body;
     if (!name || !category || price === undefined || !subtitle) {
-      return res.status(400).json({ message: "Please fill in all required fields (name, category, price, subtitle)" });
+      return res.status(400).json({ success: false, message: "Please fill in all required fields (name, category, price, subtitle)" });
     }
     const product = await StoreProduct.create({
       name,
@@ -203,7 +213,7 @@ export const createStoreProduct = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ message: "Failed to create store product", error });
+    res.status(500).json({ success: false, message: "Failed to create store product", error });
   }
 };
 
@@ -214,7 +224,7 @@ export const deleteStoreProduct = async (req: Request, res: Response) => {
   try {
     const product = await StoreProduct.findById(req.params.id);
     if (!product) {
-      return res.status(404).json({ message: "Product not found" });
+      return res.status(404).json({ success: false, message: "Product not found" });
     }
     await StoreProduct.findByIdAndDelete(req.params.id);
     res.status(200).json({
@@ -222,7 +232,7 @@ export const deleteStoreProduct = async (req: Request, res: Response) => {
       message: "Product deleted successfully"
     });
   } catch (error) {
-    res.status(500).json({ message: "Failed to delete product", error });
+    res.status(500).json({ success: false, message: "Failed to delete product", error });
   }
 };
 
@@ -233,7 +243,7 @@ export const createExpert = async (req: Request, res: Response) => {
   try {
     const { name, specialty, fee, online } = req.body;
     if (!name || !specialty || fee === undefined) {
-      return res.status(400).json({ message: "Please fill in all required fields (name, specialty, fee)" });
+      return res.status(400).json({ success: false, message: "Please fill in all required fields (name, specialty, fee)" });
     }
     const expert = await Expert.create({
       name,
@@ -254,7 +264,7 @@ export const createExpert = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ message: "Failed to create expert", error });
+    res.status(500).json({ success: false, message: "Failed to create expert", error });
   }
 };
 
@@ -265,7 +275,7 @@ export const deleteExpert = async (req: Request, res: Response) => {
   try {
     const expert = await Expert.findById(req.params.id);
     if (!expert) {
-      return res.status(404).json({ message: "Expert not found" });
+      return res.status(404).json({ success: false, message: "Expert not found" });
     }
     await Expert.findByIdAndDelete(req.params.id);
     res.status(200).json({
@@ -273,7 +283,110 @@ export const deleteExpert = async (req: Request, res: Response) => {
       message: "Expert deleted successfully"
     });
   } catch (error) {
-    res.status(500).json({ message: "Failed to delete expert", error });
+    res.status(500).json({ success: false, message: "Failed to delete expert", error });
+  }
+};
+
+// FIXED: @desc    Create an outbreak spot (Admin only)
+// @route   POST /api/explore/outbreaks
+// @access  Private/Admin
+export const createOutbreak = async (req: Request, res: Response) => {
+  try {
+    const { region, disease, severity, cases, trendPercent } = req.body;
+    if (!region || !disease || !severity) {
+      return res.status(400).json({ success: false, message: "Please fill in all required fields (region, disease, severity)" });
+    }
+    const outbreak = await OutbreakSpot.create({
+      region,
+      disease,
+      severity,
+      cases: Number(cases) || 0,
+      trendPercent: Number(trendPercent) || 0,
+      mapX: Math.random() * 0.6 + 0.2, // standard random placement coordinates
+      mapY: Math.random() * 0.6 + 0.2,
+      colorHex: severity === "high" ? "#FF4D4D" : severity === "medium" ? "#FFA502" : "#2ED573",
+    });
+    res.status(201).json({
+      success: true,
+      data: {
+        id: outbreak._id,
+        region: outbreak.region,
+        disease: outbreak.disease,
+        severity: outbreak.severity,
+        cases: outbreak.cases,
+        trendPercent: outbreak.trendPercent,
+        mapX: outbreak.mapX,
+        mapY: outbreak.mapY,
+        colorHex: outbreak.colorHex,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to create outbreak spot", error });
+  }
+};
+
+// FIXED: @desc    Delete an outbreak spot (Admin only)
+// @route   DELETE /api/explore/outbreaks/:id
+// @access  Private/Admin
+export const deleteOutbreak = async (req: Request, res: Response) => {
+  try {
+    const outbreak = await OutbreakSpot.findById(req.params.id);
+    if (!outbreak) {
+      return res.status(404).json({ success: false, message: "Outbreak spot not found" });
+    }
+    await OutbreakSpot.findByIdAndDelete(req.params.id);
+    res.status(200).json({
+      success: true,
+      message: "Outbreak spot deleted successfully"
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to delete outbreak spot", error });
+  }
+};
+
+// FIXED: @desc    Update an outbreak spot (Admin only)
+// @route   PUT /api/explore/outbreaks/:id
+// @access  Private/Admin
+export const updateOutbreak = async (req: Request, res: Response) => {
+  try {
+    const { region, disease, severity, cases, trendPercent, mapX, mapY } = req.body;
+    const outbreak = await OutbreakSpot.findById(req.params.id);
+    if (!outbreak) {
+      return res.status(404).json({ success: false, message: "Outbreak spot not found" });
+    }
+
+    if (region !== undefined) outbreak.region = region;
+    if (disease !== undefined) outbreak.disease = disease;
+    if (severity !== undefined) {
+      if (!['high', 'medium', 'low'].includes(severity)) {
+        return res.status(400).json({ success: false, message: "Invalid severity specified (high, medium, low)" });
+      }
+      outbreak.severity = severity;
+      outbreak.colorHex = severity === "high" ? "#FF4D4D" : severity === "medium" ? "#FFA502" : "#2ED573";
+    }
+    if (cases !== undefined) outbreak.cases = Number(cases);
+    if (trendPercent !== undefined) outbreak.trendPercent = Number(trendPercent);
+    if (mapX !== undefined) outbreak.mapX = Number(mapX);
+    if (mapY !== undefined) outbreak.mapY = Number(mapY);
+
+    await outbreak.save();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: outbreak._id,
+        region: outbreak.region,
+        disease: outbreak.disease,
+        severity: outbreak.severity,
+        cases: outbreak.cases,
+        trendPercent: outbreak.trendPercent,
+        mapX: outbreak.mapX,
+        mapY: outbreak.mapY,
+        colorHex: outbreak.colorHex,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to update outbreak spot", error });
   }
 };
 

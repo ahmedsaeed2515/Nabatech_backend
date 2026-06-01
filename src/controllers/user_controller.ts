@@ -224,8 +224,50 @@ export const getDashboardStats = async (req: Request, res: Response) => {
       { $limit: 5 }
     ]);
 
+    // FIXED: Aggregate daily diagnoses for the last 7 days
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6); // standard 7-day range including today
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    const dailyDiagnoses = await DiagnosisHistory.aggregate([
+      {
+        $match: {
+          diagnosedAt: { $gte: sevenDaysAgo }
+        }
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$diagnosedAt" } },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // FIXED: Calculate offline vs remote scan counts for the pie chart
+    const totalOfflineScans = await DiagnosisHistory.countDocuments({ isOffline: true });
+    const totalRemoteScans = await DiagnosisHistory.countDocuments({ isOffline: false });
+    const activeReminders = await Reminder.countDocuments({ enabled: true });
+
     res.status(200).json({
       success: true,
+      totalUsers,
+      totalDiagnoses,
+      totalPosts,
+      activeReminders,
+      dailyDiagnoses: dailyDiagnoses.map((item) => ({
+        date: item._id,
+        count: item.count,
+      })),
+      topDiseases: topDiseases.map((item) => ({
+        name: item._id || "Healthy / Unknown",
+        count: item.count,
+      })),
+      offlineVsRemote: {
+        offline: totalOfflineScans,
+        remote: totalRemoteScans,
+      },
+      // Dual-compatibility layer to keep dashboard graphs working perfectly
       stats: {
         totalUsers,
         totalDiagnoses,
@@ -237,7 +279,12 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         totalExperts,
         diagnosesBySeverity,
         topDiseases,
-      }
+        dailyDiagnoses,
+        scanDistribution: [
+          { name: "Remote Scans", value: totalRemoteScans },
+          { name: "Offline Scans", value: totalOfflineScans },
+        ],
+      },
     });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch dashboard stats", error });

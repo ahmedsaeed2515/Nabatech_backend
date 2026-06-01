@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
-import axios from "axios";
-import FormData from "form-data";
 import cloudinary from "../config/cloudinary";
 import DiagnosisHistory from "../models/diagnosis_history_model";
+import { orchestrateDiagnosis } from "../services/ai/ai_orchestrator_service";
+import { isProviderError, sanitizeErrorMessage } from "../services/ai/ai_errors";
 
 // Simple translation dictionary for common plant diseases
 const translateToAr = (nameEn: string): string => {
@@ -57,41 +57,13 @@ export const predictPlantDisease = async (req: Request, res: Response) => {
 
     const imageUrl = await cloudinaryUpload(req.file.buffer);
 
-    // 2. Proxy request to Hugging Face Space CNN API
-    const cnnUrl = "https://abdallah110-cnnn.hf.space/predict";
-    const formData = new FormData();
-    formData.append("file", req.file.buffer, { filename: req.file.originalname });
-
-    let prediction = "";
-    let confidence = 0.95;
-
-    try {
-      const response = await axios.post(cnnUrl, formData, {
-        headers: {
-          ...formData.getHeaders(),
-        },
-        timeout: 35000,
-      });
-
-      const data = response.data as any;
-      prediction = data.prediction || data.label || data.class || "";
-
-      const rawConf = data.confidence ?? data.score ?? data.probability;
-      if (rawConf !== undefined) {
-        const numConf = Number(rawConf);
-        confidence = numConf > 1.0 ? numConf / 100.0 : numConf;
-      }
-
-      if (!prediction) {
-        throw new Error("No prediction label returned from model");
-      }
-    } catch (apiError: any) {
-      console.error("CNN Hugging Face Space request failed:", apiError.message || apiError);
-      return res.status(500).json({
-        message: "Inference failed at remote CNN Space",
-        error: apiError.message || apiError,
-      });
-    }
+    const diagnosis = await orchestrateDiagnosis({
+      userId,
+      fileBuffer: req.file.buffer,
+      originalName: req.file.originalname,
+    });
+    const prediction = diagnosis.prediction;
+    const confidence = diagnosis.confidence ?? 0.95;
 
     // 3. Save diagnosis log in database history
     const diseaseNameAr = translateToAr(prediction);
@@ -112,9 +84,12 @@ export const predictPlantDisease = async (req: Request, res: Response) => {
       prediction,
       confidence,
       imageUrl,
+      candidates: diagnosis.candidates || [],
+      provider: { name: diagnosis.provider },
     });
   } catch (error: any) {
-    console.error("Diagnosis error:", error);
-    res.status(500).json({ message: "Inference failed", error: error.message || error });
+    console.error("Diagnosis error:", sanitizeErrorMessage(error));
+    const status = isProviderError(error) ? 502 : 500;
+    res.status(status).json({ success: false, message: "Inference failed" });
   }
 };

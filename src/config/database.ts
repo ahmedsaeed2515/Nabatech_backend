@@ -4,8 +4,11 @@ dotenv.config();
 
 const connectDB = async () => {
     try{
-      console.log("ENV VALUE:", process.env.MONGO_URI);
-      const conn =  await mongoose.connect(process.env.MONGO_URI as string);
+      const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
+      if (!mongoUri) {
+        throw new Error("Missing MONGODB_URI (or MONGO_URI) environment variable");
+      }
+      const conn =  await mongoose.connect(mongoUri);
       console.log(`Database connected successfully ${conn.connection.host}`);            
     }catch (error) {
       console.log(`Error: ${error}`);

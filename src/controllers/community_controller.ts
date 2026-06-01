@@ -49,7 +49,9 @@ export const getCommunityPosts = async (req: Request, res: Response) => {
       query.plantTag = mappedTag;
     }
 
-    let posts = await CommunityPost.find(query).sort({ createdAt: -1 });
+    let posts = await CommunityPost.find(query)
+      .populate("author", "name role")
+      .sort({ createdAt: -1 });
 
     // Seed mock data if collection is empty
     if (posts.length === 0) {
@@ -75,7 +77,9 @@ export const getCommunityPosts = async (req: Request, res: Response) => {
         }
       ];
       await CommunityPost.create(seedPosts);
-      posts = await CommunityPost.find(query).sort({ createdAt: -1 });
+      posts = await CommunityPost.find(query)
+        .populate("author", "name role")
+        .sort({ createdAt: -1 });
     }
 
     res.status(200).json({
@@ -85,6 +89,8 @@ export const getCommunityPosts = async (req: Request, res: Response) => {
         id: p._id,
         author: p.author,
         authorName: p.authorName,
+        // FIXED: Include authorRole from populated user
+        authorRole: (p.author as any)?.role ?? "farmer",
         plantTag: p.plantTag,
         title: p.title,
         content: p.content,

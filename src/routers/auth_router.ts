@@ -1,5 +1,5 @@
 import {Router} from 'express';
-import { registerUser, loginUser } from '../controllers/auth_controller';
+import { registerUser, loginUser, forgotPassword } from '../controllers/auth_controller';
 
 const router = Router();
 
@@ -51,5 +51,6 @@ router.post('/register', registerUser);
  *         description: User login successfully
  */
 router.post('/login', loginUser);
+router.post('/forgot-password', forgotPassword);
 
 export default router;

@@ -36,6 +36,6 @@ export const admin = (req: Request, res: Response, next: NextFunction) => {
     if (user && user.role === 'admin') {
         next();
     } else {
-        res.status(403).json({ message: "Not authorized as an admin" });
+        res.status(403).json({ success: false, message: "Admin access required" });
     }
 };

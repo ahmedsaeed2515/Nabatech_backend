@@ -17,7 +17,8 @@ const outbreakSpotSchema = new Schema<IOutbreakSpot>(
   {
     region: { type: String, required: true },
     disease: { type: String, required: true },
-    severity: { type: String, enum: ['high', 'medium', 'low', 'حرجة', 'متوسطة', 'منخفضة'], required: true },
+    // FIXED: Standardize outbreak severity enum to use only lowercase English ['high', 'medium', 'low']
+    severity: { type: String, enum: ['high', 'medium', 'low'], required: true },
     cases: { type: Number, default: 0 },
     trendPercent: { type: Number, default: 0 },
     mapX: { type: Number, required: true },
