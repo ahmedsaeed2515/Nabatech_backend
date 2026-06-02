@@ -79,6 +79,14 @@ describe("Auth Tests", () => {
       expect(res.body.token).toBeDefined();
     });
 
+    it("returns the user role for admin logins", async () => {
+      const { email, password } = await createTestUser("admin");
+      const res = await request(app).post("/api/auth/login").send({ email, password });
+
+      expect(res.status).toBe(200);
+      expect(res.body.user.role).toBe("admin");
+    });
+
     it("rejects wrong password", async () => {
       const { email } = await createTestUser();
       const res = await request(app).post("/api/auth/login").send({ email, password: "WrongPassword123" });

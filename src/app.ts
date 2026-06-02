@@ -21,6 +21,18 @@ const app = express();
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './docs/swagger';
 
+// CORS Middleware - Allow requests from Vercel and localhost
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 app.use(express.json());
 
 

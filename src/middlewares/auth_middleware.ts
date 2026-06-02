@@ -12,7 +12,8 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
     if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
         try {
             token = req.headers.authorization.split(' ')[1];
-            const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as JwtPayload;
+                const jwtSecret = process.env.JWT_SECRET || 'default-jwt-secret-change-in-production-12345';
+                const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
             
             const user = await User.findById(decoded.id).select('-password');
             if (!user) {
