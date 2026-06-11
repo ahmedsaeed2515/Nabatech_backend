@@ -21,55 +21,56 @@ const toWaterPayload = (item: any) => ({
   createdAt: item.createdAt,
 });
 
-// @desc    Get light meter history
-// @route   GET /api/home-tools/light-meter/history
-// @access  Private
+// ---------- Light Meter ----------
 export const getLightMeterHistory = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const history = await LightMeterSession.find({ user: userId }).sort({ createdAt: -1 });
-    return res
-      .status(200)
-      .json({ success: true, data: history.map((item) => toLightPayload(item)) });
+    const { cursor, limit } = req.query as any;
+    const pageSize = Math.min(parseInt(limit) || 20, 50);
+    const query: any = { user: userId };
+    if (cursor) query._id = { $lt: cursor };
+    const items = await LightMeterSession.find(query).sort({ _id: -1 }).limit(pageSize + 1);
+    const hasNext = items.length > pageSize;
+    const results = hasNext ? items.slice(0, pageSize) : items;
+    const nextCursor = hasNext ? results[results.length - 1]._id : null;
+    return res.status(200).json({
+      success: true,
+      data: {
+        items: results.map(toLightPayload),
+        pageInfo: { nextCursor, limit: pageSize },
+      },
+    });
   } catch (error) {
-    return res
-      .status(500)
-      .json({ success: false, message: "Failed to fetch light meter history" });
+    return res.status(500).json({ success: false, message: "Failed to fetch light meter history" });
   }
 };
 
-// @desc    Save light meter reading
-// @route   POST /api/home-tools/light-meter/history
-// @access  Private
 export const createLightMeterHistory = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const { plantId, lux, zone } = req.body;
-
+    const { plantId, plantLibraryId, lux, zone, clientOperationId, source } = req.body;
     if (lux === undefined || !zone) {
-      return res
-        .status(400)
-        .json({ success: false, message: "lux and zone are required" });
+      return res.status(400).json({ success: false, message: "lux and zone are required" });
     }
-
     const created = await LightMeterSession.create({
       user: userId,
       plantId: plantId ? String(plantId).trim() : undefined,
+      plantLibraryId: plantLibraryId ? plantLibraryId : undefined,
       lux: Number(lux),
       zone: String(zone).trim(),
+      clientOperationId: clientOperationId ? String(clientOperationId).trim() : undefined,
+      source: source ?? "local",
+    }).catch((err) => {
+      if (err.code === 11000) throw { status: 409, code: "CONFLICT", message: "Duplicate operation" };
+      throw err;
     });
-
     return res.status(201).json({ success: true, data: toLightPayload(created) });
-  } catch (error) {
-    return res
-      .status(500)
-      .json({ success: false, message: "Failed to save light meter reading" });
+  } catch (error: any) {
+    if (error.status === 409) return res.status(409).json({ success: false, code: "CONFLICT", message: error.message });
+    return res.status(500).json({ success: false, message: "Failed to save light meter reading" });
   }
 };
 
-// @desc    Get light recommendation
-// @route   GET /api/home-tools/light-meter/recommendations/:plantId
-// @access  Private
 export const getLightRecommendation = async (req: Request, res: Response) => {
   try {
     const plantId = String(req.params.plantId || "").trim().toLowerCase();
@@ -80,96 +81,116 @@ export const getLightRecommendation = async (req: Request, res: Response) => {
       snake_plant: 450,
       monstera: 900,
     };
-
     const recommendedLux = recommendationMap[plantId] ?? 900;
-    return res.status(200).json({
-      success: true,
-      data: { plantId, recommendedLux },
-    });
+    return res.status(200).json({ success: true, data: { plantId, recommendedLux } });
   } catch (error) {
-    return res
-      .status(500)
-      .json({ success: false, message: "Failed to get light recommendation" });
+    return res.status(500).json({ success: false, message: "Failed to get light recommendation" });
   }
 };
 
-// @desc    Get watering calculation history
-// @route   GET /api/home-tools/watering/history
-// @access  Private
+// ---------- Watering ----------
 export const getWateringHistory = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const history = await WateringCalculation.find({ user: userId }).sort({ createdAt: -1 });
-    return res
-      .status(200)
-      .json({ success: true, data: history.map((item) => toWaterPayload(item)) });
+    const { cursor, limit } = req.query as any;
+    const pageSize = Math.min(parseInt(limit) || 20, 50);
+    const query: any = { user: userId };
+    if (cursor) query._id = { $lt: cursor };
+    const items = await WateringCalculation.find(query).sort({ _id: -1 }).limit(pageSize + 1);
+    const hasNext = items.length > pageSize;
+    const results = hasNext ? items.slice(0, pageSize) : items;
+    const nextCursor = hasNext ? results[results.length - 1]._id : null;
+    return res.status(200).json({
+      success: true,
+      data: {
+        items: results.map(toWaterPayload),
+        pageInfo: { nextCursor, limit: pageSize },
+      },
+    });
   } catch (error) {
-    return res
-      .status(500)
-      .json({ success: false, message: "Failed to fetch watering history" });
+    return res.status(500).json({ success: false, message: "Failed to fetch watering history" });
   }
 };
 
-// @desc    Save watering calculation
-// @route   POST /api/home-tools/watering/history
-// @access  Private
 export const createWateringHistory = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const { plantType, potSize, season, location, days, volumeMl } = req.body;
-
+    const { plantType, plantLibraryId, potSize, season, location, days, volumeMl, clientOperationId, source } = req.body;
     if (!potSize || !season || !location || days === undefined || volumeMl === undefined) {
       return res.status(400).json({
         success: false,
         message: "potSize, season, location, days and volumeMl are required",
       });
     }
-
     const created = await WateringCalculation.create({
       user: userId,
       plantType: plantType ? String(plantType).trim() : undefined,
+      plantLibraryId: plantLibraryId ? plantLibraryId : undefined,
       potSize: String(potSize).trim(),
       season: String(season).trim(),
       location: String(location).trim(),
       days: Number(days),
       volumeMl: Number(volumeMl),
+      clientOperationId: clientOperationId ? String(clientOperationId).trim() : undefined,
+      source: source ?? "local",
+    }).catch((err) => {
+      if (err.code === 11000) throw { status: 409, code: "CONFLICT", message: "Duplicate operation" };
+      throw err;
     });
-
     return res.status(201).json({ success: true, data: toWaterPayload(created) });
-  } catch (error) {
-    return res
-      .status(500)
-      .json({ success: false, message: "Failed to save watering calculation" });
+  } catch (error: any) {
+    if (error.status === 409) return res.status(409).json({ success: false, code: "CONFLICT", message: error.message });
+    return res.status(500).json({ success: false, message: "Failed to save watering calculation" });
   }
 };
 
-// @desc    Get watering recommendation
-// @route   GET /api/home-tools/watering/recommendations
-// @access  Private
 export const getWateringRecommendation = async (req: Request, res: Response) => {
   try {
-    const { plantType, potSize, season, location } = req.query;
-
-    const baseDays =
-      String(plantType || "").toLowerCase().includes("succulent") ? 10 : 5;
+    const { plantType, potSize, season, location } = req.query as any;
+    const baseDays = String(plantType || "").toLowerCase().includes("succulent") ? 10 : 5;
     const seasonDelta = String(season || "").toLowerCase() === "summer" ? -1 : 1;
     const locationDelta = String(location || "").toLowerCase() === "outdoor" ? -1 : 0;
     const potDelta = String(potSize || "").toLowerCase() === "large" ? 2 : 0;
-
     const days = Math.max(1, baseDays + seasonDelta + locationDelta + potDelta);
     const volumeMl = String(potSize || "").toLowerCase() === "small" ? 220 : 350;
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        days,
-        volumeMl,
-      },
-    });
+    return res.status(200).json({ success: true, data: { days, volumeMl } });
   } catch (error) {
-    return res
-      .status(500)
-      .json({ success: false, message: "Failed to get watering recommendation" });
+    return res.status(500).json({ success: false, message: "Failed to get watering recommendation" });
   }
 };
 
+// ---------- Admin Analytics ----------
+export const getHomeToolsAnalytics = async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    if (user.role !== "admin") {
+      return res.status(403).json({ success: false, code: "AUTH_FORBIDDEN", message: "Admin access required" });
+    }
+    const { from, to, timeZone } = req.query as any;
+    const match: any = {};
+    if (from || to) {
+      match.createdAt = {};
+      if (from) match.createdAt.$gte = new Date(from);
+      if (to) match.createdAt.$lte = new Date(to);
+    }
+    const [lightRes, wateringRes] = await Promise.all([
+      LightMeterSession.aggregate([ { $match: match }, { $group: { _id: null, count: { $sum: 1 } } } ]),
+      WateringCalculation.aggregate([ { $match: match }, { $group: { _id: null, count: { $sum: 1 } } } ]),
+    ]);
+    const byDay = await LightMeterSession.aggregate([
+      { $match: match },
+      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: timeZone || "UTC" } }, count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]);
+    return res.status(200).json({
+      success: true,
+      data: {
+        light: lightRes[0]?.count || 0,
+        watering: wateringRes[0]?.count || 0,
+        byDay,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Failed to fetch admin analytics" });
+  }
+};

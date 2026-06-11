@@ -6,11 +6,15 @@ import { runCnnDiagnosis } from "./cnn_provider";
 import { getAiSettings } from "./ai_config_service";
 import { sanitizeErrorMessage } from "./ai_errors";
 import { buildAssistantPrompt } from "./assistant_prompt_builder";
+import crypto from "crypto";
 
 const logAiCall = async (payload: {
   userId?: string;
+  requestId?: string;
   feature: "diagnosis" | "chat" | "image_chat";
   provider: string;
+  model?: string;
+  sourceIds?: string[];
   status: "success" | "failure";
   latencyMs: number;
   inputMeta?: Record<string, unknown>;
@@ -24,21 +28,45 @@ const logAiCall = async (payload: {
   }
 };
 
+const validateProviderOutput = (result: any) => {
+  if (result && typeof result.confidence === "number") {
+    if (result.confidence < 0) result.confidence = 0;
+    if (result.confidence > 1) result.confidence = 1;
+  }
+  if (result && result.prediction && typeof result.prediction === "string") {
+    result.prediction = result.prediction.trim();
+    if (result.prediction.length === 0) {
+      throw new Error("Provider returned empty prediction");
+    }
+  }
+  if (result && Array.isArray(result.candidates)) {
+    if (result.candidates.length > 10) {
+      result.candidates = result.candidates.slice(0, 10);
+    }
+  }
+  return result;
+};
+
 export const orchestrateDiagnosis = async (args: {
   userId?: string;
+  requestId?: string;
   fileBuffer: Buffer;
   originalName: string;
 }) => {
   const started = Date.now();
   const settings = await getAiSettings();
+  const reqId = args.requestId || crypto.randomUUID();
 
   const formData = new FormData();
   formData.append("file", args.fileBuffer, { filename: args.originalName || "image.jpg" });
 
   try {
-    const result = await runCnnDiagnosis(settings, formData, formData.getHeaders() as Record<string, string>);
+    const rawResult = await runCnnDiagnosis(settings, formData, formData.getHeaders() as Record<string, string>);
+    const result = validateProviderOutput(rawResult);
+    
     await logAiCall({
       userId: args.userId,
+      requestId: reqId,
       feature: "diagnosis",
       provider: result.provider,
       status: "success",
@@ -50,6 +78,7 @@ export const orchestrateDiagnosis = async (args: {
   } catch (error) {
     await logAiCall({
       userId: args.userId,
+      requestId: reqId,
       feature: "diagnosis",
       provider: settings.cnn.provider,
       status: "failure",
@@ -63,12 +92,14 @@ export const orchestrateDiagnosis = async (args: {
 
 export const orchestrateChat = async (args: {
   userId?: string;
+  requestId?: string;
   question: string;
   history: Array<{ role: string; content: string }>;
   topK?: number;
 }) => {
   const settings = await getAiSettings();
   const started = Date.now();
+  const reqId = args.requestId || crypto.randomUUID();
   let lastError: unknown;
 
   for (const source of settings.fallback.chatOrder) {
@@ -77,12 +108,13 @@ export const orchestrateChat = async (args: {
         const rag = await askRag(settings, args.question, args.history, args.topK);
         await logAiCall({
           userId: args.userId,
+          requestId: reqId,
           feature: "chat",
           provider: rag.provider,
           status: "success",
           latencyMs: Date.now() - started,
           inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
-          outputMeta: { responseLength: rag.message.length, source: rag.source },
+          outputMeta: { responseLength: rag.message?.length || 0, source: rag.source },
         });
         return rag;
       }
@@ -92,12 +124,13 @@ export const orchestrateChat = async (args: {
         const llm = await askLlm(settings, args.question, llmSource);
         await logAiCall({
           userId: args.userId,
+          requestId: reqId,
           feature: "chat",
           provider: llm.provider,
           status: "success",
           latencyMs: Date.now() - started,
           inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
-          outputMeta: { responseLength: llm.message.length, source: llm.source },
+          outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
         });
         return llm;
       }
@@ -111,12 +144,13 @@ export const orchestrateChat = async (args: {
       const llm = await askLlm(settings, args.question, "fallback");
       await logAiCall({
         userId: args.userId,
+        requestId: reqId,
         feature: "chat",
         provider: llm.provider,
         status: "success",
         latencyMs: Date.now() - started,
         inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
-        outputMeta: { responseLength: llm.message.length, source: llm.source },
+        outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
       });
       return llm;
     } catch (error) {
@@ -126,6 +160,7 @@ export const orchestrateChat = async (args: {
 
   await logAiCall({
     userId: args.userId,
+    requestId: reqId,
     feature: "chat",
     provider: "none",
     status: "failure",
@@ -165,6 +200,7 @@ const runChatWithQuestion = async (args: {
 
 export const orchestrateAssistantRequest = async (args: {
   userId?: string;
+  requestId?: string;
   fileBuffer?: Buffer;
   originalName?: string;
   question?: string;
@@ -173,6 +209,7 @@ export const orchestrateAssistantRequest = async (args: {
 }) => {
   const settings = await getAiSettings();
   const started = Date.now();
+  const reqId = args.requestId || crypto.randomUUID();
   const question = (args.question || "").trim();
   const hasFile = Boolean(args.fileBuffer && args.fileBuffer.length);
 
@@ -181,8 +218,8 @@ export const orchestrateAssistantRequest = async (args: {
   }
 
   if (!hasFile && question) {
-    const chat = await orchestrateChat({ userId: args.userId, question, history: args.history, topK: args.topK });
-    return { mode: "chat" as const, message: chat.message, source: chat.source, provider: chat.provider };
+    const chat = await orchestrateChat({ userId: args.userId, requestId: reqId, question, history: args.history, topK: args.topK });
+    return { mode: "chat" as const, message: chat.message, source: chat.source, provider: chat.provider, providerChain: [chat.provider] };
   }
 
   const providerChain: string[] = [];
@@ -193,12 +230,14 @@ export const orchestrateAssistantRequest = async (args: {
     try {
       const formData = new FormData();
       formData.append("file", args.fileBuffer!, { filename: args.originalName || "image.jpg" });
-      cnnResult = await runCnnDiagnosis(settings, formData, formData.getHeaders() as Record<string, string>);
+      const rawCnn = await runCnnDiagnosis(settings, formData, formData.getHeaders() as Record<string, string>);
+      cnnResult = validateProviderOutput(rawCnn);
       providerChain.push("cnn");
     } catch (error) {
       if (!settings.pipeline.allowAnswerIfCnnFails) {
         await logAiCall({
           userId: args.userId,
+          requestId: reqId,
           feature: "image_chat",
           provider: "cnn",
           status: "failure",
@@ -274,8 +313,10 @@ export const orchestrateAssistantRequest = async (args: {
 
   await logAiCall({
     userId: args.userId,
+    requestId: reqId,
     feature: hasFile ? "image_chat" : "chat",
     provider,
+    sourceIds: providerChain,
     status: "success",
     latencyMs: Date.now() - started,
     inputMeta: {
@@ -286,7 +327,7 @@ export const orchestrateAssistantRequest = async (args: {
     },
     outputMeta: {
       confidence: cnnResult?.confidence,
-      responseLength: message.length,
+      responseLength: message?.length || 0,
       source,
     },
   });

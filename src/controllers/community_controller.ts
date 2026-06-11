@@ -2,15 +2,18 @@ import { Request, Response } from "express";
 import CommunityPost from "../models/community_post_model";
 import Comment from "../models/comment_model";
 import cloudinary from "../config/cloudinary";
+import { logger } from "../utils/logger";
+import { AppError } from "../utils/app_error";
+import { NextFunction } from "express";
 
 // Helper function to upload buffer stream to Cloudinary
-const uploadToCloudinary = (fileBuffer: Buffer, folderName: string): Promise<string> => {
-  return new Promise<string>((resolve, reject) => {
+const uploadToCloudinary = (fileBuffer: Buffer, folderName: string): Promise<{ url: string, public_id: string }> => {
+  return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       { folder: folderName },
       (error, result) => {
         if (error) return reject(error);
-        resolve(result!.secure_url);
+        resolve({ url: result!.secure_url, public_id: result!.public_id });
       }
     );
     stream.end(fileBuffer);
@@ -35,26 +38,32 @@ const formatRelativeTime = (date: Date): string => {
 // @access  Private
 export const getCommunityPosts = async (req: Request, res: Response) => {
   try {
-    const category = req.query.category as string;
-    const query: any = {};
+    const { category, cursor, limit, status } = req.query;
+    const qLimit = limit ? parseInt(limit as string, 10) : 20;
+    
+    const query: any = { status: 'visible' };
 
     if (category && category !== "all") {
-      // Map frontend category filters to DB tags
-      let mappedTag = category;
-      if (category.toLowerCase() === "diagnosis") mappedTag = "Diagnosis";
-      else if (category.toLowerCase() === "care_tips") mappedTag = "Care Tips";
-      else if (category.toLowerCase() === "watering") mappedTag = "Watering";
-      else if (category.toLowerCase() === "pests") mappedTag = "Pests";
+      let mappedTag = category as string;
+      if (mappedTag.toLowerCase() === "diagnosis") mappedTag = "Diagnosis";
+      else if (mappedTag.toLowerCase() === "care_tips") mappedTag = "Care Tips";
+      else if (mappedTag.toLowerCase() === "watering") mappedTag = "Watering";
+      else if (mappedTag.toLowerCase() === "pests") mappedTag = "Pests";
       
       query.plantTag = mappedTag;
     }
 
+    if (cursor) {
+      query._id = { $lt: cursor };
+    }
+
     let posts = await CommunityPost.find(query)
       .populate("author", "name role")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(qLimit + 1);
 
-    // Seed mock data if collection is empty
-    if (posts.length === 0) {
+    // Seed mock data if collection is empty and no cursor is provided
+    if (posts.length === 0 && !cursor) {
       const defaultUserId = (req as any).user.id;
       const seedPosts = [
         {
@@ -65,6 +74,7 @@ export const getCommunityPosts = async (req: Request, res: Response) => {
           content: "I used liquid fertilizer yesterday and noticed slight brown edges today. Any dosage advice?",
           likes: 18,
           commentsCount: 2,
+          status: 'visible'
         },
         {
           author: defaultUserId,
@@ -74,35 +84,48 @@ export const getCommunityPosts = async (req: Request, res: Response) => {
           content: "My basil gets 3 hours direct sun from the balcony. Should I move it for stronger growth?",
           likes: 24,
           commentsCount: 0,
+          status: 'visible'
         }
       ];
       await CommunityPost.create(seedPosts);
       posts = await CommunityPost.find(query)
         .populate("author", "name role")
-        .sort({ createdAt: -1 });
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(qLimit + 1);
     }
+
+    const hasNextPage = posts.length > qLimit;
+    if (hasNextPage) posts.pop();
+
+    const nextCursor = posts.length > 0 ? posts[posts.length - 1]._id : null;
+
+    const mappedPosts = posts.map(p => ({
+      id: p._id,
+      author: p.author,
+      authorName: p.authorName,
+      authorRole: (p.author as any)?.role ?? "farmer",
+      plantTag: p.plantTag,
+      title: p.title,
+      content: p.content,
+      timeLabel: formatRelativeTime(p.createdAt),
+      likes: p.likes,
+      comments: p.commentsCount,
+      imagePath: p.imagePath,
+      liked: p.likedBy.includes((req as any).user.id),
+    }));
 
     res.status(200).json({
       success: true,
-      count: posts.length,
-      posts: posts.map(p => ({
-        id: p._id,
-        author: p.author,
-        authorName: p.authorName,
-        // FIXED: Include authorRole from populated user
-        authorRole: (p.author as any)?.role ?? "farmer",
-        plantTag: p.plantTag,
-        title: p.title,
-        content: p.content,
-        timeLabel: formatRelativeTime(p.createdAt),
-        likes: p.likes,
-        comments: p.commentsCount,
-        imagePath: p.imagePath,
-        liked: p.likedBy.includes((req as any).user.id),
-      })),
+      count: mappedPosts.length, // legacy
+      posts: mappedPosts, // legacy
+      data: {
+        items: mappedPosts,
+        pageInfo: { hasNextPage, nextCursor }
+      }
     });
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch posts", error });
+    logger.error('Failed to fetch posts', { event: 'community_feed_and_moderation.list_posts.error', error });
+    res.status(500).json({ message: "Failed to fetch posts" });
   }
 };
 
@@ -113,23 +136,35 @@ export const createPost = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
     const username = (req as any).user.name;
-    const { title, content, plantTag } = req.body;
+    const { title, content, plantTag, clientOperationId } = req.body;
 
-    if (!title || !content || !plantTag) {
-      return res.status(400).json({ message: "Title, content and plant tag are required" });
-    }
-
-    if (title.trim().length < 5) {
-      return res.status(400).json({ message: "Title must be at least 5 characters long" });
-    }
-
-    if (content.trim().length < 10) {
-      return res.status(400).json({ message: "Content must be at least 10 characters long" });
+    // Validation is mostly handled by Zod now, but idempotency check happens here
+    if (clientOperationId) {
+      const existing = await CommunityPost.findOne({ author: userId, clientOperationId });
+      if (existing) {
+        return res.status(201).json({
+          success: true,
+          post: {
+            id: existing._id,
+            authorName: existing.authorName,
+            plantTag: existing.plantTag,
+            title: existing.title,
+            content: existing.content,
+            likes: existing.likes,
+            comments: existing.commentsCount,
+            imagePath: existing.imagePath
+          },
+          data: { post: existing }
+        });
+      }
     }
 
     let imageUrl = "";
+    let imagePublicId = "";
     if (req.file) {
-      imageUrl = await uploadToCloudinary(req.file.buffer, "community_posts");
+      const uploadResult = await uploadToCloudinary(req.file.buffer, "community_posts");
+      imageUrl = uploadResult.url;
+      imagePublicId = uploadResult.public_id;
     }
 
     const post = await CommunityPost.create({
@@ -138,7 +173,17 @@ export const createPost = async (req: Request, res: Response) => {
       plantTag,
       title: title.trim(),
       content: content.trim(),
-      imagePath: imageUrl || "",
+      imagePath: imageUrl,
+      imagePublicId,
+      clientOperationId,
+    });
+
+    logger.info('Created community post', {
+      event: 'community_feed_and_moderation.create_post',
+      requestId: (req as any).id,
+      actorId: userId,
+      targetId: post._id,
+      payload: { title: post.title.substring(0, 50), plantTag }
     });
 
     res.status(201).json({
@@ -152,10 +197,15 @@ export const createPost = async (req: Request, res: Response) => {
         likes: post.likes,
         comments: post.commentsCount,
         imagePath: post.imagePath
-      }
+      },
+      data: { post }
     });
-  } catch (error) {
-    res.status(500).json({ message: "Failed to create post", error });
+  } catch (error: any) {
+    if (error.code === 11000) {
+      return res.status(409).json({ success: false, message: 'Conflict on create', code: 'CONFLICT' });
+    }
+    logger.error('Failed to create post', { event: 'community_feed_and_moderation.create_post.error', error });
+    res.status(500).json({ message: "Failed to create post" });
   }
 };
 
@@ -165,35 +215,57 @@ export const createPost = async (req: Request, res: Response) => {
 export const toggleLike = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const post = await CommunityPost.findById(req.params.id);
+    const postId = req.params.id;
 
+    const post = await CommunityPost.findOne({ _id: postId, status: 'visible' });
     if (!post) {
-      return res.status(404).json({ message: "Post not found" });
+      return res.status(404).json({ success: false, message: "Post not found", code: 'RESOURCE_NOT_FOUND' });
     }
 
-    const userIndex = post.likedBy.indexOf(userId);
+    const hasLiked = post.likedBy.includes(userId);
     let liked = false;
 
-    if (userIndex > -1) {
-      // User has already liked the post, unlike it
-      post.likedBy.splice(userIndex, 1);
-      post.likes = Math.max(0, post.likes - 1);
+    if (hasLiked) {
+      // Unlike atomically
+      await CommunityPost.updateOne(
+        { _id: postId },
+        { 
+          $pull: { likedBy: userId },
+          $inc: { likes: -1 }
+        }
+      );
     } else {
-      // Like the post
-      post.likedBy.push(userId);
-      post.likes += 1;
+      // Like atomically
+      await CommunityPost.updateOne(
+        { _id: postId },
+        { 
+          $addToSet: { likedBy: userId },
+          $inc: { likes: 1 }
+        }
+      );
       liked = true;
     }
 
-    await post.save();
+    // Fetch the updated post to get the true current state
+    const updatedPost = await CommunityPost.findById(postId);
+
+    logger.info(`User ${liked ? 'liked' : 'unliked'} post`, {
+      event: 'community_feed_and_moderation.toggle_like',
+      requestId: (req as any).id,
+      actorId: userId,
+      targetId: postId,
+      result: liked ? 'liked' : 'unliked'
+    });
 
     res.status(200).json({
       success: true,
-      likes: post.likes,
+      likes: updatedPost?.likes || 0,
       liked,
+      data: { liked, likes: updatedPost?.likes || 0 }
     });
   } catch (error) {
-    res.status(500).json({ message: "Failed to toggle like", error });
+    logger.error('Failed to toggle like', { event: 'community_feed_and_moderation.toggle_like.error', error });
+    res.status(500).json({ message: "Failed to toggle like" });
   }
 };
 
@@ -202,78 +274,125 @@ export const toggleLike = async (req: Request, res: Response) => {
 // @access  Private
 export const getComments = async (req: Request, res: Response) => {
   try {
-    const comments = await Comment.find({ post: req.params.id }).sort({ createdAt: -1 });
+    const { cursor, limit } = req.query;
+    const qLimit = limit ? parseInt(limit as string, 10) : 50;
 
-    // Seed mock comments if list is empty (only for seeded default posts)
-    if (comments.length === 0 && (req.params.id === "p1" || req.params.id === "p2")) {
+    const query: any = { post: req.params.id, status: 'visible' };
+    if (cursor) {
+      query._id = { $lt: cursor };
+    }
+
+    const comments = await Comment.find(query)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(qLimit + 1);
+
+    // Seed mock comments if list is empty
+    if (comments.length === 0 && !cursor && (req.params.id === "p1" || req.params.id === "p2")) {
       const seedComments = [
         {
           post: req.params.id,
           author: (req as any).user.id,
           authorName: "Nour",
           text: "Try reducing fertilizer concentration to half dose next time.",
+          status: 'visible'
         },
         {
           post: req.params.id,
           author: (req as any).user.id,
           authorName: "Karim",
           text: "Flush the soil once and monitor new leaves for a week.",
+          status: 'visible'
         }
       ];
       await Comment.create(seedComments);
-      const seeded = await Comment.find({ post: req.params.id }).sort({ createdAt: -1 });
       return res.status(200).json({
         success: true,
-        comments: seeded.map(c => ({
-          id: c._id,
+        comments: seedComments.map((c, idx) => ({
+          id: `seeded_${idx}`,
           authorName: c.authorName,
           text: c.text,
-          timeLabel: formatRelativeTime(c.createdAt),
+          timeLabel: "now",
         })),
+        data: { items: seedComments, pageInfo: { hasNextPage: false, nextCursor: null } }
       });
     }
 
+    const hasNextPage = comments.length > qLimit;
+    if (hasNextPage) comments.pop();
+
+    const nextCursor = comments.length > 0 ? comments[comments.length - 1]._id : null;
+
+    const mappedComments = comments.map(c => ({
+      id: c._id,
+      authorName: c.authorName,
+      text: c.text,
+      timeLabel: formatRelativeTime(c.createdAt),
+    }));
+
     res.status(200).json({
       success: true,
-      comments: comments.map(c => ({
-        id: c._id,
-        authorName: c.authorName,
-        text: c.text,
-        timeLabel: formatRelativeTime(c.createdAt),
-      })),
+      comments: mappedComments, // legacy
+      data: {
+        items: mappedComments,
+        pageInfo: { hasNextPage, nextCursor }
+      }
     });
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch comments", error });
+    logger.error('Failed to fetch comments', { event: 'community_feed_and_moderation.list_comments.error', error });
+    res.status(500).json({ message: "Failed to fetch comments" });
   }
 };
 
 // @desc    Add a comment
 // @route   POST /api/community/posts/:id/comments
 // @access  Private
-export const createComment = async (req: Request, res: Response) => {
+export const createComment = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = (req as any).user.id;
     const username = (req as any).user.name;
-    const { text } = req.body;
+    const { text, clientOperationId } = req.body;
+    const postId = req.params.id;
 
-    if (!text || text.trim() === "") {
-      return res.status(400).json({ message: "Comment content is required" });
+    if (clientOperationId) {
+      const existing = await Comment.findOne({ author: userId, post: postId, clientOperationId });
+      if (existing) {
+        return res.status(201).json({
+          success: true,
+          comment: {
+            id: existing._id,
+            authorName: existing.authorName,
+            text: existing.text,
+            timeLabel: formatRelativeTime(existing.createdAt),
+          },
+          data: { comment: existing }
+        });
+      }
     }
 
-    const post = await CommunityPost.findById(req.params.id);
+    const post = await CommunityPost.findOne({ _id: postId, status: 'visible' });
     if (!post) {
-      return res.status(404).json({ message: "Post not found" });
+      return res.status(404).json({ success: false, message: "Post not found or unavailable", code: 'RESOURCE_NOT_FOUND' });
     }
 
+    // Create comment
     const comment = await Comment.create({
       post: post._id,
       author: userId,
       authorName: username,
       text: text.trim(),
+      clientOperationId,
     });
 
-    post.commentsCount += 1;
-    await post.save();
+    // Atomically increment comment count
+    await CommunityPost.updateOne({ _id: post._id }, { $inc: { commentsCount: 1 } });
+
+    logger.info('Created comment on post', {
+      event: 'community_feed_and_moderation.create_comment',
+      requestId: (req as any).id,
+      actorId: userId,
+      targetId: comment._id,
+      payload: { postId: post._id, textLength: text.length }
+    });
 
     res.status(201).json({
       success: true,
@@ -282,9 +401,17 @@ export const createComment = async (req: Request, res: Response) => {
         authorName: comment.authorName,
         text: comment.text,
         timeLabel: "now",
-      }
+      },
+      data: { comment }
     });
-  } catch (error) {
-    res.status(500).json({ message: "Failed to add comment", error });
+  } catch (error: any) {
+    if (error.code === 11000) {
+      return res.status(409).json({ success: false, message: 'Conflict on create', code: 'CONFLICT' });
+    }
+    if (error.name === 'ValidationError') {
+      return next(new AppError({ code: 'VALIDATION_FAILED', statusCode: 400, message: error.message }));
+    }
+    logger.error('Failed to create comment', { event: 'community_feed_and_moderation.create_comment.error', error });
+    next(error);
   }
 };

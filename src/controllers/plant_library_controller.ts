@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import Plant from "../models/plant_model";
 import Disease from "../models/disease_model";
-
+import logger from "../logger";
 // ==========================================
 // Plants Controllers
 // ==========================================
@@ -11,8 +11,49 @@ import Disease from "../models/disease_model";
 // @access  Public
 export const getPlants = async (req: Request, res: Response) => {
   try {
-    const plants = await Plant.find().sort({ nameEn: 1 });
-    res.status(200).json({ success: true, data: plants });
+    logger.info({ event: "plant_library.getPlants", query: req.query });
+    // Pagination: clamp limit to max 100, support cursor-based pagination
+  const { search, category, cursor, limit = "20" } = req.query;
+  const limitNumber = Math.min(parseInt(limit as string, 10) || 20, 100);
+
+  // Build query with normalized search if provided
+  const query: any = {};
+  if (search) {
+    const normalized = (search as string).toLowerCase().trim();
+    // Prefix search on normalized fields, fallback to regex on original fields
+    query.$or = [
+      { normalizedNameEn: { $regex: `^${normalized}` } },
+      { normalizedNameAr: { $regex: `^${normalized}` } },
+      { nameEn: { $regex: search, $options: "i" } },
+      { nameAr: { $regex: search, $options: "i" } },
+    ];
+  }
+  if (category) {
+    query.category = category;
+  }
+
+  // Cursor pagination using ObjectId as opaque cursor
+  let cursorQuery = {} as any;
+  if (cursor) {
+    cursorQuery._id = { $gt: cursor };
+  }
+  const plants = await Plant.find({ ...query, ...cursorQuery })
+    .sort({ _id: 1 })
+    .limit(limitNumber + 1); // fetch one extra to determine hasNextPage
+
+  const hasNextPage = plants.length > limitNumber;
+  const items = hasNextPage ? plants.slice(0, -1) : plants;
+  const nextCursor = hasNextPage ? items[items.length - 1]._id : null;
+
+  // Legacy pagination metadata for backward compatibility
+  const totalCount = await Plant.countDocuments(query);
+
+  res.status(200).json({
+    success: true,
+    data: { items, pageInfo: { hasNextPage, nextCursor } },
+    count: totalCount,
+    totalPages: Math.ceil(totalCount / limitNumber),
+  });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || "Failed to fetch plants" });
   }
@@ -23,10 +64,17 @@ export const getPlants = async (req: Request, res: Response) => {
 // @access  Admin
 export const addPlant = async (req: Request, res: Response) => {
   try {
+    logger.info({ event: "plant_library.addPlant", body: req.body, user: (req as any).user?.id });
     const { nameAr, nameEn, scientificName, imageUrl, category, careLevel, descriptionAr, descriptionEn } = req.body;
 
     if (!nameAr || !nameEn) {
       return res.status(400).json({ success: false, message: "nameAr and nameEn are required fields" });
+    }
+
+    const slug = nameEn.toLowerCase().replace(/\s+/g, '-');
+    const existing = await Plant.findOne({ slug });
+    if (existing) {
+      return res.status(409).json({ success: false, message: "Plant with this slug already exists" });
     }
 
     const plant = await Plant.create({
@@ -38,6 +86,11 @@ export const addPlant = async (req: Request, res: Response) => {
       careLevel,
       descriptionAr,
       descriptionEn,
+      slug,
+      normalizedNameEn: nameEn.toLowerCase(),
+      normalizedNameAr: nameAr.toLowerCase(),
+      active: true,
+      createdBy: (req as any).user?.id || '',
     });
 
     res.status(201).json({ success: true, data: plant });
@@ -51,6 +104,7 @@ export const addPlant = async (req: Request, res: Response) => {
 // @access  Admin
 export const updatePlant = async (req: Request, res: Response) => {
   try {
+    logger.info({ event: "plant_library.updatePlant", params: req.params, body: req.body, user: (req as any).user?.id });
     const { id } = req.params;
     const { nameAr, nameEn, scientificName, imageUrl, category, careLevel, descriptionAr, descriptionEn } = req.body;
 
@@ -81,6 +135,7 @@ export const updatePlant = async (req: Request, res: Response) => {
 // @access  Admin
 export const deletePlant = async (req: Request, res: Response) => {
   try {
+    logger.info({ event: "plant_library.deletePlant", params: req.params, user: (req as any).user?.id });
     const { id } = req.params;
 
     const plant = await Plant.findByIdAndDelete(id);
@@ -103,8 +158,48 @@ export const deletePlant = async (req: Request, res: Response) => {
 // @access  Public
 export const getDiseases = async (req: Request, res: Response) => {
   try {
-    const diseases = await Disease.find().sort({ nameEn: 1 });
-    res.status(200).json({ success: true, data: diseases });
+    logger.info({ event: "plant_library.getDiseases", query: req.query });
+    // Pagination: clamp limit to max 100, support cursor pagination
+  const { search, type, cursor, limit = "20" } = req.query;
+  const limitNumber = Math.min(parseInt(limit as string, 10) || 20, 100);
+
+  // Build query with normalized search
+  const query: any = {};
+  if (search) {
+    const normalized = (search as string).toLowerCase().trim();
+    query.$or = [
+      { normalizedNameEn: { $regex: `^${normalized}` } },
+      { normalizedNameAr: { $regex: `^${normalized}` } },
+      { nameEn: { $regex: search, $options: "i" } },
+      { nameAr: { $regex: search, $options: "i" } },
+    ];
+  }
+  if (type) {
+    query.type = type;
+  }
+
+  // Cursor pagination
+  let cursorQuery = {} as any;
+  if (cursor) {
+    cursorQuery._id = { $gt: cursor };
+  }
+  const diseases = await Disease.find({ ...query, ...cursorQuery })
+    .sort({ _id: 1 })
+    .limit(limitNumber + 1);
+
+  const hasNextPage = diseases.length > limitNumber;
+  const items = hasNextPage ? diseases.slice(0, -1) : diseases;
+  const nextCursor = hasNextPage ? items[items.length - 1]._id : null;
+
+  // Legacy count for compatibility
+  const totalCount = await Disease.countDocuments(query);
+
+  res.status(200).json({
+    success: true,
+    data: { items, pageInfo: { hasNextPage, nextCursor } },
+    count: totalCount,
+    totalPages: Math.ceil(totalCount / limitNumber),
+  });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || "Failed to fetch diseases" });
   }
@@ -115,6 +210,7 @@ export const getDiseases = async (req: Request, res: Response) => {
 // @access  Admin
 export const addDisease = async (req: Request, res: Response) => {
   try {
+    logger.info({ event: "plant_library.addDisease", body: req.body, user: (req as any).user?.id });
     const { nameAr, nameEn, imageUrl, severity, type, affectedPlantsCount, descriptionAr, descriptionEn } = req.body;
 
     if (!nameAr || !nameEn) {
@@ -183,5 +279,77 @@ export const deleteDisease = async (req: Request, res: Response) => {
     res.status(200).json({ success: true, message: "Disease deleted successfully" });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || "Failed to delete disease" });
+  }
+};
+export const bulkImport = async (req: Request, res: Response) => {
+  try {
+    const { kind, rows } = req.body as any;
+    const idempotencyKey = req.header('Idempotency-Key');
+    if (!idempotencyKey) {
+      return res.status(400).json({ success: false, message: 'Idempotency-Key header required' });
+    }
+    // Simple in-memory idempotency placeholder (replace with persistent store)
+    const existing = (global as any).__importIdempotency?.[idempotencyKey];
+    if (existing) {
+      return res.status(200).json(existing);
+    }
+
+    const accepted: any[] = [];
+    const rejected: any[] = [];
+    const created: any[] = [];
+    const updated: any[] = [];
+    const errors: any[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      try {
+        if (kind === 'plants') {
+          // Validate row
+          const { PlantImportRowSchema } = await import('../validation/plant_library_schemas');
+          PlantImportRowSchema.parse(row);
+          const slug = row.slug || row.nameEn.toLowerCase().replace(/\s+/g, '-');
+          const normalizedNameEn = row.nameEn.toLowerCase();
+          const normalizedNameAr = row.nameAr.toLowerCase();
+          const existingDoc = await Plant.findOne({ slug });
+          if (existingDoc) {
+            Object.assign(existingDoc, { ...row, slug, normalizedNameEn, normalizedNameAr, updatedBy: (req as any).user?.id || '' });
+            await existingDoc.save();
+            updated.push(existingDoc);
+          } else {
+            const createdDoc = await Plant.create({ ...row, slug, normalizedNameEn, normalizedNameAr, createdBy: (req as any).user?.id || '' });
+            created.push(createdDoc);
+          }
+          accepted.push(row);
+        } else if (kind === 'diseases') {
+          const { DiseaseImportRowSchema } = await import('../validation/plant_library_schemas');
+          DiseaseImportRowSchema.parse(row);
+          const slug = row.slug || row.nameEn.toLowerCase().replace(/\s+/g, '-');
+          const normalizedNameEn = row.nameEn.toLowerCase();
+          const normalizedNameAr = row.nameAr.toLowerCase();
+          const existingDoc = await Disease.findOne({ slug });
+          if (existingDoc) {
+            Object.assign(existingDoc, { ...row, slug, normalizedNameEn, normalizedNameAr, updatedBy: (req as any).user?.id || '' });
+            await existingDoc.save();
+            updated.push(existingDoc);
+          } else {
+            const createdDoc = await Disease.create({ ...row, slug, normalizedNameEn, normalizedNameAr, createdBy: (req as any).user?.id || '' });
+            created.push(createdDoc);
+          }
+          accepted.push(row);
+        } else {
+          throw new Error('Invalid kind');
+        }
+      } catch (rowErr: any) {
+        rejected.push(row);
+        errors.push({ row, error: rowErr.message });
+      }
+    }
+
+    const response = { success: true, data: { accepted, rejected, created, updated, errors } };
+    (global as any).__importIdempotency = (global as any).__importIdempotency || {};
+    (global as any).__importIdempotency[idempotencyKey] = response;
+    res.status(200).json(response);
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Bulk import failed' });
   }
 };

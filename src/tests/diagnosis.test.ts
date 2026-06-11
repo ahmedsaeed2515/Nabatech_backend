@@ -1,10 +1,18 @@
 import request from "supertest";
-import axios from "axios";
 import app from "../app";
 import DiagnosisHistory from "../models/diagnosis_history_model";
 import { connectTestDB, disconnectTestDB, clearTestDB } from "./db.setup";
+import { orchestrateAssistantRequest } from "../services/ai/ai_orchestrator_service";
+import { translateToAr, estimateSeverity } from "../controllers/diagnosis_controller";
 
-// 1. Hoisted-safe Cloudinary mock defined entirely inside the mock callback to prevent initialization errors
+
+// 2. Mock Orchestrator
+jest.mock("../services/ai/ai_orchestrator_service", () => ({
+  orchestrateAssistantRequest: jest.fn(),
+}));
+
+// Mock cloudinary destroy
+const mockDestroy = jest.fn().mockResolvedValue({ result: "ok" });
 jest.mock("../config/cloudinary", () => {
   const mockCloudinaryObj = {
     uploader: {
@@ -12,11 +20,13 @@ jest.mock("../config/cloudinary", () => {
         return {
           end: (buffer: any) => {
             callback(null, {
-              secure_url: "https://res.cloudinary.com/nabatech-mock/image/upload/v123456/test_diagnosis.jpg"
+              secure_url: "https://res.cloudinary.com/nabatech-mock/image/upload/v123456/test_diagnosis.jpg",
+              public_id: "test_diagnosis_public_id",
             });
           }
         };
-      }
+      },
+      destroy: (...args: any[]) => mockDestroy(...args)
     }
   };
   return {
@@ -26,9 +36,7 @@ jest.mock("../config/cloudinary", () => {
   };
 });
 
-// 2. Mock Axios for external CNN space predictions
-jest.mock("axios");
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+const mockedOrchestrateAssistantRequest = orchestrateAssistantRequest as jest.MockedFunction<typeof orchestrateAssistantRequest>;
 
 beforeAll(async () => {
   await connectTestDB();
@@ -41,7 +49,34 @@ afterAll(async () => {
 beforeEach(async () => {
   await clearTestDB();
   jest.clearAllMocks();
-  process.env.CNN_ENDPOINT_URL = "https://mock-cnn.local/predict";
+});
+
+describe("Diagnosis Controller Helper Functions", () => {
+  it("translates powdery mildew correctly", () => {
+    expect(translateToAr("powdery mildew")).toBe("البياض الدقيقي");
+  });
+
+  it("returns English name unchanged for unknown disease", () => {
+    expect(translateToAr("unknown alien virus")).toBe("unknown alien virus");
+  });
+
+  it("translates healthy to سليم", () => {
+    expect(translateToAr("healthy")).toBe("سليم");
+  });
+
+  it("estimates severity as high for late blight", () => {
+    expect(estimateSeverity(0.5, "late blight")).toBe("high");
+  });
+
+  it("estimates severity as low for healthy", () => {
+    expect(estimateSeverity(0.99, "healthy")).toBe("low");
+  });
+
+  it("estimates severity based on confidence when disease is unknown", () => {
+    expect(estimateSeverity(0.9)).toBe("high");
+    expect(estimateSeverity(0.7)).toBe("medium");
+    expect(estimateSeverity(0.5)).toBe("low");
+  });
 });
 
 describe("Diagnosis Predict API Endpoints", () => {
@@ -49,7 +84,6 @@ describe("Diagnosis Predict API Endpoints", () => {
   let userId: string;
 
   beforeEach(async () => {
-    // Register a test user
     const userRes = await request(app)
       .post("/api/auth/register")
       .send({
@@ -74,21 +108,30 @@ describe("Diagnosis Predict API Endpoints", () => {
     it("should fail if no file is uploaded in the request", async () => {
       const res = await request(app)
         .post("/api/diagnosis/predict")
-        .set("Authorization", `Bearer ${userToken}`);
+        .set("Authorization", `Bearer ${userToken}`)
+        .field("dummy", "value"); // ensure multipart
 
       expect(res.status).toBe(400);
       expect(res.body.message).toContain("No file uploaded");
     });
 
-    it("should successfully upload to Cloudinary, proxy to CNN space, and save diagnosis to DB history", async () => {
-      // Mock the CNN Space server response with casting to any to bypass strict TS typing limits in test mocks
-      mockedAxios.post.mockResolvedValueOnce({
-        status: 200,
-        data: {
+    it("returns prediction, confidence, advice and saves to history with candidates", async () => {
+      mockedOrchestrateAssistantRequest.mockResolvedValueOnce({
+        mode: "image_chat",
+        diagnosis: {
           prediction: "powdery mildew",
-          confidence: 0.95
-        }
-      } as any);
+          confidence: 0.95,
+          candidates: [{ label: "powdery mildew", confidence: 0.95 }],
+          provider: "cnn",
+        },
+        message: "This disease can be treated by neem oil.",
+        source: "rag",
+        provider: "groq",
+        lowConfidenceWarning: "",
+        needsNewImage: false,
+        recommendedAction: undefined,
+        providerChain: ["cnn", "rag"],
+      });
 
       const fakeImageBuffer = Buffer.from("this is a fake jpeg image buffer");
 
@@ -101,20 +144,64 @@ describe("Diagnosis Predict API Endpoints", () => {
       expect(res.body.success).toBe(true);
       expect(res.body.prediction).toBe("powdery mildew");
       expect(res.body.confidence).toBe(0.95);
-      expect(res.body.imageUrl).toContain("test_diagnosis.jpg");
+      expect(res.body.advice).toBe("This disease can be treated by neem oil.");
+      expect(res.body.candidates.length).toBe(1);
+      expect(res.body.historyId).toBeDefined();
 
-      // Verify saving in MongoDB
       const dbHistory = await DiagnosisHistory.findOne({ user: userId });
       expect(dbHistory).not.toBeNull();
       expect(dbHistory?.diseaseNameEn).toBe("powdery mildew");
-      expect(dbHistory?.diseaseNameAr).toBe("البياض الدقيقي"); // Arabic translation dictionary test
-      expect(dbHistory?.severity).toBe("high"); // Severity calculation logic check
-      expect(dbHistory?.imageUrl).toBe(res.body.imageUrl);
+      expect(dbHistory?.diseaseNameAr).toBe("البياض الدقيقي");
+      expect(dbHistory?.severity).toBe("high");
+      expect(dbHistory?.candidates?.length).toBe(1);
+      expect(dbHistory?.candidates?.[0].label).toBe("powdery mildew");
     });
 
-    it("should return safe error payload if CNN provider request fails", async () => {
-      // Mock axios post failure
-      mockedAxios.post.mockRejectedValueOnce(new Error("Remote Server Timeout"));
+    it("accepts optional plantId and links to history", async () => {
+      mockedOrchestrateAssistantRequest.mockResolvedValueOnce({
+        mode: "image_chat",
+        diagnosis: {
+          prediction: "healthy",
+          confidence: 0.99,
+          candidates: [],
+          provider: "cnn",
+        },
+        message: "Your plant is healthy.",
+        source: "cnn",
+        provider: "cnn",
+        lowConfidenceWarning: "",
+        needsNewImage: false,
+        recommendedAction: undefined,
+        providerChain: ["cnn"],
+      });
+
+      const fakeImageBuffer = Buffer.from("this is a fake jpeg image buffer");
+      const plantId = "60c72b2f9b1d8b001c8e4b5a"; // Random valid ObjectId
+
+      const res = await request(app)
+        .post("/api/diagnosis/predict")
+        .set("Authorization", `Bearer ${userToken}`)
+        .field("plantId", plantId)
+        .attach("file", fakeImageBuffer, "leaves.jpg");
+
+      expect(res.status).toBe(200);
+      
+      const dbHistory = await DiagnosisHistory.findOne({ user: userId });
+      expect(dbHistory?.plantId?.toString()).toBe(plantId);
+    });
+
+    it("returns lowConfidenceWarning when confidence is low", async () => {
+      mockedOrchestrateAssistantRequest.mockResolvedValueOnce({
+        mode: "image_chat",
+        diagnosis: { prediction: "unknown", confidence: 0.2, candidates: [], provider: "cnn" },
+        message: "Please upload a clearer image.",
+        source: "cnn",
+        provider: "cnn",
+        lowConfidenceWarning: "Low CNN confidence",
+        needsNewImage: true,
+        recommendedAction: "upload_clearer_image",
+        providerChain: ["cnn"],
+      });
 
       const fakeImageBuffer = Buffer.from("this is a fake jpeg image buffer");
 
@@ -123,8 +210,130 @@ describe("Diagnosis Predict API Endpoints", () => {
         .set("Authorization", `Bearer ${userToken}`)
         .attach("file", fakeImageBuffer, "leaves.jpg");
 
-      expect(res.status).toBe(502);
-      expect(res.body.message).toContain("Inference failed");
+      expect(res.status).toBe(200);
+      expect(res.body.lowConfidenceWarning).toBe("Low CNN confidence");
+      expect(res.body.needsNewImage).toBe(true);
+    });
+    it("returns idempotent response for same clientOperationId", async () => {
+      mockedOrchestrateAssistantRequest.mockResolvedValueOnce({
+        mode: "image_chat",
+        diagnosis: { prediction: "healthy", confidence: 0.99, candidates: [], provider: "cnn" },
+        message: "Your plant is healthy.",
+        source: "cnn",
+        provider: "cnn",
+        lowConfidenceWarning: "",
+        needsNewImage: false,
+        recommendedAction: undefined,
+        providerChain: ["cnn"],
+      });
+
+      const fakeImageBuffer = Buffer.from("this is a fake jpeg image buffer");
+      const clientOpId = "idemp-op-123";
+
+      const res1 = await request(app)
+        .post("/api/diagnosis/predict")
+        .set("Authorization", `Bearer ${userToken}`)
+        .field("clientOperationId", clientOpId)
+        .attach("file", fakeImageBuffer, "leaves.jpg");
+
+      expect(res1.status).toBe(200);
+
+      const res2 = await request(app)
+        .post("/api/diagnosis/predict")
+        .set("Authorization", `Bearer ${userToken}`)
+        .field("clientOperationId", clientOpId)
+        .attach("file", fakeImageBuffer, "leaves.jpg");
+
+      expect(res2.status).toBe(200);
+      expect(res2.body.historyId).toBe(res1.body.historyId);
+      
+      const historyCount = await DiagnosisHistory.countDocuments({ clientOperationId: clientOpId });
+      expect(historyCount).toBe(1);
+    });
+
+    it("cleans up Cloudinary if DB save fails", async () => {
+      mockedOrchestrateAssistantRequest.mockResolvedValueOnce({
+        mode: "image_chat",
+        diagnosis: { prediction: "healthy", confidence: 0.99, candidates: [], provider: "cnn" },
+        message: "Your plant is healthy.",
+        source: "cnn",
+        provider: "cnn",
+        lowConfidenceWarning: "",
+        needsNewImage: false,
+        recommendedAction: undefined,
+        providerChain: ["cnn"],
+      });
+
+      const fakeImageBuffer = Buffer.from("this is a fake jpeg image buffer");
+
+      // Force DB to fail
+      const createSpy = jest.spyOn(DiagnosisHistory, "create").mockRejectedValueOnce(new Error("DB Error"));
+
+      const res = await request(app)
+        .post("/api/diagnosis/predict")
+        .set("Authorization", `Bearer ${userToken}`)
+        .attach("file", fakeImageBuffer, "leaves.jpg");
+
+      expect(res.status).toBe(500);
+      expect(mockDestroy).toHaveBeenCalledWith("test_diagnosis_public_id");
+      createSpy.mockRestore();
+    });
+  });
+
+  describe("POST /api/diagnosis/sync-offline", () => {
+    it("creates an isOffline=true DiagnosisHistory record", async () => {
+      const res = await request(app)
+        .post("/api/diagnosis/sync-offline")
+        .set("Authorization", `Bearer ${userToken}`)
+        .send({
+          diseaseNameEn: "wheat rust",
+          confidence: 0.88,
+          imageUrl: "https://example.com/path.jpg",
+          clientOperationId: "test-op-1"
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.id).toBeDefined();
+
+      const dbHistory = await DiagnosisHistory.findById(res.body.id);
+      expect(dbHistory).not.toBeNull();
+      expect(dbHistory?.isOffline).toBe(true);
+      expect(dbHistory?.diseaseNameEn).toBe("wheat rust");
+      expect(dbHistory?.diseaseNameAr).toBe("صدأ الحنطة"); // Auto-translated
+      expect(dbHistory?.imageUrl).toBe("https://example.com/path.jpg");
+    });
+
+    it("returns 400 if diseaseNameEn missing", async () => {
+      const res = await request(app)
+        .post("/api/diagnosis/sync-offline")
+        .set("Authorization", `Bearer ${userToken}`)
+        .send({
+          confidence: 0.88,
+          imageUrl: "https://example.com/path.jpg",
+          clientOperationId: "test-op-2"
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it("uses provided diagnosedAt timestamp", async () => {
+      const pastDate = new Date("2023-01-01T10:00:00Z");
+      const res = await request(app)
+        .post("/api/diagnosis/sync-offline")
+        .set("Authorization", `Bearer ${userToken}`)
+        .send({
+          diseaseNameEn: "healthy",
+          confidence: 0.99,
+          imageUrl: "https://example.com/path.jpg",
+          diagnosedAt: pastDate.toISOString(),
+          clientOperationId: "test-op-3"
+        });
+
+      expect(res.status).toBe(201);
+      const dbHistory = await DiagnosisHistory.findById(res.body.id);
+      expect(dbHistory?.diagnosedAt.toISOString()).toBe(pastDate.toISOString());
     });
   });
 });

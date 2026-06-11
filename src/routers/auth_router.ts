@@ -1,5 +1,32 @@
-import {Router} from 'express';
-import { registerUser, loginUser, forgotPassword } from '../controllers/auth_controller';
+import { Router } from 'express';
+import { 
+  registerUser, 
+  loginUser, 
+  forgotPassword, 
+  resetPassword, 
+  refreshAccessToken, 
+  logoutUser, 
+  logoutAll,
+  verifyEmail, 
+  resendVerification 
+} from '../controllers/auth_controller';
+import { protect } from '../middlewares/auth_middleware';
+import { validateRequest } from '../middlewares/validate_request_middleware';
+import { 
+  loginLimiter, 
+  registerLimiter, 
+  strictAuthLimiter, 
+  refreshLimiter 
+} from '../middlewares/rate_limit_middleware';
+import {
+  registerSchema,
+  loginSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  refreshTokenSchema,
+  logoutSchema,
+  resendVerificationSchema
+} from '../validation/auth_schemas';
 
 const router = Router();
 
@@ -26,7 +53,8 @@ const router = Router();
  *       201:
  *         description: User created successfully
  */
-router.post('/register', registerUser);
+router.post('/register', registerLimiter, validateRequest(registerSchema), registerUser);
+
 /**
  * @swagger
  * /api/auth/login:
@@ -40,8 +68,6 @@ router.post('/register', registerUser);
  *           schema:
  *             type: object
  *             properties:
- *               name:
- *                 type: string
  *               email:
  *                 type: string
  *               password:
@@ -50,7 +76,14 @@ router.post('/register', registerUser);
  *       201:
  *         description: User login successfully
  */
-router.post('/login', loginUser);
-router.post('/forgot-password', forgotPassword);
+router.post('/login', loginLimiter, validateRequest(loginSchema), loginUser);
+
+router.post('/forgot-password', strictAuthLimiter, validateRequest(forgotPasswordSchema), forgotPassword);
+router.post('/reset-password', strictAuthLimiter, validateRequest(resetPasswordSchema), resetPassword);
+router.post('/refresh-token', refreshLimiter, validateRequest(refreshTokenSchema), refreshAccessToken);
+router.get('/verify-email/:token', strictAuthLimiter, verifyEmail);
+router.post('/resend-verification', strictAuthLimiter, validateRequest(resendVerificationSchema), resendVerification);
+router.post('/logout', protect, validateRequest(logoutSchema), logoutUser);
+router.post('/logout-all', protect, logoutAll);
 
 export default router;

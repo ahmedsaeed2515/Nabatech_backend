@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
 
 dotenv.config();
 
@@ -11,18 +11,16 @@ process.env.MONGODB_URI_TEST =
   "mongodb://127.0.0.1:27017/nabatech_test";
 process.env.MONGO_URI = process.env.MONGODB_URI_TEST;
 process.env.JWT_SECRET = process.env.JWT_SECRET || "testsecretjwtkey12345!";
+process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "testrefreshsecret12345!";
 
 let connectPromise: Promise<typeof mongoose> | null = null;
-let memoryServer: MongoMemoryServer | null = null;
+let memoryServer: MongoMemoryReplSet | null = null;
 
 export const connectTestDB = async () => {
   if (mongoose.connection.readyState === 1) return;
   if (!memoryServer) {
-    memoryServer = await MongoMemoryServer.create({
-      instance: {
-        dbName: "nabatech_test",
-        launchTimeout: 60000
-      }
+    memoryServer = await MongoMemoryReplSet.create({
+      replSet: { count: 1, storageEngine: 'wiredTiger' }
     });
     process.env.MONGODB_URI_TEST = memoryServer.getUri();
     process.env.MONGO_URI = process.env.MONGODB_URI_TEST;

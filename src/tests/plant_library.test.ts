@@ -19,22 +19,49 @@ beforeEach(async () => {
 
 describe("Plant Library Tests", () => {
   describe("GET /api/plant-library/plants", () => {
+
     it("returns plants list (public, no auth needed)", async () => {
-      await Plant.create({ nameAr: "äÚäÇÚ", nameEn: "Mint" });
+      await Plant.create({ nameAr: "Ù†Ø¹Ù†Ø§Ø¹", nameEn: "Mint", slug: "mint", normalizedNameEn: "mint", normalizedNameAr: "Ù†Ø¹Ù†Ø§Ø¹" });
       const res = await request(app).get("/api/plant-library/plants");
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(Array.isArray(res.body.data)).toBe(true);
-      expect(res.body.data.length).toBeGreaterThan(0);
+      expect(res.body.data.items).toBeDefined();
+      expect(Array.isArray(res.body.data.items)).toBe(true);
+      expect(res.body.data.items.length).toBeGreaterThan(0);
     });
 
-    it("returns 23 plants after seeding", async () => {
+    it("returns 20 plants by default after seeding (pagination)", async () => {
       await seedPlantLibrary();
       const res = await request(app).get("/api/plant-library/plants");
 
       expect(res.status).toBe(200);
-      expect(res.body.data).toHaveLength(23);
+      expect(res.body.data.items).toHaveLength(20);
+      expect(res.body.count).toBe(23);
+      expect(res.body.totalPages).toBe(2);
+    });
+
+    it("searches plants by Arabic and English names", async () => {
+      await seedPlantLibrary();
+      // Search English
+      const resEn = await request(app).get("/api/plant-library/plants?search=aloe");
+      expect(resEn.status).toBe(200);
+      expect(resEn.body.data.items.some((p: any) => p.nameEn.toLowerCase().includes("aloe"))).toBe(true);
+
+      // Search Arabic
+      const resAr = await request(app).get("/api/plant-library/plants?search=ØµØ¨Ø§Ø±");
+      expect(resAr.status).toBe(200);
+      expect(resAr.body.data.items.some((p: any) => p.nameAr.includes("ØµØ¨Ø§Ø±"))).toBe(true);
+    });
+
+    it("applies pagination limits correctly", async () => {
+      await seedPlantLibrary();
+      const res = await request(app).get("/api/plant-library/plants?page=2&limit=5");
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.items).toHaveLength(5);
+      expect(res.body.count).toBe(23);
+      expect(res.body.totalPages).toBe(5);
     });
   });
 
@@ -46,7 +73,7 @@ describe("Plant Library Tests", () => {
       const res = await request(app)
         .post("/api/plant-library/plants")
         .set("Authorization", `Bearer ${token}`)
-        .send({ nameAr: "ØãÇØã", nameEn: "Tomato" });
+        .send({ nameAr: "Ø·Ù…Ø§Ø·Ù…", nameEn: "Tomato" });
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
@@ -59,7 +86,7 @@ describe("Plant Library Tests", () => {
       const res = await request(app)
         .post("/api/plant-library/plants")
         .set("Authorization", `Bearer ${token}`)
-        .send({ nameAr: "ØãÇØã", nameEn: "Tomato" });
+        .send({ nameAr: "Ø·Ù…Ø§Ø·Ù…", nameEn: "Tomato" });
 
       expect(res.status).toBe(403);
     });
@@ -69,7 +96,7 @@ describe("Plant Library Tests", () => {
     it("admin can delete", async () => {
       const admin = await createAdminUser();
       const token = await getAuthToken(admin.email, admin.password);
-      const plant = await Plant.create({ nameAr: "ÑíÍÇä", nameEn: "Basil" });
+      const plant = await Plant.create({ nameAr: "Ø±ÙŠØ­Ø§Ù†", nameEn: "Basil", slug: "basil-1", normalizedNameEn: "basil", normalizedNameAr: "Ø±ÙŠØ­Ø§Ù†" });
 
       const res = await request(app)
         .delete(`/api/plant-library/plants/${plant._id}`)
@@ -82,7 +109,7 @@ describe("Plant Library Tests", () => {
     it("regular user gets 403", async () => {
       const user = await createTestUser();
       const token = await getAuthToken(user.email, user.password);
-      const plant = await Plant.create({ nameAr: "ÑíÍÇä", nameEn: "Basil" });
+      const plant = await Plant.create({ nameAr: "Ø±ÙŠØ­Ø§Ù†", nameEn: "Basil", slug: "basil-2", normalizedNameEn: "basil", normalizedNameAr: "Ø±ÙŠØ­Ø§Ù†" });
 
       const res = await request(app)
         .delete(`/api/plant-library/plants/${plant._id}`)
@@ -92,3 +119,4 @@ describe("Plant Library Tests", () => {
     });
   });
 });
+

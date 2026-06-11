@@ -1,5 +1,5 @@
-import mongoose from "mongoose";
 import dotenv from "dotenv";
+import mongoose from "mongoose";
 dotenv.config();
 
 const connectDB = async () => {
@@ -9,12 +9,12 @@ const connectDB = async () => {
         throw new Error("Missing MONGODB_URI (or MONGO_URI) environment variable");
       }
       const conn =  await mongoose.connect(mongoUri);
-      console.log(`Database connected successfully ${conn.connection.host}`);            
+      console.log(`Database connected successfully ${conn.connection.host}`);
     }catch (error) {
       console.error(`Database Connection Error: ${error}`);
       process.exit(1);
-    }                
-} 
+    }
+}
 
 
 export default connectDB;

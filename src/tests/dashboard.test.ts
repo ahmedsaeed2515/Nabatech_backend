@@ -159,4 +159,56 @@ describe("Dashboard Stats API Endpoints", () => {
       expect(res.body.stats.scanDistribution[1].value).toBe(1); // Offline
     });
   });
+
+  describe("GET /api/admin/diagnoses", () => {
+    it("should offset paginate admin diagnoses", async () => {
+      // Create some mock data
+      await DiagnosisHistory.create({
+        user: adminId,
+        imageUrl: "https://example.com/1.jpg",
+        diseaseNameEn: "powdery mildew",
+        diseaseNameAr: "البياض الدقيقي",
+        confidence: 0.95,
+        severity: "high",
+        diagnosedAt: new Date()
+      });
+      await DiagnosisHistory.create({
+        user: adminId,
+        imageUrl: "https://example.com/2.jpg",
+        diseaseNameEn: "healthy",
+        diseaseNameAr: "سليم",
+        confidence: 0.99,
+        severity: "low",
+        diagnosedAt: new Date()
+      });
+
+      const res = await request(app)
+        .get("/api/admin/diagnoses?page=1&limit=1&severity=high")
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.items.length).toBe(1);
+      expect(res.body.data.items[0].severity).toBe("high");
+      expect(res.body.data.total).toBe(1);
+      expect(res.body.data.page).toBe(1);
+      expect(res.body.data.totalPages).toBe(1);
+    });
+  });
+
+  describe("GET /api/admin/diagnoses/analytics", () => {
+    it("should return diagnosis analytics for admins", async () => {
+      const res = await request(app)
+        .get("/api/admin/diagnoses/analytics?timeZone=UTC")
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.totals).toBeDefined();
+      expect(res.body.data.byDay).toBeDefined();
+      expect(res.body.data.bySeverity).toBeDefined();
+      expect(res.body.data.topDiseases).toBeDefined();
+      expect(res.body.data.offlineVsRemote).toBeDefined();
+    });
+  });
 });

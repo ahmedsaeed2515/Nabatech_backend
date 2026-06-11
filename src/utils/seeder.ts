@@ -8,14 +8,26 @@ export const seedPlantLibrary = async () => {
     const plantCount = await Plant.countDocuments();
     if (plantCount === 0) {
       console.log("Seeding plants into the database...");
-      await Plant.create(seedPlants);
+      const plantsWithSlug = seedPlants.map((p, i) => ({
+        ...p,
+        slug: p.nameEn.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + i,
+        normalizedNameEn: p.nameEn.toLowerCase(),
+        normalizedNameAr: p.nameAr,
+      }));
+      await Plant.create(plantsWithSlug);
       console.log("Plants seeded successfully.");
     }
 
     const diseaseCount = await Disease.countDocuments();
     if (diseaseCount === 0) {
       console.log("Seeding diseases into the database...");
-      await Disease.create(seedDiseases);
+      const diseasesWithSlug = seedDiseases.map((d, i) => ({
+        ...d,
+        slug: d.nameEn.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + i,
+        normalizedNameEn: d.nameEn.toLowerCase(),
+        normalizedNameAr: d.nameAr,
+      }));
+      await Disease.create(diseasesWithSlug);
       console.log("Diseases seeded successfully.");
     }
   } catch (error) {

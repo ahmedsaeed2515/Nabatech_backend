@@ -8,7 +8,8 @@ import Reminder from "../models/reminder_model";
 import StoreProduct from "../models/store_product_model";
 import Message from "../models/message_model";
 import Expert from "../models/expert_model";
-
+import Comment from "../models/comment_model";
+import DiaryEntry from "../models/diary_entry_model";
 // @desc    Get all users (Admin/Management only)
 // @route   GET /api/users/
 // @access  Private
@@ -59,7 +60,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
 export const updateProfile = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const { fullName, phoneNumber, selectedCountry, avatarUrl } = req.body;
+    const { fullName, phoneNumber, selectedCountry, avatarUrl, preferences } = req.body;
 
     const user = await User.findById(userId);
     if (!user) {
@@ -85,6 +86,21 @@ export const updateProfile = async (req: Request, res: Response) => {
       user.avatarUrl = avatarUrl.trim();
     }
 
+    if (preferences !== undefined) {
+      if (!user.preferences) {
+        user.preferences = { theme: 'system', language: 'en', notificationsEnabled: true };
+      }
+      if (preferences.theme !== undefined) {
+        user.preferences.theme = preferences.theme;
+      }
+      if (preferences.language !== undefined) {
+        user.preferences.language = preferences.language;
+      }
+      if (preferences.notificationsEnabled !== undefined) {
+        user.preferences.notificationsEnabled = preferences.notificationsEnabled;
+      }
+    }
+
     await user.save();
 
     res.status(200).json({
@@ -96,6 +112,7 @@ export const updateProfile = async (req: Request, res: Response) => {
         phoneNumber: user.phoneNumber,
         avatarUrl: user.avatarUrl,
         selectedCountry: user.selectedCountry,
+        preferences: user.preferences,
         createdAt: user.createdAt,
       }
     });
@@ -187,6 +204,14 @@ export const deleteUser = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // Cascade deletions
+    await CommunityPost.deleteMany({ author: user._id });
+    await Comment.deleteMany({ author: user._id });
+    await MyPlant.deleteMany({ user: user._id });
+    await DiaryEntry.deleteMany({ user: user._id });
+    await Reminder.deleteMany({ user: user._id });
+    await DiagnosisHistory.deleteMany({ user: user._id });
+
     await User.findByIdAndDelete(req.params.id);
 
     res.status(200).json({
@@ -195,6 +220,40 @@ export const deleteUser = async (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete user", error });
+  }
+};
+
+// @desc    Get detailed stats for a user (Admin only)
+// @route   GET /api/users/:id/details
+// @access  Private/Admin
+export const getUserDetails = async (req: Request, res: Response) => {
+  try {
+    const user = await User.findById(req.params.id).select("-password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const [plantsCount, remindersCount, diagnosesCount, postsCount, diariesCount] = await Promise.all([
+      MyPlant.countDocuments({ user: user._id }),
+      Reminder.countDocuments({ user: user._id }),
+      DiagnosisHistory.countDocuments({ user: user._id }),
+      CommunityPost.countDocuments({ author: user._id }),
+      DiaryEntry.countDocuments({ user: user._id })
+    ]);
+
+    res.status(200).json({
+      success: true,
+      user,
+      stats: {
+        plants: plantsCount,
+        reminders: remindersCount,
+        diagnoses: diagnosesCount,
+        posts: postsCount,
+        diaries: diariesCount
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch user details", error });
   }
 };
 
@@ -288,5 +347,31 @@ export const getDashboardStats = async (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch dashboard stats", error });
+  }
+};
+
+// @desc    Update FCM Device Token
+// @route   PUT /api/users/fcm-token
+// @access  Private
+export const updateFcmToken = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ success: false, message: "Token is required" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    user.fcmToken = token;
+    await user.save();
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to update FCM token", error });
   }
 };

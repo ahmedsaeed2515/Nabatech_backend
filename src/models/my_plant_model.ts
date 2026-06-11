@@ -22,7 +22,11 @@ const myPlantSchema = new Schema<IMyPlant>(
     location: { type: String, enum: ['indoor', 'outdoor', '\u062F\u0627\u062E\u0644\u064A', '\u062E\u0627\u0631\u062C\u064A'], required: true },
     waterFrequencyDays: { type: Number, required: true },
     lastWatered: { type: Date, default: Date.now },
-    healthStatus: { type: String, default: "excellent" },
+    healthStatus: { 
+      type: String, 
+      enum: ['excellent', 'good', 'needs_care', 'sick', 'critical', 'ممتازة', 'جيدة', 'تحتاج رعاية', 'مريضة', 'حرجة'], 
+      default: 'excellent' 
+    },
   },
   { timestamps: true }
 );

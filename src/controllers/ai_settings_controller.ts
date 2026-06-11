@@ -17,6 +17,7 @@ export const getAdminAiSettings = async (_req: Request, res: Response) => {
 
 export const putAdminAiSettings = async (req: Request, res: Response) => {
   try {
+    // Optionally use Idempotency-Key if provided in headers, simple deduplication not implemented here due to admin scope
     const raw = (req.body || {}) as Record<string, unknown>;
     const updated = await updateAiSettings(raw, (req as any)?.user?.id);
     return res.status(200).json({ success: true, data: redactAiSettings(updated) });
@@ -28,6 +29,16 @@ export const putAdminAiSettings = async (req: Request, res: Response) => {
 export const testAdminAiSettings = async (req: Request, res: Response) => {
   try {
     const { provider = "all", question = "Hello", imageBase64 } = req.body || {};
+    
+    // Validation bounding
+    if (typeof question !== "string" || question.length > 2000) {
+      return res.status(400).json({ success: false, message: "Question exceeds maximum length of 2000 characters" });
+    }
+    
+    if (imageBase64 && (typeof imageBase64 !== "string" || imageBase64.length > 10 * 1024 * 1024)) { // Rough 10MB base64 limit
+      return res.status(400).json({ success: false, message: "Image base64 payload is too large" });
+    }
+
     const settings = await getAiSettings();
     const results: Record<string, unknown> = {};
 
@@ -79,7 +90,7 @@ export const testAdminAiSettings = async (req: Request, res: Response) => {
 
 export const getAdminAiLogs = async (req: Request, res: Response) => {
   try {
-    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const limit = Math.min(Number(req.query.limit) || 50, 100);
     const feature = typeof req.query.feature === "string" ? req.query.feature : "";
     const status = typeof req.query.status === "string" ? req.query.status : "";
 
@@ -87,9 +98,13 @@ export const getAdminAiLogs = async (req: Request, res: Response) => {
     if (feature === "chat" || feature === "diagnosis" || feature === "image_chat") filter.feature = feature;
     if (status === "success" || status === "failure") filter.status = status;
 
-    const logs = await AiCallLog.find(filter).sort({ createdAt: -1 }).limit(limit);
+    const logs = await AiCallLog.find(filter)
+      .select("-inputMeta") // Redact input meta which might contain personal data or large prompts
+      .sort({ createdAt: -1 })
+      .limit(limit);
     return res.status(200).json({ success: true, data: logs });
   } catch {
     return res.status(500).json({ success: false, message: "Failed to fetch AI logs" });
   }
 };
+

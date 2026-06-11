@@ -27,7 +27,8 @@ describe("Community Tests", () => {
         authorName: "Test User",
         title: "Valid title",
         content: "This is valid content with enough length",
-        plantTag: "General"
+        plantTag: "General",
+        clientOperationId: "op-list-1"
       });
 
       const res = await request(app)
@@ -48,7 +49,8 @@ describe("Community Tests", () => {
         authorName: "Test User",
         title: "Diagnosis title",
         content: "This is valid content for diagnosis category",
-        plantTag: "Diagnosis"
+        plantTag: "Diagnosis",
+        clientOperationId: "op-filter-1"
       });
 
       await CommunityPost.create({
@@ -56,7 +58,8 @@ describe("Community Tests", () => {
         authorName: "Test User",
         title: "Watering title",
         content: "This is valid content for watering category",
-        plantTag: "Watering"
+        plantTag: "Watering",
+        clientOperationId: "op-filter-2"
       });
 
       const res = await request(app)
@@ -80,7 +83,8 @@ describe("Community Tests", () => {
         .send({
           title: "How to treat tomato leaves?",
           content: "My tomato leaves have yellow spots for 3 days. Any help?",
-          plantTag: "Diagnosis"
+          plantTag: "Diagnosis",
+          clientOperationId: "op-123"
         });
 
       expect(res.status).toBe(201);
@@ -98,7 +102,8 @@ describe("Community Tests", () => {
         .send({
           title: "abcd",
           content: "My tomato leaves have yellow spots for 3 days. Any help?",
-          plantTag: "Diagnosis"
+          plantTag: "Diagnosis",
+          clientOperationId: "op-124"
         });
 
       expect(res.status).toBe(400);
@@ -114,7 +119,8 @@ describe("Community Tests", () => {
         .send({
           title: "Valid title",
           content: "short",
-          plantTag: "Diagnosis"
+          plantTag: "Diagnosis",
+          clientOperationId: "op-125"
         });
 
       expect(res.status).toBe(400);
@@ -131,7 +137,8 @@ describe("Community Tests", () => {
         authorName: "Test User",
         title: "Valid title",
         content: "This is valid content with enough length",
-        plantTag: "General"
+        plantTag: "General",
+        clientOperationId: "op-like-1"
       });
 
       const likeRes = await request(app)
@@ -160,13 +167,14 @@ describe("Community Tests", () => {
         authorName: "Test User",
         title: "Valid title",
         content: "This is valid content with enough length",
-        plantTag: "General"
+        plantTag: "General",
+        clientOperationId: "op-comment-1"
       });
 
       const res = await request(app)
         .post(`/api/community/posts/${post._id}/comments`)
         .set("Authorization", `Bearer ${token}`)
-        .send({ text: "Helpful answer" });
+        .send({ text: "Helpful answer", clientOperationId: "op-126" });
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
@@ -182,15 +190,44 @@ describe("Community Tests", () => {
         authorName: "Test User",
         title: "Valid title",
         content: "This is valid content with enough length",
-        plantTag: "General"
+        plantTag: "General",
+        clientOperationId: "op-comment-2"
       });
 
       const res = await request(app)
         .post(`/api/community/posts/${post._id}/comments`)
         .set("Authorization", `Bearer ${token}`)
-        .send({ text: "   " });
+        .send({ text: "   ", clientOperationId: "op-127" });
 
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Specialist Offers", () => {
+    it("prevents non-specialists from creating offers", async () => {
+      const user = await createTestUser();
+      const token = await getAuthToken(user.email, user.password);
+
+      const post = await CommunityPost.create({
+        author: user.user!._id,
+        authorName: "Test User",
+        title: "Valid title",
+        content: "This is valid content with enough length",
+        plantTag: "General",
+        clientOperationId: "op-offer-1"
+      });
+
+      const res = await request(app)
+        .post("/api/community/offers")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          postId: post._id,
+          plan: "I can help",
+          price: 50,
+          clientOperationId: "op-offer-1"
+        });
+
+      expect(res.status).toBe(403);
     });
   });
 });

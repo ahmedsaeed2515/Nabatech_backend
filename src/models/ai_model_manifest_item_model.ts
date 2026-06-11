@@ -13,6 +13,12 @@ export interface IAiModelManifestItem extends Document {
   labelsUrl: string;
   sha256: string;
   recommended: boolean;
+  manifestVersion: string;
+  platform: string;
+  minAppVersion: string;
+  active: boolean;
+  rollbackOf?: string;
+  publishedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,12 +37,22 @@ const aiModelManifestItemSchema = new Schema<IAiModelManifestItem>(
     labelsUrl: { type: String, required: true, trim: true },
     sha256: { type: String, required: true, trim: true },
     recommended: { type: Boolean, default: false },
+    manifestVersion: { type: String, default: "1.0", trim: true },
+    platform: { type: String, default: "all", trim: true },
+    minAppVersion: { type: String, default: "0.0.0", trim: true },
+    active: { type: Boolean, default: true },
+    rollbackOf: { type: String, trim: true },
+    publishedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
+);
+
+aiModelManifestItemSchema.index(
+  { recommended: 1, platform: 1, active: 1 },
+  { unique: true, partialFilterExpression: { recommended: true, active: true } }
 );
 
 export default mongoose.model<IAiModelManifestItem>(
   "AiModelManifestItem",
   aiModelManifestItemSchema
 );
-

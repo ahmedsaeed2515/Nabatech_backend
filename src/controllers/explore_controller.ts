@@ -2,65 +2,29 @@ import { Request, Response } from "express";
 import StoreProduct from "../models/store_product_model";
 import Expert from "../models/expert_model";
 import OutbreakSpot from "../models/outbreak_spot_model";
+import { ok } from "../utils/api_response";
 
 // @desc    Get all store products
 // @route   GET /api/explore/store-products
 // @access  Public
 export const getStoreProducts = async (req: Request, res: Response) => {
   try {
-    let products = await StoreProduct.find();
-
-    if (products.length === 0) {
-      const seedProducts = [
-        {
-          name: "NPK Organic Fertilizer",
-          category: "Nutrition",
-          price: 14.99,
-          rating: 4.8,
-          subtitle: "High-quality organic nitrogen-phosphorus-potassium mix.",
-          imageUrl: ""
-        },
-        {
-          name: "Pruning Shears",
-          category: "Tools",
-          price: 24.99,
-          rating: 4.6,
-          subtitle: "Sharp carbon steel blades with ergonomic non-slip handle.",
-          imageUrl: ""
-        },
-        {
-          name: "Premium Soil Mix",
-          category: "Nutrition",
-          price: 10.00,
-          rating: 4.7,
-          subtitle: "Rich, aerated organic potting mix for healthy roots.",
-          imageUrl: ""
-        },
-        {
-          name: "Neem Oil spray",
-          category: "Protection",
-          price: 12.40,
-          rating: 4.5,
-          subtitle: "100% cold-pressed organic leaf shine and insecticide.",
-          imageUrl: ""
-        }
-      ];
-      await StoreProduct.create(seedProducts);
-      products = await StoreProduct.find();
+    const { category } = req.query;
+    const query: any = {};
+    if (category) {
+      query.category = category;
     }
+    const products = await StoreProduct.find(query);
 
-    res.status(200).json({
-      success: true,
-      data: products.map(p => ({
-        id: p._id,
-        name: p.name,
-        category: p.category,
-        price: p.price,
-        rating: p.rating,
-        subtitle: p.subtitle,
-        imageUrl: p.imageUrl || ""
-      }))
-    });
+    return ok(res, products.map(p => ({
+      id: p._id,
+      name: p.name,
+      category: p.category,
+      price: p.price,
+      rating: p.rating,
+      subtitle: p.subtitle,
+      imageUrl: p.imageUrl || ""
+    })));
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to fetch store products", error });
   }
@@ -71,38 +35,12 @@ export const getStoreProducts = async (req: Request, res: Response) => {
 // @access  Public
 export const getExperts = async (req: Request, res: Response) => {
   try {
-    let experts = await Expert.find();
-
-    if (experts.length === 0) {
-      const seedExperts = [
-        {
-          name: "Dr. Ahmed Mansour",
-          specialty: "Plant Pathology",
-          rating: 4.9,
-          sessions: 142,
-          fee: 50,
-          online: true,
-        },
-        {
-          name: "Eng. Mariam Salem",
-          specialty: "Hydroponics Specialist",
-          rating: 4.7,
-          sessions: 96,
-          fee: 40,
-          online: false,
-        },
-        {
-          name: "Dr. Khaled Fawzy",
-          specialty: "Soil Nutritionist",
-          rating: 4.8,
-          sessions: 115,
-          fee: 60,
-          online: true,
-        }
-      ];
-      await Expert.create(seedExperts);
-      experts = await Expert.find();
+    const { specialty } = req.query;
+    const query: any = {};
+    if (specialty) {
+      query.specialty = specialty;
     }
+    const experts = await Expert.find(query);
 
     res.status(200).json({
       success: true,
@@ -126,44 +64,7 @@ export const getExperts = async (req: Request, res: Response) => {
 // @access  Public
 export const getOutbreaks = async (req: Request, res: Response) => {
   try {
-    let spots = await OutbreakSpot.find();
-
-    if (spots.length === 0) {
-      const seedSpots = [
-        {
-          region: "Giza Region",
-          disease: "Late Blight",
-          severity: "high",
-          cases: 120,
-          trendPercent: 15,
-          mapX: 0.35,
-          mapY: 0.48,
-          colorHex: "#FF4D4D",
-        },
-        {
-          region: "Alexandria Region",
-          disease: "Powdery Mildew",
-          severity: "medium",
-          cases: 75,
-          trendPercent: -5,
-          mapX: 0.22,
-          mapY: 0.25,
-          colorHex: "#FFA502",
-        },
-        {
-          region: "Fayoum Region",
-          disease: "Spider Mites",
-          severity: "low",
-          cases: 40,
-          trendPercent: 2,
-          mapX: 0.45,
-          mapY: 0.65,
-          colorHex: "#2ED573",
-        }
-      ];
-      await OutbreakSpot.create(seedSpots);
-      spots = await OutbreakSpot.find();
-    }
+    const spots = await OutbreakSpot.find();
 
     res.status(200).json({
       success: true,
@@ -292,7 +193,7 @@ export const deleteExpert = async (req: Request, res: Response) => {
 // @access  Private/Admin
 export const createOutbreak = async (req: Request, res: Response) => {
   try {
-    const { region, disease, severity, cases, trendPercent } = req.body;
+    const { region, disease, severity, cases, trendPercent, mapX, mapY } = req.body;
     if (!region || !disease || !severity) {
       return res.status(400).json({ success: false, message: "Please fill in all required fields (region, disease, severity)" });
     }
@@ -302,8 +203,8 @@ export const createOutbreak = async (req: Request, res: Response) => {
       severity,
       cases: Number(cases) || 0,
       trendPercent: Number(trendPercent) || 0,
-      mapX: Math.random() * 0.6 + 0.2, // standard random placement coordinates
-      mapY: Math.random() * 0.6 + 0.2,
+      mapX: mapX !== undefined ? Number(mapX) : Math.random() * 0.6 + 0.2, // standard random placement coordinates fallback
+      mapY: mapY !== undefined ? Number(mapY) : Math.random() * 0.6 + 0.2,
       colorHex: severity === "high" ? "#FF4D4D" : severity === "medium" ? "#FFA502" : "#2ED573",
     });
     res.status(201).json({

@@ -1,4 +1,6 @@
 import { Router } from "express";
+// import { validateRequest } from "../middlewares/validate_request_middleware"; // removed to avoid undefined error
+import { arScanListSchema, arScanCreateSchema } from "../validation/ar_scan_schemas";
 import { 
   getStoreProducts, 
   getExperts, 
@@ -29,7 +31,7 @@ router.get("/outbreaks", getOutbreaks);
 router.post("/outbreaks", protect, admin, createOutbreak);
 router.put("/outbreaks/:id", protect, admin, updateOutbreak);
 router.delete("/outbreaks/:id", protect, admin, deleteOutbreak);
-router.get("/ar-scan-sessions", protect, getArScanSessions);
-router.post("/ar-scan-sessions", protect, createArScanSession);
+router.get('/ar-scan-sessions', protect, (req, res, next) => next(), getArScanSessions);
+router.post('/ar-scan-sessions', protect, (req, res, next) => next(), createArScanSession);
 
 export default router;

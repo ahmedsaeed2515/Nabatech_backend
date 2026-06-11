@@ -14,19 +14,39 @@ const toManifestPayload = (item: any) => ({
   labelsUrl: item.labelsUrl,
   sha256: item.sha256,
   recommended: item.recommended,
+  manifestVersion: item.manifestVersion || "1.0",
+  platform: item.platform || "all",
+  minAppVersion: item.minAppVersion || "0.0.0",
+  active: item.active !== undefined ? item.active : true,
+  rollbackOf: item.rollbackOf,
+  publishedAt: item.publishedAt,
 });
+
+const isValidSecureUrl = (urlString: string) => {
+  try {
+    const url = new URL(urlString);
+    return url.protocol === "https:" || url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+};
+
+const isValidSha256 = (sha256: string) => {
+  return /^[a-fA-F0-9]{64}$/.test(sha256);
+};
 
 // @desc    Get AI models manifest
 // @route   GET /api/ai-models/manifest
 // @access  Public
 export const getAiModelsManifest = async (_req: Request, res: Response) => {
   try {
-    const items = await AiModelManifestItem.find().sort({ recommended: -1, name: 1 });
+    const items = await AiModelManifestItem.find({ active: true }).sort({ recommended: -1, name: 1 });
     const mapped = items.map((item) => toManifestPayload(item));
     return res
       .status(200)
       .json({ 
         success: true, 
+        manifestVersion: "1.0",
         data: mapped,
         models: mapped // For Flutter dynamic downloader compatibility
       });
@@ -55,6 +75,11 @@ export const createAiModelManifestItem = async (req: Request, res: Response) => 
       labelsUrl,
       sha256,
       recommended,
+      manifestVersion,
+      platform,
+      minAppVersion,
+      active,
+      rollbackOf,
     } = req.body;
 
     if (
@@ -73,6 +98,14 @@ export const createAiModelManifestItem = async (req: Request, res: Response) => 
         .json({ success: false, message: "Missing required manifest fields" });
     }
 
+    if (!isValidSha256(sha256)) {
+      return res.status(400).json({ success: false, message: "sha256 must be a valid 64-character hex string" });
+    }
+
+    if (!isValidSecureUrl(modelUrl) || !isValidSecureUrl(labelsUrl)) {
+      return res.status(400).json({ success: false, message: "modelUrl and labelsUrl must be secure HTTPS URLs (or localhost)" });
+    }
+
     const created = await AiModelManifestItem.create({
       id: String(id).trim(),
       name: String(name).trim(),
@@ -86,10 +119,18 @@ export const createAiModelManifestItem = async (req: Request, res: Response) => 
       labelsUrl: String(labelsUrl).trim(),
       sha256: String(sha256).trim(),
       recommended: Boolean(recommended),
+      manifestVersion: manifestVersion ? String(manifestVersion).trim() : "1.0",
+      platform: platform ? String(platform).trim() : "all",
+      minAppVersion: minAppVersion ? String(minAppVersion).trim() : "0.0.0",
+      active: active !== undefined ? Boolean(active) : true,
+      rollbackOf: rollbackOf ? String(rollbackOf).trim() : undefined,
     });
 
     return res.status(201).json({ success: true, data: toManifestPayload(created) });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ success: false, message: "Manifest item already exists or recommended uniqueness violated" });
+    }
     return res
       .status(500)
       .json({ success: false, message: "Failed to create AI model manifest item" });
@@ -120,17 +161,31 @@ export const updateAiModelManifestItem = async (req: Request, res: Response) => 
       "labelsUrl",
       "sha256",
       "recommended",
+      "manifestVersion",
+      "platform",
+      "minAppVersion",
+      "active",
+      "rollbackOf"
     ] as const;
 
     for (const field of fields) {
       if (req.body[field] !== undefined) {
+        if (field === "sha256" && !isValidSha256(req.body[field])) {
+           return res.status(400).json({ success: false, message: "sha256 must be a valid 64-character hex string" });
+        }
+        if ((field === "modelUrl" || field === "labelsUrl") && !isValidSecureUrl(req.body[field])) {
+           return res.status(400).json({ success: false, message: "Urls must be secure HTTPS URLs (or localhost)" });
+        }
         (item as any)[field] = req.body[field];
       }
     }
 
     await item.save();
     return res.status(200).json({ success: true, data: toManifestPayload(item) });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ success: false, message: "Update violated recommended uniqueness" });
+    }
     return res
       .status(500)
       .json({ success: false, message: "Failed to update AI model manifest item" });
@@ -172,6 +227,8 @@ export const getAiModelProxyUrl = async (req: Request, res: Response) => {
       data: {
         modelUrl: item.modelUrl,
         labelsUrl: item.labelsUrl,
+        sha256: item.sha256,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(), // Dummy expiresAt representing a presigned url pattern
       },
     });
   } catch (error) {
