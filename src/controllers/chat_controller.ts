@@ -5,23 +5,81 @@ import { sanitizeErrorMessage, isProviderError } from "../services/ai/ai_errors"
 import { validateChatText, validateChatHistory } from "../validation/chat_schemas";
 import crypto from "crypto";
 
+/**
+ * Loads recent message history from DB for a given user+conversationId.
+ * Returns up to `limit` messages in chronological order (oldest first).
+ * This is the server-side memory — it is the ground truth for what was said.
+ */
+const loadDbHistory = async (
+  userId: string,
+  conversationId: string,
+  limit = 20
+): Promise<Array<{ role: string; content: string }>> => {
+  try {
+    const messages = await Message.find({
+      user: userId,
+      conversationId,
+      role: { $in: ["user", "assistant"] },
+      status: "sent",
+    })
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit)
+      .lean();
+
+    // Reverse to chronological order (oldest first) for LLM context window
+    return messages.reverse().map((m) => ({
+      role: m.role === "assistant" ? "assistant" : "user",
+      content: m.text,
+    }));
+  } catch (error) {
+    console.warn("Failed to load DB history, proceeding with client history:", sanitizeErrorMessage(error));
+    return [];
+  }
+};
+
+/**
+ * Merges server-side DB history with client-sent history.
+ * DB history is the ground truth; client history fills gaps for very recent
+ * messages that may not yet be committed (optimistic UI sends).
+ * Deduplicates by (role, content) to avoid double-injecting the same message.
+ */
+const mergeHistory = (
+  dbHistory: Array<{ role: string; content: string }>,
+  clientHistory: Array<{ role: string; content: string }>
+): Array<{ role: string; content: string }> => {
+  if (!dbHistory.length) return clientHistory.slice(-20);
+  
+  // Build a set of known (role+content) pairs from DB history
+  const dbSet = new Set(dbHistory.map((m) => `${m.role}::${m.content.trim()}`));
+  
+  // Append any client messages NOT already in DB (e.g., very recent unsaved turns)
+  const extraFromClient = clientHistory.filter(
+    (m) => !dbSet.has(`${m.role}::${m.content.trim()}`)
+  );
+  
+  const merged = [...dbHistory, ...extraFromClient];
+  // Bound to last 20 messages (10 turns) for token safety
+  return merged.slice(-20);
+};
+
 export const chatWithAI = async (req: Request, res: Response) => {
   try {
     const text = (req.body?.text || req.body?.question || "").toString();
-    const history = Array.isArray(req.body?.history) ? req.body.history : [];
+    const clientHistory = Array.isArray(req.body?.history) ? req.body.history : [];
     const topK = Number(req.body?.top_k) || undefined;
     const clientOperationId = req.body?.clientOperationId;
 
     if (!validateChatText(text)) {
       return res.status(400).json({ success: false, message: "Message is required and must be under 2000 characters" });
     }
-    if (!validateChatHistory(history)) {
+    if (!validateChatHistory(clientHistory)) {
       return res.status(400).json({ success: false, message: "Invalid history format or length" });
     }
 
     const trimmedText = text.trim();
     const userId = (req as any).user.id;
     const requestId = crypto.randomUUID();
+    const conversationId = `conv-${userId}`;
 
     if (clientOperationId) {
       const existing = await Message.findOne({ user: userId, clientOperationId, role: "assistant" });
@@ -37,8 +95,11 @@ export const chatWithAI = async (req: Request, res: Response) => {
       }
     }
 
-    // Default conversation for legacy or new ones without specific ID in this design
-    const conversationId = `conv-${userId}`; 
+    // ✅ FIX #1: Load authoritative conversation history from DB
+    // This is the memory fix — the server always knows the full conversation,
+    // even if the client forgot to send history (e.g., after app restart)
+    const dbHistory = await loadDbHistory(userId, conversationId, 20);
+    const history = mergeHistory(dbHistory, clientHistory);
 
     // Create a MongoDB Message log for user query
     await Message.create({
@@ -57,7 +118,7 @@ export const chatWithAI = async (req: Request, res: Response) => {
         userId,
         requestId,
         question: trimmedText,
-        history,
+        history, // ✅ FIX #1: merged DB + client history injected
         topK,
       });
     } catch (aiError) {
@@ -91,7 +152,7 @@ export const chatWithAI = async (req: Request, res: Response) => {
       status: "sent",
       provider: chatResult.provider,
       source: chatResult.source,
-      sourceIds: [chatResult.provider] // Simplified sourceIds based on provider chain
+      sourceIds: [chatResult.provider]
     });
 
     // Return response with success and message fields
@@ -106,7 +167,7 @@ export const chatWithAI = async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Failed to fetch chat history", error });
+    res.status(500).json({ message: "Failed to process chat message", error });
   }
 };
 
@@ -144,6 +205,9 @@ export const getChatHistory = async (req: Request, res: Response) => {
       provider: m.provider,
       source: m.source,
       sourceIds: m.sourceIds,
+      // ✅ FIX #3: include image fields so image chat messages render correctly
+      imageUrl: m.imageUrl,
+      diagnosisResult: m.diagnosisResult,
       createdAt: m.createdAt
     }));
 
@@ -172,15 +236,13 @@ export const getAllChatLogs = async (req: Request, res: Response) => {
     const q = req.query.q as string;
 
     const match: any = {};
-    if (filterUserId) match.user = filterUserId; // Mongoose aggregate auto-casts if possible, but let's be careful
+    if (filterUserId) match.user = filterUserId;
     if (statusFilter) match.status = statusFilter;
     if (q) match.text = new RegExp(`^${q}`, "i"); // Prefix search
 
     const pipeline: any[] = [];
     
-    // Avoid full scan if possible, but $match is the only way here.
     if (Object.keys(match).length > 0) {
-      // Manual ObjectId casting for user since aggregate doesn't always auto-cast
       if (match.user) {
          const mongoose = require("mongoose");
          match.user = new mongoose.Types.ObjectId(match.user);
@@ -197,11 +259,14 @@ export const getAllChatLogs = async (req: Request, res: Response) => {
         messageCount: { $sum: 1 },
         lastMessageAt: { $max: "$createdAt" },
         lastMessage: { $first: "$text" },
+        // ✅ FIX #3: include imageUrl in the group so image chats surface in logs
+        hasImageMessages: { $max: { $cond: [{ $ifNull: ["$imageUrl", false] }, 1, 0] } },
         messages: { 
           $push: { 
             role: { $ifNull: ["$role", { $cond: [{ $eq: ["$sender", "llm"] }, "assistant", "user"] }] }, 
             content: "$text", 
-            timestamp: "$createdAt" 
+            timestamp: "$createdAt",
+            imageUrl: "$imageUrl",
           } 
         }
       }
@@ -219,14 +284,13 @@ export const getAllChatLogs = async (req: Request, res: Response) => {
 
     const conversations = await Message.aggregate(pipeline);
 
-    // Limit the embedded messages for unbounded previews
     const formattedConversations = conversations.map(c => ({
       userId: c.userId,
       conversationId: c._id,
       messageCount: c.messageCount,
       lastMessage: c.lastMessage,
       lastMessageAt: c.lastMessageAt,
-      // Reverse back to chronological order and bound to 5 latest
+      hasImageMessages: Boolean(c.hasImageMessages),
       messages: c.messages.slice(0, 5).reverse() 
     }));
 
@@ -234,7 +298,6 @@ export const getAllChatLogs = async (req: Request, res: Response) => {
       ? new Date(formattedConversations[formattedConversations.length - 1].lastMessageAt).getTime() 
       : null;
 
-    // Provide flat messages list for legacy fallback
     const flatMessagesList = conversations.flatMap(c => c.messages).slice(0, 50);
 
     return res.status(200).json({

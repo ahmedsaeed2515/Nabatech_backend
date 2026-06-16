@@ -113,7 +113,7 @@ describe("Diary API Endpoints", () => {
         });
 
       expect(res.status).toBe(400);
-      expect(res.body.message).toContain("Plant name, title and notes are required");
+      expect(res.body.message).toContain("Plant ID, title and notes are required");
     });
   });
 
@@ -147,7 +147,7 @@ describe("Diary API Endpoints", () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.entries).toHaveLength(1);
-      expect(res.body.entries[0].plantId).toBe("User 1 Plant");
+      expect(res.body.entries[0].plantId).toBe("650c1f2e9f1a2c3d4e5f6a7b");
     });
   });
 
@@ -189,7 +189,7 @@ describe("Diary API Endpoints", () => {
 
       // Verify db changes
       const dbEntry = await DiaryEntry.findById(entryId);
-      expect(dbEntry?.plantId).toBe(updatedData.plantId);
+      expect(dbEntry?.plantId?.toString()).toBe(updatedData.plantId);
     });
 
     it("should return 404 if user tries to update another user's diary entry", async () => {
@@ -205,7 +205,7 @@ describe("Diary API Endpoints", () => {
 
       // Verify db is unchanged
       const dbEntry = await DiaryEntry.findById(entryId);
-      expect(dbEntry?.plantId).toBe("Original Plant");
+      expect(dbEntry?.plantId?.toString()).toBe("650c1f2e9f1a2c3d4e5f6a7b");
     });
 
     it("should return 404 if the diary entry does not exist", async () => {

@@ -3,8 +3,10 @@ import { orchestrateAssistantRequest } from "../services/ai/ai_orchestrator_serv
 import { sanitizeErrorMessage } from "../services/ai/ai_errors";
 import cloudinary from "../config/cloudinary";
 import DiagnosisHistory from "../models/diagnosis_history_model";
-import { translateToAr, estimateSeverity } from "./diagnosis_controller";
+import Message from "../models/message_model";
+import { DiseaseKnowledgeRecord } from "../models/disease_knowledge_record_model";
 import { validateHistory, validateQuestion, validateTopK } from "../validation/diagnosis_schemas";
+import crypto from "crypto";
 
 const parseHistory = (raw: unknown): Array<{ role: string; content: string }> => {
   if (Array.isArray(raw)) return raw as Array<{ role: string; content: string }>;
@@ -43,11 +45,11 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
     }
 
     const userId = (req as any)?.user?.id;
+    const requestId = crypto.randomUUID();
 
     if (clientOperationId) {
       const existing = await DiagnosisHistory.findOne({ user: userId, clientOperationId });
       if (existing) {
-         // Return existing history record if clientOperationId matches
          return res.status(200).json({ 
            success: true, 
            mode: existing.imageUrl ? "image_chat" : "chat", 
@@ -91,15 +93,24 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
 
       if (imageUrl) {
         try {
+          const prediction = result.diagnosis.prediction;
+          const kbRecord = await DiseaseKnowledgeRecord.findOne({
+            $or: [
+              { diseaseNameEn: prediction },
+              { diseaseNameEn: prediction.replace(/_/g, " ") }
+            ]
+          });
           const confidence = typeof result.diagnosis.confidence === "number" ? result.diagnosis.confidence : 0.5;
-          const severity = estimateSeverity(confidence, result.diagnosis.prediction);
+          const severity = kbRecord?.severity || (confidence > 0.6 ? "medium" : "low");
+          const diseaseNameAr = kbRecord?.diseaseNameAr || prediction;
+
           await DiagnosisHistory.create({
             user: userId,
             clientOperationId,
             imageUrl,
             imagePublicId: uploadedImagePublicId,
-            diseaseNameAr: translateToAr(result.diagnosis.prediction),
-            diseaseNameEn: result.diagnosis.prediction,
+            diseaseNameAr,
+            diseaseNameEn: prediction,
             confidence,
             severity,
             isOffline: false,
@@ -109,6 +120,7 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
             sourceIds: result.providerChain,
             uncertain: Boolean(result.lowConfidenceWarning),
             needsNewImage: result.needsNewImage,
+            llmResponse: result.message,
           });
         } catch (error) {
           console.warn("Assistant diagnosis history save failed:", sanitizeErrorMessage(error));
@@ -121,6 +133,53 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
                console.error("Failed to cleanup Cloudinary on history save error:", sanitizeErrorMessage(delErr));
             }
           }
+        }
+
+        // ✅ FIX #3: Persist image conversation to the Message collection so it
+        // appears in /api/chat/history, recent chats, and history reload.
+        // Image chats use a dedicated conversationId bucket for easy filtering.
+        const imageConversationId = `conv-image-${userId}`;
+        const userQuestion = text || "Please analyze this plant image.";
+
+        try {
+          // User message — includes image URL and diagnosis result
+          await Message.create({
+            user: userId,
+            sender: "user",
+            role: "user",
+            text: userQuestion,
+            conversationId: imageConversationId,
+            requestId,
+            clientOperationId,
+            status: "sent",
+            imageUrl, // ✅ image URL stored on the user message
+            diagnosisResult: result.diagnosis
+              ? {
+                  prediction: result.diagnosis.prediction,
+                  confidence: result.diagnosis.confidence,
+                  candidates: result.diagnosis.candidates || [],
+                }
+              : undefined,
+          });
+
+          // Assistant message — stores the LLM response for this image
+          if (result.message) {
+            await Message.create({
+              user: userId,
+              sender: "llm",
+              role: "assistant",
+              text: result.message,
+              conversationId: imageConversationId,
+              requestId,
+              status: "sent",
+              provider: result.provider,
+              source: result.source,
+              sourceIds: result.providerChain,
+            });
+          }
+        } catch (msgError) {
+          // Message persistence failure is non-fatal — diagnosis was already saved
+          console.warn("Image chat message persistence failed:", sanitizeErrorMessage(msgError));
         }
       }
     }

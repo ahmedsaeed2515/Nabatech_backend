@@ -11,6 +11,7 @@ export interface IDiagnosisHistory extends Document {
   severity: string;
   diagnosedAt: Date;
   isOffline: boolean;
+  diagnosisSource: 'online' | 'offline' | 'hybrid';
   feedbackStatus: "pending" | "confirmed" | "rejected";
   candidates?: Array<{ label: string; confidence: number }>;
   plantId?: mongoose.Types.ObjectId;
@@ -22,6 +23,9 @@ export interface IDiagnosisHistory extends Document {
   uncertain?: boolean;
   needsNewImage?: boolean;
   advice?: string;
+  llmResponse?: string;
+  cnnResult?: string;
+  ragContext?: string[];
   retentionUntil?: Date;
   version: number;
   createdAt: Date;
@@ -40,6 +44,7 @@ const diagnosisHistorySchema = new Schema<IDiagnosisHistory>(
     severity: { type: String, enum: ["low", "medium", "high", "منخفضة", "متوسطة", "عالية"], default: "medium" },
     diagnosedAt: { type: Date, default: Date.now },
     isOffline: { type: Boolean, default: false },
+    diagnosisSource: { type: String, enum: ['online', 'offline', 'hybrid'], default: 'online' },
     feedbackStatus: { type: String, enum: ["pending", "confirmed", "rejected"], default: "pending" },
     candidates: { type: [{ label: String, confidence: Number }], default: [] },
     plantId: { type: Schema.Types.ObjectId, ref: "MyPlant", required: false },
@@ -51,6 +56,9 @@ const diagnosisHistorySchema = new Schema<IDiagnosisHistory>(
     uncertain: { type: Boolean, default: false },
     needsNewImage: { type: Boolean, default: false },
     advice: { type: String, trim: true },
+    llmResponse: { type: String, trim: true },
+    cnnResult: { type: String, trim: true },
+    ragContext: { type: [String], default: [] },
     retentionUntil: { type: Date, expires: 0 },
     version: { type: Number, default: 1 },
   },

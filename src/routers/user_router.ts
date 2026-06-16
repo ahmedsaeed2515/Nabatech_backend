@@ -31,8 +31,8 @@ router.put("/fcm-token", protect, validateRequest(updateFcmTokenSchema), updateF
 router.get("/dashboard-stats", protect, authorizeRoles('moderator', 'admin', 'super_admin'), getDashboardStats);
 router.get("/:id/details", protect, authorizeRoles('moderator', 'admin', 'super_admin'), getUserDetails);
 
-// Super Admin only endpoints
-router.put("/:id/role", protect, authorizeRoles('super_admin'), validateRequest(updateUserRoleSchema), updateUserRole);
-router.delete("/:id", protect, authorizeRoles('super_admin'), deleteUser);
+// Super Admin / Admin endpoints
+router.put("/:id/role", protect, authorizeRoles('admin', 'super_admin'), validateRequest(updateUserRoleSchema), updateUserRole);
+router.delete("/:id", protect, authorizeRoles('admin', 'super_admin'), deleteUser);
 
 export default router;

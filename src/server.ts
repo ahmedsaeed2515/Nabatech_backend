@@ -8,6 +8,18 @@ import { env } from "./config/env";
 import { startOutboxPolling, stopOutboxPolling } from "./workers/outbox_worker";
 import mongoose from "mongoose";
 import { logger } from "./utils/logger";
+import { careSyncWorker } from './workers/care_sync_worker';
+import { aiAnalysisWorker } from './queues/ai_queue';
+import { timelapseWorker } from './workers/timelapse_worker';
+import { TaskGenCron } from './crons/TaskGenCron';
+import { ReminderCron } from "./crons/ReminderCron";
+import { WeatherCron } from "./crons/WeatherCron";
+import { StreakCron } from "./crons/StreakCron";
+
+// Ensure worker is registered
+careSyncWorker.on('error', (err: Error) => logger.error('careSyncWorker error:', err));
+aiAnalysisWorker.on('error', (err: Error) => logger.error('aiAnalysisWorker error:', err));
+timelapseWorker.on('error', (err: Error) => logger.error('timelapseWorker error:', err));
 
 const PORT = process.env.PORT || 10000;
 
@@ -20,6 +32,12 @@ const startServer = async () => {
       // In serverless mode, Vercel cron triggers the endpoint directly
       startOutboxPolling(10000);
       logger.info('Started outbox polling');
+      
+      // Start node-cron schedules
+      TaskGenCron.start();
+      ReminderCron.start();
+      WeatherCron.start();
+      StreakCron.start();
     }
 
     const server = app.listen(PORT, () => {

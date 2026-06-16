@@ -24,11 +24,17 @@ export const askRag = async (
   let response: any;
   try {
     const ragApiKey = (settings.secrets.ragApiKey || "").trim();
+    
+    // Context Assembly bounds token limits
+    const maxHistoryItems = 5;
+    const boundedHistory = history.slice(-maxHistoryItems);
+    const boundedQuestion = question.substring(0, 1000); // Max 1000 chars
+
     response = await axios.post(
       settings.rag.endpointUrl,
       {
-        question,
-        history,
+        question: boundedQuestion,
+        history: boundedHistory,
         top_k: topK || settings.rag.topK,
       },
       {

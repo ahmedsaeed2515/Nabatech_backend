@@ -1,59 +1,64 @@
-import mongoose ,{Document}from "mongoose";
+import mongoose, { Document } from "mongoose";
+
+export enum UserLevel {
+  SPROUT = 'Sprout',
+  GARDENER = 'Gardener',
+  BOTANIST = 'Botanist'
+}
+
+export enum UserRole {
+  USER = 'user',
+  MODERATOR = 'moderator',
+  ADMIN = 'admin',
+  SUPER_ADMIN = 'super_admin'
+}
 
 export interface User extends Document {
-    name: string;
-    email: string;
-    password: string;  
-    updatedAt: Date;
-    createdAt: Date;      
-    role?: "user" | "moderator" | "admin" | "super_admin";
-    status: 'active' | 'disabled';
-    tokenVersion: number;
-    accountType: 'farmer' | 'specialist';
-    specialistVerifiedAt?: Date;
-    avatarUrl?: string;        
-    phoneNumber?: string;
-    selectedCountry?: string;
-    refreshToken?: string; // Legacy
-    emailVerified: boolean;
-    emailVerificationToken?: string; // Legacy
-    emailVerificationTokenHash?: string;
-    emailVerificationExpiresAt?: Date;
-    fcmToken?: string;
-    preferences?: {
-        theme: string;
-        language: string;
-        notificationsEnabled: boolean;
-    };
+  email: string;
+  passwordHash: string;
+  role: UserRole;
+  fcmToken?: string;
+  level: UserLevel;
+  pushEnabled: boolean;
+  autoAddEnabled: boolean;
+  latitude?: number;
+  longitude?: number;
+  name?: string;
+  phoneNumber?: string;
+  selectedCountry?: string;
+  avatarUrl?: string;
+  preferences?: any;
+  password?: string;
+  status?: string;
+  tokenVersion?: number;
+  emailVerificationToken?: string;
+  refreshToken?: string;
+  emailVerificationTokenHash?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt?: Date | null;
 }
 
 const userSchema = new mongoose.Schema<User>({
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
-    updatedAt: { type: Date, default: Date.now },
-    createdAt: { type: Date, default: Date.now },
-    role: { type: String, enum: ['user', 'moderator', 'admin', 'super_admin'], default: 'user' },
-    status: { type: String, enum: ['active', 'disabled'], default: 'active' },
-    tokenVersion: { type: Number, default: 0 },
-    accountType: { type: String, enum: ['farmer', 'specialist'], default: 'farmer' },
-    specialistVerifiedAt: { type: Date },
-    avatarUrl: { type: String , default: ""},
-    phoneNumber: { type: String, required: false },
-    selectedCountry: { type: String, required: false, default: "" },
-    refreshToken: { type: String, required: false, default: null }, // Legacy
-    emailVerified: { type: Boolean, default: false },
-    emailVerificationToken: { type: String, required: false, default: null }, // Legacy
-    emailVerificationTokenHash: { type: String },
-    emailVerificationExpiresAt: { type: Date },
-    fcmToken: { type: String, required: false },
-    preferences: {
-        theme: { type: String, enum: ['light', 'dark', 'system'], default: 'system' },
-        language: { type: String, default: 'en' },
-        notificationsEnabled: { type: Boolean, default: true }
-    }
-},
-    {timestamps: true}
-);
+  email: { type: String, required: true, unique: true },
+  passwordHash: { type: String, required: true },
+  role: { type: String, enum: Object.values(UserRole), default: UserRole.USER },
+  fcmToken: { type: String, required: false },
+  level: { type: String, enum: Object.values(UserLevel), default: UserLevel.SPROUT },
+  pushEnabled: { type: Boolean, default: true },
+  autoAddEnabled: { type: Boolean, default: true },
+  latitude: { type: Number, required: false },
+  longitude: { type: Number, required: false },
+  deletedAt: { type: Date, default: null }
+}, {
+  timestamps: true
+});
+
+// Exclude soft-deleted users from basic queries
+userSchema.pre(/^find/, function(next) {
+  const query = this as mongoose.Query<any, any>;
+  query.find({ deletedAt: { $eq: null } });
+  next();
+});
 
 export default mongoose.model<User>('User', userSchema);

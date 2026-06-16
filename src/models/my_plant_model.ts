@@ -8,6 +8,7 @@ export interface IMyPlant extends Document {
   location: string;
   waterFrequencyDays: number;
   lastWatered: Date;
+  lastFertilized?: Date;
   plantLibraryId?: mongoose.Types.ObjectId;
   enableNotifications: boolean;
   healthStatus: string;
@@ -24,6 +25,7 @@ const myPlantSchema = new Schema<IMyPlant>(
     location: { type: String, enum: ['indoor', 'outdoor', '\u062F\u0627\u062E\u0644\u064A', '\u062E\u0627\u0631\u062C\u064A'], required: true },
     waterFrequencyDays: { type: Number, required: true },
     lastWatered: { type: Date, default: Date.now },
+    lastFertilized: { type: Date },
     plantLibraryId: { type: Schema.Types.ObjectId, ref: "PlantLibrary" },
     enableNotifications: { type: Boolean, default: true },
     healthStatus: { 

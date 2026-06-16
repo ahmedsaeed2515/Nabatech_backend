@@ -3,8 +3,6 @@ import app from "../app";
 import DiagnosisHistory from "../models/diagnosis_history_model";
 import { connectTestDB, disconnectTestDB, clearTestDB } from "./db.setup";
 import { orchestrateAssistantRequest } from "../services/ai/ai_orchestrator_service";
-import { translateToAr, estimateSeverity } from "../controllers/diagnosis_controller";
-
 
 // 2. Mock Orchestrator
 jest.mock("../services/ai/ai_orchestrator_service", () => ({
@@ -51,34 +49,6 @@ beforeEach(async () => {
   jest.clearAllMocks();
 });
 
-describe("Diagnosis Controller Helper Functions", () => {
-  it("translates powdery mildew correctly", () => {
-    expect(translateToAr("powdery mildew")).toBe("البياض الدقيقي");
-  });
-
-  it("returns English name unchanged for unknown disease", () => {
-    expect(translateToAr("unknown alien virus")).toBe("unknown alien virus");
-  });
-
-  it("translates healthy to سليم", () => {
-    expect(translateToAr("healthy")).toBe("سليم");
-  });
-
-  it("estimates severity as high for late blight", () => {
-    expect(estimateSeverity(0.5, "late blight")).toBe("high");
-  });
-
-  it("estimates severity as low for healthy", () => {
-    expect(estimateSeverity(0.99, "healthy")).toBe("low");
-  });
-
-  it("estimates severity based on confidence when disease is unknown", () => {
-    expect(estimateSeverity(0.9)).toBe("high");
-    expect(estimateSeverity(0.7)).toBe("medium");
-    expect(estimateSeverity(0.5)).toBe("low");
-  });
-});
-
 describe("Diagnosis Predict API Endpoints", () => {
   let userToken: string;
   let userId: string;
@@ -93,6 +63,20 @@ describe("Diagnosis Predict API Endpoints", () => {
       });
     userToken = userRes.body.token;
     userId = userRes.body.user.id;
+
+    const { DiseaseKnowledgeRecord } = require("../models/disease_knowledge_record_model");
+    await DiseaseKnowledgeRecord.create({
+      diseaseNameEn: "powdery mildew",
+      diseaseNameAr: "البياض الدقيقي",
+      severity: "high",
+      advice: "Use neem oil",
+    });
+    await DiseaseKnowledgeRecord.create({
+      diseaseNameEn: "wheat rust",
+      diseaseNameAr: "صدأ الحنطة",
+      severity: "high",
+      advice: "Use fungicides",
+    });
   });
 
   describe("POST /api/diagnosis/predict", () => {
@@ -116,7 +100,7 @@ describe("Diagnosis Predict API Endpoints", () => {
     });
 
     it("returns prediction, confidence, advice and saves to history with candidates", async () => {
-      mockedOrchestrateAssistantRequest.mockResolvedValueOnce({
+      mockedOrchestrateAssistantRequest.mockResolvedValue({
         mode: "image_chat",
         diagnosis: {
           prediction: "powdery mildew",
@@ -158,7 +142,7 @@ describe("Diagnosis Predict API Endpoints", () => {
     });
 
     it("accepts optional plantId and links to history", async () => {
-      mockedOrchestrateAssistantRequest.mockResolvedValueOnce({
+      mockedOrchestrateAssistantRequest.mockResolvedValue({
         mode: "image_chat",
         diagnosis: {
           prediction: "healthy",
@@ -191,7 +175,7 @@ describe("Diagnosis Predict API Endpoints", () => {
     });
 
     it("returns lowConfidenceWarning when confidence is low", async () => {
-      mockedOrchestrateAssistantRequest.mockResolvedValueOnce({
+      mockedOrchestrateAssistantRequest.mockResolvedValue({
         mode: "image_chat",
         diagnosis: { prediction: "unknown", confidence: 0.2, candidates: [], provider: "cnn" },
         message: "Please upload a clearer image.",
@@ -215,7 +199,7 @@ describe("Diagnosis Predict API Endpoints", () => {
       expect(res.body.needsNewImage).toBe(true);
     });
     it("returns idempotent response for same clientOperationId", async () => {
-      mockedOrchestrateAssistantRequest.mockResolvedValueOnce({
+      mockedOrchestrateAssistantRequest.mockResolvedValue({
         mode: "image_chat",
         diagnosis: { prediction: "healthy", confidence: 0.99, candidates: [], provider: "cnn" },
         message: "Your plant is healthy.",

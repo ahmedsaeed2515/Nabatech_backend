@@ -40,8 +40,6 @@ const diseaseSchema = new Schema<IDisease>(
 );
 
 // Compound indexes for efficient search
-diseaseSchema.index({ normalizedNameEn: 1 });
-diseaseSchema.index({ normalizedNameAr: 1 });
 diseaseSchema.index({ type: 1, normalizedNameEn: 1 });
 
 export default mongoose.model<IDisease>("Disease", diseaseSchema);

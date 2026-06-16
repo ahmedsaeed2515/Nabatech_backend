@@ -14,6 +14,9 @@ const envSchema = z.object({
   CRON_SECRET: z.string().optional(),
   DEPLOYMENT_MODE: z.enum(['single-instance', 'multi-instance', 'serverless']).default('single-instance'),
   ALLOWED_ORIGINS: z.string().optional(),
+  FIREBASE_CREDENTIALS: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
+  OPENWEATHERMAP_API_KEY: z.string().optional(),
   EMAIL_USER: z.string().optional(),
   EMAIL_PASS: z.string().optional()
 }).refine(data => data.MONGODB_URI || data.MONGO_URI, {

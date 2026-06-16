@@ -1,22 +1,24 @@
-import mongoose, { Document, Schema } from "mongoose";
+import mongoose, { Document, Types } from 'mongoose';
 
-export interface IPlant extends Document {
-  nameAr: string;
-  nameEn: string;
-  scientificName?: string;
-  imageUrl?: string;
-  category?: string;
-  careLevel?: "easy" | "medium" | "hard";
-  descriptionAr?: string;
-  descriptionEn?: string;
-  waterRequirements?: string;
-  lightRequirements?: string;
-  humidityRequirements?: string;
-  soilRequirements?: string;
-  fertilizerRequirements?: string;
-  growthRate?: string;
-  matureSize?: string;
-  temperatureRange?: string;
+export enum PlantStage {
+  SEED = 'SEED',
+  SPROUT = 'SPROUT',
+  VEGETATIVE = 'VEGETATIVE',
+  FLOWERING = 'FLOWERING',
+  FRUITING = 'FRUITING',
+  MATURE = 'MATURE',
+  DEAD = 'DEAD'
+}
+
+export interface Plant extends Document {
+  zone: Types.ObjectId;
+  dna: Types.ObjectId;
+  user: Types.ObjectId;
+  name: string;
+  imageUrl: string;
+  stage: PlantStage;
+  healthScore: number;
+  lastWatered?: Date;
   toxicityLevel?: string;
   wateringFrequency?: string;
   careInstructions?: string;
@@ -24,54 +26,30 @@ export interface IPlant extends Document {
   propagationMethod?: string;
   nativeRegion?: string;
   plantBenefits?: string;
-  slug: string;
-  normalizedNameEn: string;
-  normalizedNameAr: string;
-  active: boolean;
-  createdBy: string;
-  updatedBy: string;
   createdAt: Date;
+  updatedAt: Date;
+  deletedAt?: Date | null;
 }
 
-const plantSchema = new Schema<IPlant>(
-  {
-    nameAr: { type: String, required: true },
-    nameEn: { type: String, required: true },
-    scientificName: { type: String, default: "" },
-    imageUrl: { type: String, default: "" },
-    category: { type: String, default: "" },
-    careLevel: { type: String, enum: ["easy", "medium", "hard"], default: "medium" },
-    descriptionAr: { type: String, default: "" },
-    descriptionEn: { type: String, default: "" },
-    waterRequirements: { type: String, default: "" },
-    lightRequirements: { type: String, default: "" },
-    humidityRequirements: { type: String, default: "" },
-    soilRequirements: { type: String, default: "" },
-    fertilizerRequirements: { type: String, default: "" },
-    growthRate: { type: String, default: "" },
-    matureSize: { type: String, default: "" },
-    temperatureRange: { type: String, default: "" },
-    toxicityLevel: { type: String, default: "" },
-    wateringFrequency: { type: String, default: "" },
-    careInstructions: { type: String, default: "" },
-    commonProblems: { type: String, default: "" },
-    propagationMethod: { type: String, default: "" },
-    nativeRegion: { type: String, default: "" },
-    plantBenefits: { type: String, default: "" },
-    slug: { type: String, required: true, unique: true },
-    normalizedNameEn: { type: String, required: true, index: true },
-    normalizedNameAr: { type: String, required: true, index: true },
-    active: { type: Boolean, default: true },
-    createdBy: { type: String, default: "" },
-    updatedBy: { type: String, default: "" },
-    createdAt: { type: Date, default: Date.now },
-  },
-  { timestamps: true }
-);
+const plantSchema = new mongoose.Schema<Plant>({
+  zone: { type: mongoose.Schema.Types.ObjectId, ref: 'Zone', required: true, index: true },
+  dna: { type: mongoose.Schema.Types.ObjectId, ref: 'PlantDna', required: true },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  name: { type: String, required: true },
+  imageUrl: { type: String, default: '' },
+  stage: { type: String, enum: Object.values(PlantStage), default: PlantStage.SEED },
+  healthScore: { type: Number, default: 100 },
+  lastWatered: { type: Date },
+  deletedAt: { type: Date, default: null }
+}, {
+  timestamps: true
+});
 
-// Compound indexes for efficient search
-plantSchema.index({ normalizedNameEn: 1 });
-plantSchema.index({ normalizedNameAr: 1 });
-plantSchema.index({ category: 1, normalizedNameEn: 1 });
+// Exclude soft-deleted records from basic queries
+plantSchema.pre(/^find/, function(next) {
+  const query = this as mongoose.Query<any, any>;
+  query.find({ deletedAt: { $eq: null } });
+  next();
+});
 
-export default mongoose.model<IPlant>("Plant", plantSchema);
+export default mongoose.model<Plant>('Plant', plantSchema);

@@ -5,7 +5,7 @@ import { askRag } from "./rag_provider";
 import { runCnnDiagnosis } from "./cnn_provider";
 import { getAiSettings } from "./ai_config_service";
 import { sanitizeErrorMessage } from "./ai_errors";
-import { buildAssistantPrompt } from "./assistant_prompt_builder";
+import { buildAssistantPrompt, extractRagQuery } from "./assistant_prompt_builder";
 import crypto from "crypto";
 
 const logAiCall = async (payload: {
@@ -105,6 +105,7 @@ export const orchestrateChat = async (args: {
   for (const source of settings.fallback.chatOrder) {
     try {
       if (source === "rag") {
+        // ✅ FIX #2: RAG receives ONLY the clean user question — no prompt preamble
         const rag = await askRag(settings, args.question, args.history, args.topK);
         await logAiCall({
           userId: args.userId,
@@ -121,7 +122,8 @@ export const orchestrateChat = async (args: {
 
       if (source === "llm") {
         const llmSource = settings.rag.enabled ? "fallback" : "llm";
-        const llm = await askLlm(settings, args.question, llmSource);
+        // ✅ FIX #1: pass history to askLlm so the LLM sees prior conversation turns
+        const llm = await askLlm(settings, args.question, llmSource, args.history);
         await logAiCall({
           userId: args.userId,
           requestId: reqId,
@@ -141,7 +143,8 @@ export const orchestrateChat = async (args: {
 
   if (settings.features.allowBackendFallbackToLLM) {
     try {
-      const llm = await askLlm(settings, args.question, "fallback");
+      // ✅ FIX #1: fallback path also gets history
+      const llm = await askLlm(settings, args.question, "fallback", args.history);
       await logAiCall({
         userId: args.userId,
         requestId: reqId,
@@ -182,18 +185,21 @@ const runChatWithQuestion = async (args: {
   for (const source of args.settings.fallback.chatOrder) {
     try {
       if (source === "rag") {
+        // ✅ FIX #2: RAG always gets the clean question (already validated by caller)
         return await askRag(args.settings, args.question, args.history, args.topK);
       }
       if (source === "llm") {
         const llmSource = args.settings.rag.enabled ? "fallback" : "llm";
-        return await askLlm(args.settings, args.question, llmSource);
+        // ✅ FIX #1: pass history so LLM has conversation context
+        return await askLlm(args.settings, args.question, llmSource, args.history);
       }
     } catch (error) {
       lastError = error;
     }
   }
   if (args.settings.features.allowBackendFallbackToLLM) {
-    return await askLlm(args.settings, args.question, "fallback");
+    // ✅ FIX #1: fallback also gets history
+    return await askLlm(args.settings, args.question, "fallback", args.history);
   }
   throw lastError instanceof Error ? lastError : new Error("No AI provider succeeded");
 };
@@ -219,6 +225,8 @@ export const orchestrateAssistantRequest = async (args: {
   }
 
   if (!hasFile && question) {
+    // ✅ FIX #1 + #2: text-only path — question goes directly to orchestrateChat
+    // which passes clean question to RAG and history to LLM
     const chat = await orchestrateChat({ userId: args.userId, requestId: reqId, question, history: args.history, topK: args.topK });
     return { mode: "chat" as const, message: chat.message, source: chat.source, provider: chat.provider, providerChain: [chat.provider] };
   }
@@ -270,10 +278,31 @@ export const orchestrateAssistantRequest = async (args: {
   let message = "";
   let source: "rag" | "llm" | "fallback" | "cnn" = "cnn";
   let provider = cnnResult?.provider || "cnn";
+  let ragContext: string | undefined;
 
   if (isLowConfidence && settings.pipeline.lowConfidenceBehavior === "block") {
     message = "The image confidence is too low. Please upload a clearer image of the plant to receive advice.";
   } else if (shouldGenerateAnswer) {
+    // ✅ FIX #2: STEP 1 — extract a CLEAN query for RAG retrieval
+    // RAG must see ONLY the user's question, not the full prompt with CNN data
+    const ragQuery = extractRagQuery(question || (cnnResult?.prediction ? `${cnnResult.prediction} plant disease treatment` : "plant disease diagnosis"));
+
+    // ✅ FIX #2: STEP 2 — retrieve from RAG using the CLEAN query
+    // Then pass the retrieved context INTO the LLM prompt (not the other way around)
+    let ragRetrievedContext: string | undefined;
+    if (settings.rag.enabled && settings.rag.endpointUrl) {
+      try {
+        const ragResult = await askRag(settings, ragQuery, [], args.topK); // empty history for RAG embedding
+        ragRetrievedContext = ragResult.message;
+        ragContext = ragRetrievedContext;
+      } catch (ragError) {
+        // RAG failure is non-fatal — LLM will fall back to its training knowledge
+        console.warn("RAG retrieval failed for image chat, proceeding without context:", sanitizeErrorMessage(ragError));
+      }
+    }
+
+    // ✅ FIX #2: STEP 3 — build the ENRICHED LLM prompt AFTER retrieval
+    // This is the message body sent to the LLM; history is passed separately as chat turns
     const prompt = buildAssistantPrompt({
       userQuestion: question || "Explain diagnosis and safe care guidance for this plant.",
       history: args.history,
@@ -288,12 +317,14 @@ export const orchestrateAssistantRequest = async (args: {
         settings.pipeline.lowConfidenceBehavior === "warn" || settings.pipeline.lowConfidenceBehavior === "ask_for_new_image"
           ? lowConfidenceWarning
           : "",
+      ragContext: ragRetrievedContext,
     });
 
+    // ✅ FIX #1: STEP 4 — pass history to LLM so it remembers the conversation
     const chat = await runChatWithQuestion({
       settings,
       question: prompt,
-      history: args.history,
+      history: args.history, // conversation history passed as separate turns
       topK: args.topK,
     });
     providerChain.push(chat.provider);
@@ -331,6 +362,7 @@ export const orchestrateAssistantRequest = async (args: {
       confidence: cnnResult?.confidence,
       responseLength: message?.length || 0,
       source,
+      ragContextLength: ragContext?.length || 0,
     },
   });
 

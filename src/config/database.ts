@@ -8,9 +8,11 @@ const connectDB = async () => {
       if (!mongoUri) {
         throw new Error("Missing MONGODB_URI (or MONGO_URI) environment variable");
       }
-      // Add serverSelectionTimeoutMS to fail fast if DB is unreachable
+      // Add robust connection options
       const conn = await mongoose.connect(mongoUri, {
-        serverSelectionTimeoutMS: 5000, // 5 seconds timeout
+        serverSelectionTimeoutMS: 15000, // 15 seconds timeout
+        socketTimeoutMS: 45000,
+        family: 4 // Force IPv4
       });
       console.log(`Database connected successfully ${conn.connection.host}`);
     } catch (error) {

@@ -4,6 +4,7 @@ import WateringLog from "../models/watering_log_model";
 import DiaryEntry from "../models/diary_entry_model";
 import Reminder from "../models/reminder_model";
 import DiagnosisHistory from "../models/diagnosis_history_model";
+import FertilizerLog from "../models/fertilizer_log_model";
 import cloudinary from "../config/cloudinary";
 import IdempotencyRecord from "../models/idempotency_record_model";
 import crypto from "crypto";
@@ -481,3 +482,199 @@ export const getPlantDashboard = async (req: Request, res: Response, next: NextF
     next(error);
   }
 };
+
+// @desc    Get diaries for a plant
+// @route   GET /api/my-plants/:id/diaries
+// @access  Private
+export const getPlantDiaries = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user.id;
+    const plantId = req.params.id;
+
+    const plant = await MyPlant.findOne({ _id: plantId, user: userId });
+    if (!plant) {
+      throw new AppError({ code: 'RESOURCE_NOT_FOUND', statusCode: 404, message: 'Plant not found' });
+    }
+
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const limit = parseInt(req.query.limit as string, 10) || 10;
+    const skip = (page - 1) * limit;
+
+    const diaries = await DiaryEntry.find({ plantId, user: userId })
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit)
+      .select('_id title date imageUrl content')
+      .lean();
+
+    const count = await DiaryEntry.countDocuments({ plantId, user: userId });
+
+    const formattedDiaries = diaries.map((diary: any) => {
+      const { _id, ...rest } = diary;
+      return { id: _id, ...rest };
+    });
+
+    return ok(res, {
+      count,
+      diaries: formattedDiaries,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get reminders for a plant
+// @route   GET /api/my-plants/:id/reminders
+// @access  Private
+export const getPlantReminders = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user.id;
+    const plantId = req.params.id;
+
+    const plant = await MyPlant.findOne({ _id: plantId, user: userId });
+    if (!plant) {
+      throw new AppError({ code: 'RESOURCE_NOT_FOUND', statusCode: 404, message: 'Plant not found' });
+    }
+
+    const reminders = await Reminder.find({ plantId, user: userId })
+      .select('_id title scheduledAt type isCompleted')
+      .lean();
+
+    const formattedReminders = reminders.map((reminder: any) => {
+      const { _id, ...rest } = reminder;
+      return { id: _id, ...rest };
+    });
+
+    return ok(res, {
+      count: formattedReminders.length,
+      reminders: formattedReminders,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get diagnoses for a plant
+// @route   GET /api/my-plants/:id/diagnoses
+// @access  Private
+export const getPlantDiagnoses = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user.id;
+    const plantId = req.params.id;
+
+    const plant = await MyPlant.findOne({ _id: plantId, user: userId });
+    if (!plant) {
+      throw new AppError({ code: 'RESOURCE_NOT_FOUND', statusCode: 404, message: 'Plant not found' });
+    }
+
+    const diagnoses = await DiagnosisHistory.find({ plantId, user: userId })
+      .sort({ diagnosedAt: -1 })
+      .limit(10)
+      .select('_id diseaseName confidence diagnosedAt imageUrl')
+      .lean();
+
+    const formattedDiagnoses = diagnoses.map((diagnosis: any) => {
+      const { _id, ...rest } = diagnosis;
+      return { id: _id, ...rest };
+    });
+
+    return ok(res, {
+      count: formattedDiagnoses.length,
+      diagnoses: formattedDiagnoses,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Log plant fertilization
+// @route   POST /api/my-plants/:id/fertilize
+// @access  Private
+export const fertilizePlant = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user.id;
+    const plantId = req.params.id;
+    const { fertilizedAt, fertilizerType, amountGrams, note, clientOperationId } = req.body;
+
+    const plant = await MyPlant.findOne({ _id: plantId, user: userId });
+    if (!plant) {
+      throw new AppError({ code: 'RESOURCE_NOT_FOUND', statusCode: 404, message: 'Plant not found' });
+    }
+
+    if (clientOperationId) {
+      const existingLog = await FertilizerLog.findOne({ clientOperationId, user: userId });
+      if (existingLog) {
+        return ok(res, {
+          message: "Fertilization already logged",
+          log: {
+            id: existingLog._id,
+            fertilizedAt: existingLog.fertilizedAt,
+            fertilizerType: existingLog.fertilizerType,
+            amountGrams: existingLog.amountGrams,
+            note: existingLog.note,
+          }
+        });
+      }
+    }
+
+    const log = await FertilizerLog.create({
+      user: userId,
+      plant: plantId,
+      fertilizedAt: fertilizedAt ? new Date(fertilizedAt) : new Date(),
+      fertilizerType,
+      amountGrams,
+      note: note?.trim(),
+      clientOperationId
+    });
+
+    plant.lastFertilized = log.fertilizedAt;
+    await plant.save();
+
+    return created(res, {
+      message: "Fertilization logged successfully",
+      log: {
+        id: log._id,
+        fertilizedAt: log.fertilizedAt,
+        fertilizerType: log.fertilizerType,
+        amountGrams: log.amountGrams,
+        note: log.note,
+      }
+    });
+  } catch (error: any) {
+    if (error.name === 'ValidationError') {
+      next(new AppError({ code: 'VALIDATION_FAILED', statusCode: 400, message: error.message }));
+    } else {
+      next(error);
+    }
+  }
+};
+
+// @desc    Get fertilizer logs for a plant
+// @route   GET /api/my-plants/:id/fertilizer-logs
+// @access  Private
+export const getFertilizerLogs = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user.id;
+    const plantId = req.params.id;
+
+    const plant = await MyPlant.findOne({ _id: plantId, user: userId });
+    if (!plant) {
+      throw new AppError({ code: 'RESOURCE_NOT_FOUND', statusCode: 404, message: 'Plant not found' });
+    }
+
+    const logs = await FertilizerLog.find({ plant: plantId, user: userId })
+      .sort({ fertilizedAt: -1 })
+      .lean();
+
+    return ok(res, {
+      count: logs.length,
+      logs: logs.map((log: any) => {
+        const { _id, ...rest } = log;
+        return { id: _id, ...rest };
+      })
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

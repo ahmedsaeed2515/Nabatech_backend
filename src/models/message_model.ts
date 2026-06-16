@@ -13,6 +13,13 @@ export interface IMessage extends Document {
   requestId?: string;
   clientOperationId?: string;
   errorCode?: string;
+  // Image chat fields
+  imageUrl?: string;
+  diagnosisResult?: {
+    prediction: string;
+    confidence: number;
+    candidates?: Array<{ label: string; confidence?: number }>;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,11 +36,22 @@ const messageSchema = new Schema<IMessage>({
   sourceIds: { type: [String], default: [] },
   requestId: { type: String, trim: true },
   clientOperationId: { type: String, trim: true },
-  errorCode: { type: String, trim: true }
+  errorCode: { type: String, trim: true },
+  // Image chat fields — persists Cloudinary URL and CNN result
+  imageUrl: { type: String, trim: true },
+  diagnosisResult: {
+    type: {
+      prediction: { type: String },
+      confidence: { type: Number },
+      candidates: { type: [{ label: String, confidence: Number }], default: [] },
+    },
+    default: undefined,
+  },
 }, { timestamps: true });
 
 messageSchema.index({ user: 1, createdAt: -1, _id: -1 });
 messageSchema.index({ user: 1, conversationId: 1, createdAt: 1 });
+messageSchema.index({ user: 1, conversationId: 1, createdAt: -1 }); // for history window queries
 messageSchema.index(
   { user: 1, clientOperationId: 1 },
   { unique: true, partialFilterExpression: { clientOperationId: { $exists: true, $type: "string" } } }

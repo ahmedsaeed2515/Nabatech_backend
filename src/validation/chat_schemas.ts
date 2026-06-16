@@ -1,7 +1,7 @@
 export const validateChatHistory = (history: any): boolean => {
   if (!history) return true;
   if (!Array.isArray(history)) return false;
-  if (history.length > 12) return false;
+  if (history.length > 20) return false;
   
   for (const msg of history) {
     if (!msg || typeof msg !== "object") return false;

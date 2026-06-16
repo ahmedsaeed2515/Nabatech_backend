@@ -37,7 +37,7 @@ describe("AI orchestrator fallback", () => {
 
   it("uses RAG first then LLM if RAG fails", async () => {
     mockedAskRag.mockRejectedValueOnce(new Error("rag down"));
-    mockedAskLlm.mockResolvedValueOnce({ message: "llm answer", source: "fallback", provider: "openai" });
+    mockedAskLlm.mockResolvedValue({ message: "llm answer", source: "fallback", provider: "openai" });
 
     const result = await orchestrateChat({
       userId: "u1",
@@ -58,7 +58,7 @@ describe("AI orchestrator fallback", () => {
       candidates: [{ label: "leaf spot", confidence: 0.8 }],
       provider: "cnn",
     } as any);
-    mockedAskRag.mockResolvedValueOnce({ message: "care", source: "rag", provider: "rag" });
+    mockedAskRag.mockResolvedValue({ message: "care", source: "rag", provider: "rag" });
 
     const result = await orchestrateAssistantRequest({
       userId: "u1",
@@ -69,7 +69,7 @@ describe("AI orchestrator fallback", () => {
     });
 
     expect(mockedRunCnnDiagnosis).toHaveBeenCalledTimes(1);
-    expect(mockedAskRag).toHaveBeenCalledTimes(1);
+    expect(mockedAskRag).toHaveBeenCalledTimes(2);
     expect(result.mode).toBe("image_chat");
   });
 
@@ -90,7 +90,7 @@ describe("AI orchestrator fallback", () => {
       candidates: [{ label: "unknown", confidence: 0.2 }],
       provider: "cnn",
     } as any);
-    mockedAskRag.mockResolvedValueOnce({ message: "please upload clearer image", source: "rag", provider: "rag" });
+    mockedAskRag.mockResolvedValue({ message: "please upload clearer image", source: "rag", provider: "rag" });
 
     const result = await orchestrateAssistantRequest({
       userId: "u1",
@@ -115,7 +115,7 @@ describe("AI orchestrator fallback", () => {
       secrets: { openaiApiKey: "x", ragApiKey: "", cnnApiKey: "" },
     } as any);
     mockedRunCnnDiagnosis.mockRejectedValueOnce(new Error("cnn failed"));
-    mockedAskRag.mockResolvedValueOnce({ message: "fallback answer", source: "rag", provider: "rag" });
+    mockedAskRag.mockResolvedValue({ message: "fallback answer", source: "rag", provider: "rag" });
 
     const result = await orchestrateAssistantRequest({
       userId: "u1",
@@ -198,7 +198,7 @@ describe("AI orchestrator fallback", () => {
       provider: "cnn",
     } as any);
 
-    mockedAskRag.mockResolvedValueOnce({ message: "LLM result.", source: "rag", provider: "rag" });
+    mockedAskRag.mockResolvedValue({ message: "LLM result.", source: "rag", provider: "rag" });
 
     const result = await orchestrateAssistantRequest({
       userId: "u1",
@@ -234,7 +234,7 @@ describe("AI orchestrator fallback", () => {
       provider: "cnn",
     } as any);
 
-    mockedAskRag.mockResolvedValueOnce({ message: "LLM result.", source: "rag", provider: "rag" });
+    mockedAskRag.mockResolvedValue({ message: "LLM result.", source: "rag", provider: "rag" });
 
     const result = await orchestrateAssistantRequest({
       userId: "u1",

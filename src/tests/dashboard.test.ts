@@ -69,7 +69,7 @@ describe("Dashboard Stats API Endpoints", () => {
 
       expect(res.status).toBe(403);
       expect(res.body.success).toBe(false);
-      expect(res.body.message).toContain("Admin access required");
+      expect(res.body.message).toContain("Access denied: Requires one of");
     });
 
     it("should successfully return all metrics, daily counts, and breakdown charts for authenticated admin", async () => {

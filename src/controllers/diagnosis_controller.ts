@@ -4,61 +4,7 @@ import DiagnosisHistory from "../models/diagnosis_history_model";
 import { orchestrateAssistantRequest } from "../services/ai/ai_orchestrator_service";
 import { isProviderError, sanitizeErrorMessage } from "../services/ai/ai_errors";
 import { buildAssistantPrompt } from "../services/ai/assistant_prompt_builder";
-
-// Simple translation dictionary for common plant diseases
-export const translateToAr = (nameEn: string): string => {
-  const dict: { [key: string]: string } = {
-    // CNN class names
-    "powdery mildew": "البياض الدقيقي",
-    "powdery_mildew": "البياض الدقيقي",
-    "leaf spot": "تبقع الأوراق",
-    "leaf_spot": "تبقع الأوراق",
-    "wheat rust": "صدأ الحنطة",
-    "wheat_rust": "صدأ الحنطة",
-    "late blight": "اللفحة المتأخرة",
-    "late_blight": "اللفحة المتأخرة",
-    "early blight": "اللفحة المبكرة",
-    "early_blight": "اللفحة المبكرة",
-    "aphids": "حشرات المن",
-    "spider mites": "العنكبوت الأحمر",
-    "spider_mites": "العنكبوت الأحمر",
-    "healthy": "سليم",
-    "bacterial blight": "اللفحة البكتيرية",
-    "bacterial_blight": "اللفحة البكتيرية",
-    "mosaic virus": "فيروس الفسيفساء",
-    "mosaic_virus": "فيروس الفسيفساء",
-    "cercospora leaf spot": "بقعة سيركوسبورا",
-    "cercospora_leaf_spot": "بقعة سيركوسبورا",
-    "rust": "الصدأ",
-    "downy mildew": "البياض الزغبي",
-    "downy_mildew": "البياض الزغبي",
-    "anthracnose": "الأنثراكنوز",
-    "fusarium wilt": "ذبول الفيوزاريوم",
-    "fusarium_wilt": "ذبول الفيوزاريوم",
-    "nutrient deficiency": "نقص المغذيات",
-    "nutrient_deficiency": "نقص المغذيات",
-    "root rot": "تعفن الجذور",
-    "root_rot": "تعفن الجذور",
-    "leaf blight": "لفحة الأوراق",
-    "leaf_blight": "لفحة الأوراق",
-    "scab": "الجرب",
-    "canker": "السرطان",
-    "whitefly": "الذبابة البيضاء",
-    "mealybug": "البق الدقيقي",
-  };
-  const key = nameEn.trim().toLowerCase();
-  return dict[key] || nameEn;
-};
-
-// Simple severity estimator
-export const estimateSeverity = (confidence: number, diseaseNameEn?: string): string => {
-  const name = (diseaseNameEn || "").toLowerCase();
-  if (name === "healthy") return "low";
-  if (["root rot", "fusarium wilt", "late blight"].some(d => name.includes(d))) return "high";
-  if (confidence > 0.85) return "high";
-  if (confidence > 0.6) return "medium";
-  return "low";
-};
+import { DiseaseKnowledgeRecord } from "../models/disease_knowledge_record_model";
 
 export const predictPlantDisease = async (req: Request, res: Response) => {
   let uploadedImagePublicId: string | null = null;
@@ -106,7 +52,18 @@ export const predictPlantDisease = async (req: Request, res: Response) => {
     const candidates = cnnResult.diagnosis?.candidates || [];
     const isUncertain = Boolean(cnnResult.lowConfidenceWarning);
 
-    // 2. Upload to Cloudinary folder "diagnoses" only if inference succeeded
+    // 2. KB Lookup
+    const kbRecord = await DiseaseKnowledgeRecord.findOne({
+      $or: [
+        { diseaseNameEn: prediction },
+        { diseaseNameEn: prediction.replace(/_/g, " ") }
+      ]
+    });
+    
+    const diseaseNameAr = kbRecord?.diseaseNameAr || prediction;
+    const severity = kbRecord?.severity || (confidence > 0.6 ? "medium" : "low");
+
+    // 3. Upload to Cloudinary folder "diagnoses" only if inference succeeded
     const cloudinaryUpload = (fileBuffer: Buffer) => {
       return new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
@@ -123,7 +80,7 @@ export const predictPlantDisease = async (req: Request, res: Response) => {
     const uploadResult = await cloudinaryUpload(req.file.buffer);
     uploadedImagePublicId = uploadResult.public_id;
 
-    // 3. Generate LLM Advice asynchronously (Sequential flow)
+    // 4. Generate LLM Advice asynchronously (Sequential flow)
     const prompt = buildAssistantPrompt({
       userQuestion: "Explain the diagnosis in simple terms and give safe care guidance.",
       history: [],
@@ -133,6 +90,8 @@ export const predictPlantDisease = async (req: Request, res: Response) => {
         candidates,
       },
       lowConfidenceWarning: cnnResult.lowConfidenceWarning || "",
+      kbAdvice: kbRecord?.advice || undefined,
+      kbSeverity: kbRecord?.severity || undefined,
     });
 
     const llmResult = await orchestrateAssistantRequest({
@@ -141,9 +100,7 @@ export const predictPlantDisease = async (req: Request, res: Response) => {
       history: [],
     });
 
-    // 4. Save diagnosis log in database history
-    const diseaseNameAr = translateToAr(prediction);
-    const severity = estimateSeverity(confidence, prediction);
+    // 5. Save diagnosis log in database history
 
     const historyRecord = await DiagnosisHistory.create({
       user: userId,
@@ -157,13 +114,16 @@ export const predictPlantDisease = async (req: Request, res: Response) => {
       severity,
       candidates: candidates.map((c: any) => ({ label: c.label, confidence: c.confidence })),
       isOffline: false,
+      diagnosisSource: "online",
       modelId: cnnResult.diagnosis?.provider || "unknown",
       provider: cnnResult.provider,
       source: llmResult.source,
       sourceIds: [...cnnResult.providerChain, ...(llmResult.providerChain || [])],
       uncertain: isUncertain,
       needsNewImage: cnnResult.needsNewImage,
-      advice: llmResult.message,
+      advice: kbRecord?.advice || llmResult.message,
+      llmResponse: llmResult.message,
+      cnnResult: JSON.stringify({ prediction, confidence, candidates }),
     });
 
     res.status(200).json({
@@ -204,7 +164,7 @@ export const syncOfflineDiagnosis = async (req: Request, res: Response) => {
   let uploadedImagePublicId: string | null = null;
   try {
     const userId = (req as any).user.id;
-    const { diseaseNameEn, diseaseNameAr, confidence, severity, imageUrl, plantId, diagnosedAt, clientOperationId, modelId, modelVersion } = req.body;
+    const { diseaseNameEn, diseaseNameAr, confidence, severity, imageUrl, plantId, diagnosedAt, clientOperationId, modelId, modelVersion, candidates, advice, provider } = req.body;
 
     if (!clientOperationId) {
       return res.status(400).json({ success: false, message: "clientOperationId is required for offline sync" });
@@ -249,25 +209,53 @@ export const syncOfflineDiagnosis = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Either file or confirmed imageUrl is required" });
     }
 
-    const record = await DiagnosisHistory.create({
-      user: userId,
-      clientOperationId,
-      plantId: plantId || undefined,
-      imageUrl: finalImageUrl,
-      imagePublicId: finalImagePublicId,
-      diseaseNameEn,
-      diseaseNameAr: diseaseNameAr || translateToAr(diseaseNameEn),
-      confidence: Number(confidence) || 0,
-      severity: severity || estimateSeverity(Number(confidence) || 0, diseaseNameEn),
-      isOffline: true,
-      diagnosedAt: diagnosedAt ? new Date(diagnosedAt) : new Date(),
-      modelId: modelId || "unknown_offline",
-      modelVersion: modelVersion || "unknown",
-      provider: "offline",
-      uncertain: Number(confidence) < 0.6,
+    const prediction = diseaseNameEn || "unknown";
+    const kbRecord = await DiseaseKnowledgeRecord.findOne({
+      $or: [
+        { diseaseNameEn: prediction },
+        { diseaseNameEn: prediction.replace(/_/g, " ") }
+      ]
     });
 
-    return res.status(201).json({ success: true, id: record._id, historyId: record._id });
+    const finalDiseaseNameAr = diseaseNameAr || kbRecord?.diseaseNameAr || prediction;
+    const finalSeverity = severity || kbRecord?.severity || (Number(confidence) > 0.6 ? "medium" : "low");
+
+    let historyRecord = await DiagnosisHistory.findOne({ user: userId, clientOperationId });
+    if (historyRecord) {
+      historyRecord.diseaseNameAr = finalDiseaseNameAr;
+      historyRecord.diseaseNameEn = prediction;
+      historyRecord.confidence = Number(confidence) || 0;
+      historyRecord.severity = finalSeverity;
+      historyRecord.candidates = candidates;
+      historyRecord.advice = advice;
+      historyRecord.isOffline = true;
+      historyRecord.diagnosisSource = "offline";
+      if (diagnosedAt) historyRecord.diagnosedAt = new Date(diagnosedAt);
+      await historyRecord.save();
+    } else {
+      historyRecord = await DiagnosisHistory.create({
+        user: userId,
+        clientOperationId,
+        plantId,
+        imageUrl: finalImageUrl,
+        imagePublicId: finalImagePublicId,
+        diseaseNameAr: finalDiseaseNameAr,
+        diseaseNameEn: prediction,
+        confidence: Number(confidence) || 0,
+        severity: finalSeverity,
+        candidates,
+        isOffline: true,
+        diagnosisSource: "offline",
+        modelId,
+        modelVersion,
+        provider: provider || "offline",
+        advice,
+        needsNewImage: false,
+        diagnosedAt: diagnosedAt ? new Date(diagnosedAt) : undefined,
+      });
+    }
+
+    return res.status(201).json({ success: true, id: historyRecord._id, historyId: historyRecord._id });
   } catch (error) {
     if (uploadedImagePublicId) {
       try {

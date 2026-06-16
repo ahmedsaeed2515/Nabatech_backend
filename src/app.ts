@@ -1,6 +1,8 @@
 import express, { Request, Response } from "express";
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './docs/swagger';
+import helmet from 'helmet';
+import mongoSanitize from 'express-mongo-sanitize';
 import { protect } from "./middlewares/auth_middleware";
 import { requestContextMiddleware } from "./middlewares/request_context_middleware";
 import { errorHandler } from "./middlewares/error_middleware";
@@ -60,6 +62,16 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+app.use(helmet());
+// Sanitize data against NoSQL query injection
+// In Express 5, req.query is a getter, so express-mongo-sanitize crashes if used as a generic middleware.
+// We manually sanitize the objects in-place.
+app.use((req, res, next) => {
+  if (req.body) mongoSanitize.sanitize(req.body);
+  if (req.query) mongoSanitize.sanitize(req.query);
+  if (req.params) mongoSanitize.sanitize(req.params);
+  next();
+});
 app.use(requestContextMiddleware);
 
 // Health Checks
@@ -107,10 +119,12 @@ app.use("/api/admin/my-plants", adminMyPlantsRouter);
 app.use("/api/ai", aiAssistantRouter);
 import articleRouter from "./routers/article_router";
 import adminArticleRouter from "./routers/admin_article_router";
+import v2Router from "./routers/v2";
 
 app.use("/api/articles", articleRouter);
 app.use("/api/admin/articles", adminArticleRouter);
 app.use("/api/internal/jobs", internalJobsRouter);
+app.use("/api/v1", v2Router);
 
 app.get("/", (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: { message: "Express + TypeScript is working" } });

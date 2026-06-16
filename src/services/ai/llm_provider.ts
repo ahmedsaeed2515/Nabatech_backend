@@ -27,6 +27,45 @@ type OllamaResponse = {
   response?: string;
 };
 
+type HistoryTurn = { role: string; content: string };
+
+/**
+ * Bounds conversation history to last N exchanges (2*N messages).
+ * Prevents token overflow while preserving the most recent context.
+ */
+const boundHistory = (history: HistoryTurn[], maxTurns = 10): HistoryTurn[] => {
+  const maxMessages = maxTurns * 2; // user + assistant per turn
+  if (history.length <= maxMessages) return history;
+  return history.slice(history.length - maxMessages);
+};
+
+/**
+ * Converts our generic history format to OpenAI-style chat messages.
+ * Normalizes 'bot' role to 'assistant' for API compatibility.
+ */
+const toOpenAiMessages = (history: HistoryTurn[]): Array<{ role: string; content: string }> => {
+  return history.map((h) => ({
+    role: h.role === "bot" ? "assistant" : h.role,
+    content: h.content,
+  }));
+};
+
+/**
+ * Formats conversation history as plain text for providers that lack
+ * structured multi-turn support (e.g., HuggingFace Inference).
+ */
+const formatHistoryAsText = (history: HistoryTurn[]): string => {
+  if (!history.length) return "";
+  return (
+    history
+      .map((h) => {
+        const label = h.role === "user" ? "User" : "Assistant";
+        return `${label}: ${h.content}`;
+      })
+      .join("\n") + "\n"
+  );
+};
+
 const callProvider = async (args: {
   providerType: "generic_llm" | "openai_compatible" | "anthropic" | "gemini" | "cohere" | "huggingface_inference" | "ollama";
   endpointUrl: string;
@@ -35,7 +74,10 @@ const callProvider = async (args: {
   timeoutMs: number;
   systemPrompt: string;
   message: string;
+  history: HistoryTurn[]; // ✅ FIX #1: history now injected into every provider
 }): Promise<string> => {
+  const bounded = boundHistory(args.history);
+
   if (args.providerType === "generic_llm" || args.providerType === "openai_compatible") {
     const response = await axios.post<OpenAiCompletionResponse>(
       args.endpointUrl,
@@ -43,6 +85,7 @@ const callProvider = async (args: {
         model: args.model,
         messages: [
           { role: "system", content: args.systemPrompt },
+          ...toOpenAiMessages(bounded),          // ✅ inject history between system and user
           { role: "user", content: args.message },
         ],
       },
@@ -64,7 +107,10 @@ const callProvider = async (args: {
         model: args.model,
         system: args.systemPrompt,
         max_tokens: 1024,
-        messages: [{ role: "user", content: args.message }],
+        messages: [
+          ...toOpenAiMessages(bounded),          // ✅ inject history
+          { role: "user", content: args.message },
+        ],
       },
       {
         timeout: args.timeoutMs,
@@ -82,12 +128,18 @@ const callProvider = async (args: {
   }
 
   if (args.providerType === "cohere") {
+    // Cohere uses a dedicated chat_history field
+    const cohereHistory = bounded.map((h) => ({
+      role: h.role === "user" ? "USER" : "CHATBOT",
+      message: h.content,
+    }));
     const response = await axios.post<CohereResponse>(
       args.endpointUrl,
       {
         model: args.model,
         message: args.message,
         preamble: args.systemPrompt,
+        chat_history: cohereHistory,            // ✅ inject history via Cohere's field
       },
       {
         timeout: args.timeoutMs,
@@ -107,10 +159,12 @@ const callProvider = async (args: {
   }
 
   if (args.providerType === "huggingface_inference") {
+    // HuggingFace doesn't support structured multi-turn; format as text block
+    const historyText = formatHistoryAsText(bounded); // ✅ inject as text
     const response = await axios.post<HuggingFaceInferenceResponse>(
       args.endpointUrl,
       {
-        inputs: `${args.systemPrompt}\n\nUser: ${args.message}`,
+        inputs: `${args.systemPrompt}\n\n${historyText}User: ${args.message}`,
       },
       {
         timeout: args.timeoutMs,
@@ -133,6 +187,7 @@ const callProvider = async (args: {
         stream: false,
         messages: [
           { role: "system", content: args.systemPrompt },
+          ...toOpenAiMessages(bounded),          // ✅ inject history
           { role: "user", content: args.message },
         ],
       },
@@ -144,10 +199,19 @@ const callProvider = async (args: {
     return (response.data?.message?.content || response.data?.response || "").toString().trim();
   }
 
+  // Gemini — uses alternating role contents array
+  const geminiContents = [
+    ...bounded.map((h) => ({
+      role: h.role === "user" ? "user" : "model", // Gemini uses "model" not "assistant"
+      parts: [{ text: h.content }],
+    })),
+    { role: "user", parts: [{ text: args.message }] }, // ✅ inject history
+  ];
+
   const response = await axios.post<GeminiResponse>(
     `${args.endpointUrl}${args.endpointUrl.includes("?") ? "&" : "?"}key=${encodeURIComponent(args.apiKey)}`,
     {
-      contents: [{ role: "user", parts: [{ text: args.message }] }],
+      contents: geminiContents,
       systemInstruction: { role: "system", parts: [{ text: args.systemPrompt }] },
     },
     {
@@ -164,7 +228,8 @@ const callProvider = async (args: {
 export const askLlm = async (
   settings: AiSettingsShape,
   message: string,
-  source: "llm" | "fallback" = "llm"
+  source: "llm" | "fallback" = "llm",
+  history: HistoryTurn[] = [] // ✅ FIX #1: history parameter added
 ): Promise<LlmResult> => {
   if (!settings.llm.enabled || settings.llm.provider === "disabled") {
     throw new AiProviderError("LLM disabled", { code: "LLM_DISABLED", isUpstream: false });
@@ -198,7 +263,7 @@ export const askLlm = async (
       continue;
     }
     try {
-      const answer = await callProvider({
+      let answer = await callProvider({
         providerType: candidate.providerType || "generic_llm",
         endpointUrl: candidate.endpointUrl,
         model: candidate.model,
@@ -206,9 +271,18 @@ export const askLlm = async (
         timeoutMs: candidate.timeoutMs || settings.llm.timeoutMs,
         systemPrompt: settings.llm.systemPrompt,
         message,
+        history, // ✅ passed through to callProvider
       });
-      if (!answer) {
-        lastError = new AiProviderError(`Empty response from ${candidate.name}`, { code: "LLM_EMPTY_RESPONSE" });
+      
+      // Basic structure validation to prevent malformed text (e.g., stray markdown blocks)
+      if (answer.includes("```json")) {
+        answer = answer.replace(/```json/g, "").replace(/```/g, "").trim();
+      } else if (answer.includes("```")) {
+        answer = answer.replace(/```/g, "").trim();
+      }
+
+      if (!answer || answer.length < 5) {
+        lastError = new AiProviderError(`Malformed or empty response from ${candidate.name}`, { code: "LLM_MALFORMED_RESPONSE" });
         continue;
       }
       return { message: answer, source, provider: candidate.name || "llm" };
@@ -217,5 +291,10 @@ export const askLlm = async (
     }
   }
 
-  throw lastError instanceof Error ? lastError : new AiProviderError("No LLM provider succeeded", { code: "LLM_ALL_FAILED" });
+  console.warn("LLM providers failed, using safe fallback. Last error:", lastError);
+  return { 
+    message: "I am currently experiencing high traffic and unable to generate a detailed AI response. Please rely on the standard offline advice provided for your plant's care.", 
+    source: "fallback", 
+    provider: "local_fallback" 
+  };
 };
