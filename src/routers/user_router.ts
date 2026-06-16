@@ -10,20 +10,29 @@ import {
   getUserDetails,
   updateFcmToken
 } from "../controllers/user_controller";
-import { protect, admin } from "../middlewares/auth_middleware";
+import { protect, admin, authorizeRoles } from "../middlewares/auth_middleware";
+import { validateRequest } from "../middlewares/validate_request_middleware";
+import {
+  updateProfileSchema,
+  changePasswordSchema,
+  updateUserRoleSchema,
+  updateFcmTokenSchema
+} from "../validation/user_schemas";
 
 const router = Router();
 
 router.get("/", protect, admin, getAllUsers);
 router.get("/me", protect, getCurrentUser);
-router.put("/profile", protect, updateProfile);
-router.put("/change-password", protect, changePassword);
-router.put("/fcm-token", protect, updateFcmToken);
+router.put("/profile", protect, validateRequest(updateProfileSchema), updateProfile);
+router.put("/change-password", protect, validateRequest(changePasswordSchema), changePassword);
+router.put("/fcm-token", protect, validateRequest(updateFcmTokenSchema), updateFcmToken);
 
-// Admin-only dashboard endpoints
-router.get("/dashboard-stats", protect, admin, getDashboardStats);
-router.get("/:id/details", protect, admin, getUserDetails);
-router.put("/:id/role", protect, admin, updateUserRole);
-router.delete("/:id", protect, admin, deleteUser);
+// Admin/Moderator dashboard endpoints
+router.get("/dashboard-stats", protect, authorizeRoles('moderator', 'admin', 'super_admin'), getDashboardStats);
+router.get("/:id/details", protect, authorizeRoles('moderator', 'admin', 'super_admin'), getUserDetails);
+
+// Super Admin only endpoints
+router.put("/:id/role", protect, authorizeRoles('super_admin'), validateRequest(updateUserRoleSchema), updateUserRole);
+router.delete("/:id", protect, authorizeRoles('super_admin'), deleteUser);
 
 export default router;

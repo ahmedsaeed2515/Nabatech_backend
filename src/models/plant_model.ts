@@ -9,6 +9,21 @@ export interface IPlant extends Document {
   careLevel?: "easy" | "medium" | "hard";
   descriptionAr?: string;
   descriptionEn?: string;
+  waterRequirements?: string;
+  lightRequirements?: string;
+  humidityRequirements?: string;
+  soilRequirements?: string;
+  fertilizerRequirements?: string;
+  growthRate?: string;
+  matureSize?: string;
+  temperatureRange?: string;
+  toxicityLevel?: string;
+  wateringFrequency?: string;
+  careInstructions?: string;
+  commonProblems?: string;
+  propagationMethod?: string;
+  nativeRegion?: string;
+  plantBenefits?: string;
   slug: string;
   normalizedNameEn: string;
   normalizedNameAr: string;
@@ -28,6 +43,21 @@ const plantSchema = new Schema<IPlant>(
     careLevel: { type: String, enum: ["easy", "medium", "hard"], default: "medium" },
     descriptionAr: { type: String, default: "" },
     descriptionEn: { type: String, default: "" },
+    waterRequirements: { type: String, default: "" },
+    lightRequirements: { type: String, default: "" },
+    humidityRequirements: { type: String, default: "" },
+    soilRequirements: { type: String, default: "" },
+    fertilizerRequirements: { type: String, default: "" },
+    growthRate: { type: String, default: "" },
+    matureSize: { type: String, default: "" },
+    temperatureRange: { type: String, default: "" },
+    toxicityLevel: { type: String, default: "" },
+    wateringFrequency: { type: String, default: "" },
+    careInstructions: { type: String, default: "" },
+    commonProblems: { type: String, default: "" },
+    propagationMethod: { type: String, default: "" },
+    nativeRegion: { type: String, default: "" },
+    plantBenefits: { type: String, default: "" },
     slug: { type: String, required: true, unique: true },
     normalizedNameEn: { type: String, required: true, index: true },
     normalizedNameAr: { type: String, required: true, index: true },

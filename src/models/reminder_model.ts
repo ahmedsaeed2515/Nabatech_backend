@@ -3,7 +3,7 @@ import mongoose, { Document, Schema } from "mongoose";
 export interface IReminder extends Document {
   user: mongoose.Types.ObjectId;
   title: string;
-  plantName: string;
+  plantId: mongoose.Types.ObjectId;
   timeLabel: string;
   iconCodePoint: number;
   enabled: boolean;
@@ -20,7 +20,7 @@ const reminderSchema = new Schema<IReminder>(
   {
     user: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     title: { type: String, required: true },
-    plantName: { type: String, required: true },
+    plantId: { type: Schema.Types.ObjectId, ref: "MyPlant", required: true },
     timeLabel: { type: String, required: true }, // Legacy display label
     iconCodePoint: { type: Number, default: 58264 },
     enabled: { type: Boolean, default: true },

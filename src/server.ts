@@ -3,7 +3,7 @@ dotenv.config();
 
 import app from "./app";
 import connectDB from "./config/database";
-import { seedDefaultAdmin, seedPlantLibrary } from "./utils/seeder";
+
 import { env } from "./config/env";
 import { startOutboxPolling, stopOutboxPolling } from "./workers/outbox_worker";
 import mongoose from "mongoose";
@@ -14,8 +14,7 @@ const PORT = process.env.PORT || 10000;
 const startServer = async () => {
   try {
     await connectDB(); 
-    await seedPlantLibrary(); // Seed Plant Library collections if empty
-    await seedDefaultAdmin(); // Seed default admin account if missing
+
 
     if (env.DEPLOYMENT_MODE === 'single-instance' || env.DEPLOYMENT_MODE === 'multi-instance') {
       // In serverless mode, Vercel cron triggers the endpoint directly

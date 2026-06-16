@@ -2,7 +2,7 @@ import mongoose, { Document, Schema } from "mongoose";
 
 export interface IDiaryEntry extends Document {
   user: mongoose.Types.ObjectId;
-  plantName: string;
+  plantId: mongoose.Types.ObjectId;
   title: string;
   notes: string;
   date: Date;
@@ -15,7 +15,7 @@ export interface IDiaryEntry extends Document {
 const diaryEntrySchema = new Schema<IDiaryEntry>(
   {
     user: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    plantName: { type: String, required: true },
+    plantId: { type: Schema.Types.ObjectId, ref: "MyPlant", required: true },
     title: { type: String, required: true },
     notes: { type: String, required: true },
     date: { type: Date, default: Date.now },

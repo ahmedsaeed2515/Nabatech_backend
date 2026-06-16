@@ -82,11 +82,11 @@ describe("Dashboard Stats API Endpoints", () => {
         waterFrequencyDays: 3
       });
 
-      // Fixed: included all required validation fields for Reminder model (title, plantName, timeLabel)
+      // Fixed: included all required validation fields for Reminder model (title, plantId, timeLabel)
       await Reminder.create({
         user: adminId,
         title: "Water Admin Rose",
-        plantName: "Admin Rose",
+        plantId: "650c1f2e9f1a2c3d4e5f6a7b",
         timeLabel: "Every 3 days at 08:00 AM",
         enabled: true
       });

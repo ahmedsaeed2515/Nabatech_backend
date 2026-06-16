@@ -29,6 +29,7 @@ import adminPlantLibraryRouter from "./routers/admin_plant_library_router";
 import adminSpecialistOffersRouter from "./routers/admin_specialist_offers_router";
 import adminCommunityRouter from "./routers/admin_community_router";
 import adminHomeToolsRouter from "./routers/admin_home_tools_router";
+import adminMyPlantsRouter from "./routers/admin_my_plants_router";
 const app = express();
 
 // CORS Middleware - Strict allowed origins
@@ -36,12 +37,21 @@ app.use((req, res, next) => {
   const allowedOrigins = env.ALLOWED_ORIGINS ? env.ALLOWED_ORIGINS.split(',') : ['*'];
   const origin = req.headers.origin;
   
-  if (allowedOrigins.includes('*') || (origin && allowedOrigins.includes(origin))) {
+  const isLocalhost = origin && (
+    origin.startsWith('http://localhost:') || 
+    origin.startsWith('http://127.0.0.1:') || 
+    origin === 'http://localhost' || 
+    origin === 'http://127.0.0.1' ||
+    origin.startsWith('https://localhost:') ||
+    origin.startsWith('https://127.0.0.1:')
+  );
+  
+  if (allowedOrigins.includes('*') || (origin && allowedOrigins.includes(origin)) || isLocalhost) {
     res.header('Access-Control-Allow-Origin', origin || '*');
   }
   
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-request-id');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-request-id, Accept');
   res.header('Access-Control-Allow-Credentials', 'true');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
@@ -93,7 +103,13 @@ app.use("/api/admin/diagnoses", adminDiagnosisRouter);
 app.use("/api/admin/specialist-offers", adminSpecialistOffersRouter);
 app.use("/api/admin/community", adminCommunityRouter);
 app.use("/api/admin/home-tools", adminHomeToolsRouter);
+app.use("/api/admin/my-plants", adminMyPlantsRouter);
 app.use("/api/ai", aiAssistantRouter);
+import articleRouter from "./routers/article_router";
+import adminArticleRouter from "./routers/admin_article_router";
+
+app.use("/api/articles", articleRouter);
+app.use("/api/admin/articles", adminArticleRouter);
 app.use("/api/internal/jobs", internalJobsRouter);
 
 app.get("/", (req: Request, res: Response) => {

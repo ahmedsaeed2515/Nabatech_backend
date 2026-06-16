@@ -21,6 +21,7 @@ export interface IDiagnosisHistory extends Document {
   sourceIds?: string[];
   uncertain?: boolean;
   needsNewImage?: boolean;
+  advice?: string;
   retentionUntil?: Date;
   version: number;
   createdAt: Date;
@@ -49,8 +50,9 @@ const diagnosisHistorySchema = new Schema<IDiagnosisHistory>(
     sourceIds: { type: [String], default: [] },
     uncertain: { type: Boolean, default: false },
     needsNewImage: { type: Boolean, default: false },
-    retentionUntil: { type: Date },
-    version: { type: Number, default: 0 },
+    advice: { type: String, trim: true },
+    retentionUntil: { type: Date, expires: 0 },
+    version: { type: Number, default: 1 },
   },
   { timestamps: true }
 );

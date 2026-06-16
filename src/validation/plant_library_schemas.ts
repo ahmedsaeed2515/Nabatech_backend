@@ -10,6 +10,21 @@ export const PlantCreateSchema = z.object({
   careLevel: z.enum(['easy', 'medium', 'hard']).optional(),
   descriptionAr: z.string().optional(),
   descriptionEn: z.string().optional(),
+  waterRequirements: z.string().optional(),
+  lightRequirements: z.string().optional(),
+  humidityRequirements: z.string().optional(),
+  soilRequirements: z.string().optional(),
+  fertilizerRequirements: z.string().optional(),
+  growthRate: z.string().optional(),
+  matureSize: z.string().optional(),
+  temperatureRange: z.string().optional(),
+  toxicityLevel: z.string().optional(),
+  wateringFrequency: z.string().optional(),
+  careInstructions: z.string().optional(),
+  commonProblems: z.string().optional(),
+  propagationMethod: z.string().optional(),
+  nativeRegion: z.string().optional(),
+  plantBenefits: z.string().optional(),
 });
 
 export const PlantUpdateSchema = PlantCreateSchema.partial();

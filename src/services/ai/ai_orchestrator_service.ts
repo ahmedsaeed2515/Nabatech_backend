@@ -206,6 +206,7 @@ export const orchestrateAssistantRequest = async (args: {
   question?: string;
   history: Array<{ role: string; content: string }>;
   topK?: number;
+  skipAdvice?: boolean;
 }) => {
   const settings = await getAiSettings();
   const started = Date.now();
@@ -262,6 +263,7 @@ export const orchestrateAssistantRequest = async (args: {
   }
 
   const shouldGenerateAnswer =
+    !args.skipAdvice &&
     (Boolean(question) || settings.pipeline.answerAfterDiagnosis) &&
     !(isLowConfidence && settings.pipeline.lowConfidenceBehavior === "block");
 

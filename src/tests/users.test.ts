@@ -102,7 +102,7 @@ describe("Users Profile & Settings API", () => {
 
       await DiaryEntry.create({
         user: user?._id,
-        plantName: "Plant",
+        plantId: "650c1f2e9f1a2c3d4e5f6a7b",
         title: "Title",
         notes: "Notes",
       });
@@ -110,7 +110,7 @@ describe("Users Profile & Settings API", () => {
       await Reminder.create({
         user: user?._id,
         title: "Title",
-        plantName: "Plant",
+        plantId: "650c1f2e9f1a2c3d4e5f6a7b",
         timeLabel: "Morning",
       });
 
@@ -161,7 +161,7 @@ describe("Users Profile & Settings API", () => {
       await MyPlant.create({ user: user?._id, name: "Plant", species: "Species", location: "indoor", waterFrequencyDays: 3 });
       await MyPlant.create({ user: user?._id, name: "Plant 2", species: "Species", location: "indoor", waterFrequencyDays: 3 });
       
-      await Reminder.create({ user: user?._id, title: "Title", plantName: "Plant", timeLabel: "Morning" });
+      await Reminder.create({ user: user?._id, title: "Title", plantId: "650c1f2e9f1a2c3d4e5f6a7b", timeLabel: "Morning" });
       
       await DiagnosisHistory.create({ user: user?._id, imageUrl: "url", diseaseNameAr: "مرض", diseaseNameEn: "Disease", confidence: 0.9 });
       await DiagnosisHistory.create({ user: user?._id, imageUrl: "url", diseaseNameAr: "مرض", diseaseNameEn: "Disease", confidence: 0.9 });

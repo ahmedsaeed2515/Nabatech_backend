@@ -62,7 +62,7 @@ describe("Admin Tests", () => {
       await Reminder.create({
         user: admin.user!._id,
         title: "Water basil",
-        plantName: "Basil",
+        plantId: "650c1f2e9f1a2c3d4e5f6a7b",
         timeLabel: "Daily at 8:00",
         enabled: true
       });

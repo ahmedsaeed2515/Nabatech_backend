@@ -6,7 +6,7 @@ export interface User extends Document {
     password: string;  
     updatedAt: Date;
     createdAt: Date;      
-    role?: "user" | "admin";
+    role?: "user" | "moderator" | "admin" | "super_admin";
     status: 'active' | 'disabled';
     tokenVersion: number;
     accountType: 'farmer' | 'specialist';
@@ -33,7 +33,7 @@ const userSchema = new mongoose.Schema<User>({
     password: { type: String, required: true },
     updatedAt: { type: Date, default: Date.now },
     createdAt: { type: Date, default: Date.now },
-    role: { type: String, enum: ['user', 'admin'], default: 'user' },
+    role: { type: String, enum: ['user', 'moderator', 'admin', 'super_admin'], default: 'user' },
     status: { type: String, enum: ['active', 'disabled'], default: 'active' },
     tokenVersion: { type: Number, default: 0 },
     accountType: { type: String, enum: ['farmer', 'specialist'], default: 'farmer' },

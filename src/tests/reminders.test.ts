@@ -23,9 +23,9 @@ describe("Reminders API", () => {
       const tokenA = await getAuthToken(userA.email, userA.password);
 
       // Create 3 reminders
-      const r1 = await Reminder.create({ user: userA.user!._id, title: "1", plantName: "P1", timeLabel: "1" });
-      const r2 = await Reminder.create({ user: userA.user!._id, title: "2", plantName: "P2", timeLabel: "2" });
-      const r3 = await Reminder.create({ user: userA.user!._id, title: "3", plantName: "P3", timeLabel: "3" });
+      const r1 = await Reminder.create({ user: userA.user!._id, title: "1", plantId: "650c1f2e9f1a2c3d4e5f6a7b", timeLabel: "1" });
+      const r2 = await Reminder.create({ user: userA.user!._id, title: "2", plantId: "650c1f2e9f1a2c3d4e5f6a7b", timeLabel: "2" });
+      const r3 = await Reminder.create({ user: userA.user!._id, title: "3", plantId: "650c1f2e9f1a2c3d4e5f6a7b", timeLabel: "3" });
 
       // Get page 1 (limit 2)
       const res1 = await request(app)
@@ -62,7 +62,7 @@ describe("Reminders API", () => {
         .set("Authorization", `Bearer ${token}`)
         .send({
           title: "Water Tomato",
-          plantName: "Tomato",
+          plantId: "650c1f2e9f1a2c3d4e5f6a7b",
           scheduledAt: new Date().toISOString(),
           timeZone: "America/New_York",
           recurrence: "daily"
@@ -83,7 +83,7 @@ describe("Reminders API", () => {
         .set("Authorization", `Bearer ${token}`)
         .send({
           title: "Water Tomato",
-          plantName: "Tomato",
+          plantId: "650c1f2e9f1a2c3d4e5f6a7b",
           timeZone: "Invalid/Zone",
         });
 
@@ -97,7 +97,7 @@ describe("Reminders API", () => {
 
       const payload = {
         title: "Test Idempotency",
-        plantName: "Tomato",
+        plantId: "650c1f2e9f1a2c3d4e5f6a7b",
         clientOperationId: "unique-op-123"
       };
 
@@ -125,7 +125,7 @@ describe("Reminders API", () => {
       const reminder = await Reminder.create({
         user: user.user!._id,
         title: "Before",
-        plantName: "Mint",
+        plantId: "650c1f2e9f1a2c3d4e5f6a7b",
         timeLabel: "10:00 AM",
       });
 
@@ -145,7 +145,7 @@ describe("Reminders API", () => {
       const reminder = await Reminder.create({
         user: user.user!._id,
         title: "Before",
-        plantName: "Mint",
+        plantId: "650c1f2e9f1a2c3d4e5f6a7b",
         timeLabel: "10:00 AM",
         version: 1, // Current DB version
       });
@@ -168,7 +168,7 @@ describe("Reminders API", () => {
       const reminder = await Reminder.create({
         user: user.user!._id,
         title: "Delete Me",
-        plantName: "Rose",
+        plantId: "650c1f2e9f1a2c3d4e5f6a7b",
         timeLabel: "12:00 PM",
       });
 
@@ -187,7 +187,7 @@ describe("Reminders API", () => {
       const adminAuth = await createTestUser("admin");
       const adminToken = await getAuthToken(adminAuth.email, adminAuth.password);
 
-      await Reminder.create({ user: adminAuth.user!._id, title: "A", plantName: "A", timeLabel: "A" });
+      await Reminder.create({ user: adminAuth.user!._id, title: "A", plantId: "650c1f2e9f1a2c3d4e5f6a7b", timeLabel: "A" });
       
       const res = await request(app)
         .get("/api/admin/reminders")
@@ -202,8 +202,8 @@ describe("Reminders API", () => {
       const adminAuth = await createTestUser("admin");
       const adminToken = await getAuthToken(adminAuth.email, adminAuth.password);
 
-      await Reminder.create({ user: adminAuth.user!._id, title: "A", plantName: "A", timeLabel: "A", enabled: true });
-      await Reminder.create({ user: adminAuth.user!._id, title: "B", plantName: "B", timeLabel: "B", enabled: false });
+      await Reminder.create({ user: adminAuth.user!._id, title: "A", plantId: "650c1f2e9f1a2c3d4e5f6a7b", timeLabel: "A", enabled: true });
+      await Reminder.create({ user: adminAuth.user!._id, title: "B", plantId: "650c1f2e9f1a2c3d4e5f6a7b", timeLabel: "B", enabled: false });
 
       const res = await request(app)
         .get("/api/admin/reminders/stats")

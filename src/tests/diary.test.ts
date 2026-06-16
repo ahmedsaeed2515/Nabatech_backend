@@ -56,7 +56,7 @@ describe("Diary API Endpoints", () => {
     it("should reject POST /api/diary if no token is provided", async () => {
       const res = await request(app)
         .post("/api/diary")
-        .send({ plantName: "Fern", title: "Watering", notes: "Done" });
+        .send({ plantId: "650c1f2e9f1a2c3d4e5f6a7b", title: "Watering", notes: "Done" });
       expect(res.status).toBe(401);
       expect(res.body.message).toContain("Not authorized");
     });
@@ -74,7 +74,7 @@ describe("Diary API Endpoints", () => {
 
   describe("POST /api/diary", () => {
     const validEntry = {
-      plantName: "Snake Plant",
+      plantId: "650c1f2e9f1a2c3d4e5f6a7b",
       title: "New Leaf Alert!",
       notes: "Found a brand new leaf sprouting today. Looks very healthy.",
       moodCode: 2,
@@ -90,7 +90,7 @@ describe("Diary API Endpoints", () => {
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.entry).toBeDefined();
-      expect(res.body.entry.plantName).toBe(validEntry.plantName);
+      expect(res.body.entry.plantId).toBe(validEntry.plantId);
       expect(res.body.entry.title).toBe(validEntry.title);
       expect(res.body.entry.notes).toBe(validEntry.notes);
       expect(res.body.entry.moodCode).toBe(validEntry.moodCode);
@@ -108,7 +108,7 @@ describe("Diary API Endpoints", () => {
         .post("/api/diary")
         .set("Authorization", `Bearer ${userToken}`)
         .send({
-          plantName: "Aloe Vera"
+          plantId: "650c1f2e9f1a2c3d4e5f6a7b"
           // missing title and notes
         });
 
@@ -124,7 +124,7 @@ describe("Diary API Endpoints", () => {
         .post("/api/diary")
         .set("Authorization", `Bearer ${userToken}`)
         .send({
-          plantName: "User 1 Plant",
+          plantId: "650c1f2e9f1a2c3d4e5f6a7b",
           title: "User 1 Title",
           notes: "User 1 Notes"
         });
@@ -134,7 +134,7 @@ describe("Diary API Endpoints", () => {
         .post("/api/diary")
         .set("Authorization", `Bearer ${otherUserToken}`)
         .send({
-          plantName: "User 2 Plant",
+          plantId: "650c1f2e9f1a2c3d4e5f6a7b",
           title: "User 2 Title",
           notes: "User 2 Notes"
         });
@@ -147,7 +147,7 @@ describe("Diary API Endpoints", () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.entries).toHaveLength(1);
-      expect(res.body.entries[0].plantName).toBe("User 1 Plant");
+      expect(res.body.entries[0].plantId).toBe("User 1 Plant");
     });
   });
 
@@ -160,7 +160,7 @@ describe("Diary API Endpoints", () => {
         .post("/api/diary")
         .set("Authorization", `Bearer ${userToken}`)
         .send({
-          plantName: "Original Plant",
+          plantId: "650c1f2e9f1a2c3d4e5f6a7b",
           title: "Original Title",
           notes: "Original Notes"
         });
@@ -169,7 +169,7 @@ describe("Diary API Endpoints", () => {
 
     it("should successfully update diary entry owned by the user", async () => {
       const updatedData = {
-        plantName: "Updated Plant Name",
+        plantId: "650c1f2e9f1a2c3d4e5f6a7b",
         title: "Updated Title",
         notes: "Updated Notes",
         healthScore: 95
@@ -182,14 +182,14 @@ describe("Diary API Endpoints", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.entry.plantName).toBe(updatedData.plantName);
+      expect(res.body.entry.plantId).toBe(updatedData.plantId);
       expect(res.body.entry.title).toBe(updatedData.title);
       expect(res.body.entry.notes).toBe(updatedData.notes);
       expect(res.body.entry.healthScore).toBe(updatedData.healthScore);
 
       // Verify db changes
       const dbEntry = await DiaryEntry.findById(entryId);
-      expect(dbEntry?.plantName).toBe(updatedData.plantName);
+      expect(dbEntry?.plantId).toBe(updatedData.plantId);
     });
 
     it("should return 404 if user tries to update another user's diary entry", async () => {
@@ -197,7 +197,7 @@ describe("Diary API Endpoints", () => {
         .put(`/api/diary/${entryId}`)
         .set("Authorization", `Bearer ${otherUserToken}`) // Using the other user's token
         .send({
-          plantName: "Hacked Plant Name"
+          plantId: "650c1f2e9f1a2c3d4e5f6a7b"
         });
 
       expect(res.status).toBe(404);
@@ -205,7 +205,7 @@ describe("Diary API Endpoints", () => {
 
       // Verify db is unchanged
       const dbEntry = await DiaryEntry.findById(entryId);
-      expect(dbEntry?.plantName).toBe("Original Plant");
+      expect(dbEntry?.plantId).toBe("Original Plant");
     });
 
     it("should return 404 if the diary entry does not exist", async () => {
@@ -214,7 +214,7 @@ describe("Diary API Endpoints", () => {
         .put(`/api/diary/${nonExistentId}`)
         .set("Authorization", `Bearer ${userToken}`)
         .send({
-          plantName: "New Name"
+          plantId: "650c1f2e9f1a2c3d4e5f6a7b"
         });
 
       expect(res.status).toBe(404);
@@ -230,7 +230,7 @@ describe("Diary API Endpoints", () => {
         .post("/api/diary")
         .set("Authorization", `Bearer ${userToken}`)
         .send({
-          plantName: "Plant to Delete",
+          plantId: "650c1f2e9f1a2c3d4e5f6a7b",
           title: "Delete Me",
           notes: "Bye bye"
         });

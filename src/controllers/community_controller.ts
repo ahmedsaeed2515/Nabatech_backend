@@ -62,37 +62,7 @@ export const getCommunityPosts = async (req: Request, res: Response) => {
       .sort({ createdAt: -1, _id: -1 })
       .limit(qLimit + 1);
 
-    // Seed mock data if collection is empty and no cursor is provided
-    if (posts.length === 0 && !cursor) {
-      const defaultUserId = (req as any).user.id;
-      const seedPosts = [
-        {
-          author: defaultUserId,
-          authorName: "Mariam Ali",
-          plantTag: "Diagnosis",
-          title: "Brown edges after fertilizing",
-          content: "I used liquid fertilizer yesterday and noticed slight brown edges today. Any dosage advice?",
-          likes: 18,
-          commentsCount: 2,
-          status: 'visible'
-        },
-        {
-          author: defaultUserId,
-          authorName: "Omar Hassan",
-          plantTag: "Watering",
-          title: "Best sunlight duration indoors?",
-          content: "My basil gets 3 hours direct sun from the balcony. Should I move it for stronger growth?",
-          likes: 24,
-          commentsCount: 0,
-          status: 'visible'
-        }
-      ];
-      await CommunityPost.create(seedPosts);
-      posts = await CommunityPost.find(query)
-        .populate("author", "name role")
-        .sort({ createdAt: -1, _id: -1 })
-        .limit(qLimit + 1);
-    }
+
 
     const hasNextPage = posts.length > qLimit;
     if (hasNextPage) posts.pop();

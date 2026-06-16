@@ -47,11 +47,19 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
     }
 };
 
-export const admin = (req: Request, res: Response, next: NextFunction) => {
-    const user = (req as any).user;
-    if (user && user.role === 'admin') {
+export const authorizeRoles = (...roles: string[]) => {
+    return (req: Request, res: Response, next: NextFunction) => {
+        const user = (req as any).user;
+        if (!user || !user.role) {
+            return next(new AppError({ code: 'AUTH_FORBIDDEN', statusCode: 403, message: 'Access denied: No role assigned' }));
+        }
+
+        if (!roles.includes(user.role)) {
+            return next(new AppError({ code: 'AUTH_FORBIDDEN', statusCode: 403, message: `Access denied: Requires one of [${roles.join(', ')}]` }));
+        }
+
         next();
-    } else {
-        next(new AppError({ code: 'AUTH_FORBIDDEN', statusCode: 403, message: 'Admin access required' }));
-    }
+    };
 };
+
+export const admin = authorizeRoles('admin', 'super_admin');

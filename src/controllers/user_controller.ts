@@ -167,16 +167,13 @@ export const changePassword = async (req: Request, res: Response) => {
 export const updateUserRole = async (req: Request, res: Response) => {
   try {
     const { role } = req.body;
-    if (!role || !['user', 'admin'].includes(role)) {
-      return res.status(400).json({ message: "Invalid role specified" });
-    }
 
     const user = await User.findById(req.params.id);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    user.role = role as 'user' | 'admin';
+    user.role = role as 'user' | 'moderator' | 'admin' | 'super_admin';
     await user.save();
 
     res.status(200).json({

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getMyPlants, getPlantById, addPlant, updatePlant, deletePlant, waterPlant, getWateringLogs, uploadPlantImage } from "../controllers/my_plants_controller";
+import { getMyPlants, getPlantById, addPlant, updatePlant, deletePlant, waterPlant, getWateringLogs, uploadPlantImage, getPlantDashboard } from "../controllers/my_plants_controller";
 import { protect } from "../middlewares/auth_middleware";
 import upload from "../middlewares/upload_middleware";
 
@@ -13,5 +13,6 @@ router.delete("/:id", protect, deletePlant);
 router.post("/:id/water", protect, waterPlant);
 router.get("/:id/water-logs", protect, getWateringLogs);
 router.post("/:id/image", protect, upload.single("file"), uploadPlantImage);
+router.get("/:id/dashboard", protect, getPlantDashboard);
 
 export default router;

@@ -65,7 +65,7 @@ export const getPlants = async (req: Request, res: Response) => {
 export const addPlant = async (req: Request, res: Response) => {
   try {
     logger.info({ event: "plant_library.addPlant", body: req.body, user: (req as any).user?.id });
-    const { nameAr, nameEn, scientificName, imageUrl, category, careLevel, descriptionAr, descriptionEn } = req.body;
+    const { nameAr, nameEn, scientificName, imageUrl, category, careLevel, descriptionAr, descriptionEn, waterRequirements, lightRequirements, humidityRequirements, soilRequirements, fertilizerRequirements, growthRate, matureSize, temperatureRange, toxicityLevel, wateringFrequency, careInstructions, commonProblems, propagationMethod, nativeRegion, plantBenefits } = req.body;
 
     if (!nameAr || !nameEn) {
       return res.status(400).json({ success: false, message: "nameAr and nameEn are required fields" });
@@ -86,6 +86,21 @@ export const addPlant = async (req: Request, res: Response) => {
       careLevel,
       descriptionAr,
       descriptionEn,
+      waterRequirements,
+      lightRequirements,
+      humidityRequirements,
+      soilRequirements,
+      fertilizerRequirements,
+      growthRate,
+      matureSize,
+      temperatureRange,
+      toxicityLevel,
+      wateringFrequency,
+      careInstructions,
+      commonProblems,
+      propagationMethod,
+      nativeRegion,
+      plantBenefits,
       slug,
       normalizedNameEn: nameEn.toLowerCase(),
       normalizedNameAr: nameAr.toLowerCase(),
@@ -106,7 +121,7 @@ export const updatePlant = async (req: Request, res: Response) => {
   try {
     logger.info({ event: "plant_library.updatePlant", params: req.params, body: req.body, user: (req as any).user?.id });
     const { id } = req.params;
-    const { nameAr, nameEn, scientificName, imageUrl, category, careLevel, descriptionAr, descriptionEn } = req.body;
+    const { nameAr, nameEn, scientificName, imageUrl, category, careLevel, descriptionAr, descriptionEn, waterRequirements, lightRequirements, humidityRequirements, soilRequirements, fertilizerRequirements, growthRate, matureSize, temperatureRange, toxicityLevel, wateringFrequency, careInstructions, commonProblems, propagationMethod, nativeRegion, plantBenefits } = req.body;
 
     const plant = await Plant.findById(id);
     if (!plant) {
@@ -121,6 +136,21 @@ export const updatePlant = async (req: Request, res: Response) => {
     if (careLevel !== undefined) plant.careLevel = careLevel;
     if (descriptionAr !== undefined) plant.descriptionAr = descriptionAr;
     if (descriptionEn !== undefined) plant.descriptionEn = descriptionEn;
+    if (waterRequirements !== undefined) plant.waterRequirements = waterRequirements;
+    if (lightRequirements !== undefined) plant.lightRequirements = lightRequirements;
+    if (humidityRequirements !== undefined) plant.humidityRequirements = humidityRequirements;
+    if (soilRequirements !== undefined) plant.soilRequirements = soilRequirements;
+    if (fertilizerRequirements !== undefined) plant.fertilizerRequirements = fertilizerRequirements;
+    if (growthRate !== undefined) plant.growthRate = growthRate;
+    if (matureSize !== undefined) plant.matureSize = matureSize;
+    if (temperatureRange !== undefined) plant.temperatureRange = temperatureRange;
+    if (toxicityLevel !== undefined) plant.toxicityLevel = toxicityLevel;
+    if (wateringFrequency !== undefined) plant.wateringFrequency = wateringFrequency;
+    if (careInstructions !== undefined) plant.careInstructions = careInstructions;
+    if (commonProblems !== undefined) plant.commonProblems = commonProblems;
+    if (propagationMethod !== undefined) plant.propagationMethod = propagationMethod;
+    if (nativeRegion !== undefined) plant.nativeRegion = nativeRegion;
+    if (plantBenefits !== undefined) plant.plantBenefits = plantBenefits;
 
     await plant.save();
 

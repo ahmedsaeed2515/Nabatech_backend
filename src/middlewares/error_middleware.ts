@@ -29,11 +29,11 @@ export const errorHandler = (
       error: {
         code: err.code,
         status: err.statusCode,
-        message: err.message,
+        message: (process.env.NODE_ENV === 'production' && !err.isOperational) ? 'Internal Server Error' : err.message,
         details: err.details
       },
       requestId,
-      message: err.message // legacy alias
+      message: (process.env.NODE_ENV === 'production' && !err.isOperational) ? 'Internal Server Error' : err.message
     };
     return res.status(err.statusCode).json(response);
   }

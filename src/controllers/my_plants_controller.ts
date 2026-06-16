@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import MyPlant from "../models/my_plant_model";
 import WateringLog from "../models/watering_log_model";
+import DiaryEntry from "../models/diary_entry_model";
+import Reminder from "../models/reminder_model";
+import DiagnosisHistory from "../models/diagnosis_history_model";
 import cloudinary from "../config/cloudinary";
 import IdempotencyRecord from "../models/idempotency_record_model";
 import crypto from "crypto";
@@ -17,9 +20,29 @@ export const getMyPlants = async (req: Request, res: Response, next: NextFunctio
     const limit = parseInt(req.query.limit as string, 10) || 20;
     const skip = (page - 1) * limit;
 
-    const total = await MyPlant.countDocuments({ user: userId });
-    const plants = await MyPlant.find({ user: userId })
-      .sort({ createdAt: -1 })
+    const { search, sort, healthStatus, species, location } = req.query;
+
+    const query: any = { user: userId };
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { species: { $regex: search, $options: "i" } }
+      ];
+    }
+    if (healthStatus) query.healthStatus = healthStatus;
+    if (species) query.species = species;
+    if (location) query.location = location;
+
+    let sortOption: any = { createdAt: -1 };
+    if (sort === "name_asc") sortOption = { name: 1 };
+    if (sort === "name_desc") sortOption = { name: -1 };
+    if (sort === "oldest") sortOption = { createdAt: 1 };
+    if (sort === "needs_water") sortOption = { lastWatered: 1 };
+
+    const total = await MyPlant.countDocuments(query);
+    const plants = await MyPlant.find(query)
+      .sort(sortOption)
       .skip(skip)
       .limit(limit);
 
@@ -81,7 +104,7 @@ export const getPlantById = async (req: Request, res: Response, next: NextFuncti
 export const addPlant = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = (req as any).user.id;
-    const { name, species, imageUrl, location, waterFrequencyDays, lastWatered, healthStatus } = req.body;
+    const { name, species, imageUrl, location, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications } = req.body;
 
     if (!name || !species || !location || waterFrequencyDays === undefined) {
       throw new AppError({ code: 'VALIDATION_FAILED', statusCode: 400, message: 'Name, species, location and water frequency are required' });
@@ -114,6 +137,8 @@ export const addPlant = async (req: Request, res: Response, next: NextFunction) 
                 location: plant.location,
                 waterFrequencyDays: plant.waterFrequencyDays,
                 lastWatered: plant.lastWatered,
+                plantLibraryId: plant.plantLibraryId,
+                enableNotifications: plant.enableNotifications,
                 healthStatus: plant.healthStatus,
                 createdAt: plant.createdAt,
               }
@@ -144,8 +169,22 @@ export const addPlant = async (req: Request, res: Response, next: NextFunction) 
       location,
       waterFrequencyDays: Number(waterFrequencyDays),
       lastWatered: lastWatered ? new Date(lastWatered) : undefined,
+      plantLibraryId: plantLibraryId || undefined,
+      enableNotifications: enableNotifications !== undefined ? enableNotifications : true,
       healthStatus: healthStatus || "excellent",
     });
+
+    if (plant.enableNotifications) {
+      const nextDate = new Date(plant.lastWatered.getTime() + plant.waterFrequencyDays * 24 * 60 * 60 * 1000);
+      await Reminder.create({
+        user: userId,
+        plantId: plant._id,
+        title: `Water ${plant.name}`,
+        timeLabel: 'Auto',
+        scheduledAt: nextDate,
+        enabled: true,
+      });
+    }
 
     const result = {
       plant: {
@@ -184,7 +223,7 @@ export const addPlant = async (req: Request, res: Response, next: NextFunction) 
 export const updatePlant = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = (req as any).user.id;
-    const { name, species, imageUrl, location, waterFrequencyDays, lastWatered, healthStatus } = req.body;
+    const { name, species, imageUrl, location, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications } = req.body;
 
     if (waterFrequencyDays !== undefined && Number(waterFrequencyDays) < 1) {
       return res.status(400).json({ success: false, message: "waterFrequencyDays must be at least 1" });
@@ -197,13 +236,46 @@ export const updatePlant = async (req: Request, res: Response, next: NextFunctio
 
     if (name !== undefined) plant.name = name.trim();
     if (species !== undefined) plant.species = species.trim();
-    if (imageUrl !== undefined) plant.imageUrl = imageUrl;
+    if (imageUrl !== undefined && imageUrl !== plant.imageUrl) {
+      if (plant.imageUrl) {
+        await deleteCloudinaryImage(plant.imageUrl);
+      }
+      plant.imageUrl = imageUrl;
+    }
     if (location !== undefined) plant.location = location;
     if (waterFrequencyDays !== undefined) plant.waterFrequencyDays = Number(waterFrequencyDays);
     if (lastWatered !== undefined) plant.lastWatered = new Date(lastWatered);
     if (healthStatus !== undefined) plant.healthStatus = healthStatus;
+    if (plantLibraryId !== undefined) plant.plantLibraryId = plantLibraryId;
+    
+    const oldEnableNotifications = plant.enableNotifications;
+    if (enableNotifications !== undefined) plant.enableNotifications = enableNotifications;
 
     await plant.save();
+
+    if (enableNotifications !== undefined || waterFrequencyDays !== undefined || lastWatered !== undefined) {
+      if (!plant.enableNotifications) {
+        await Reminder.deleteMany({ plantId: plant._id });
+      } else {
+        const nextDate = new Date(plant.lastWatered.getTime() + plant.waterFrequencyDays * 24 * 60 * 60 * 1000);
+        const existingReminder = await Reminder.findOne({ plantId: plant._id });
+        
+        if (existingReminder) {
+          existingReminder.scheduledAt = nextDate;
+          existingReminder.title = `Water ${plant.name}`;
+          await existingReminder.save();
+        } else {
+          await Reminder.create({
+            user: userId,
+            plantId: plant._id,
+            title: `Water ${plant.name}`,
+            timeLabel: 'Auto',
+            scheduledAt: nextDate,
+            enabled: true,
+          });
+        }
+      }
+    }
 
     return ok(res, {
       plant: {
@@ -227,6 +299,24 @@ export const updatePlant = async (req: Request, res: Response, next: NextFunctio
   }
 };
 
+export const deleteCloudinaryImage = async (imageUrl: string) => {
+  if (!imageUrl || !imageUrl.includes('cloudinary.com')) return;
+  try {
+    const urlParts = imageUrl.split('/');
+    // e.g. https://res.cloudinary.com/cloud_name/image/upload/v12345/my_folder/my_image.jpg
+    const uploadIndex = urlParts.indexOf('upload');
+    if (uploadIndex === -1) return;
+    
+    // Everything after upload/vXXX/ is the public_id, minus extension
+    const pathAfterUpload = urlParts.slice(uploadIndex + 2).join('/');
+    const publicId = pathAfterUpload.split('.')[0];
+    
+    await cloudinary.uploader.destroy(publicId);
+  } catch (err) {
+    console.error("Failed to delete image from cloudinary:", err);
+  }
+};
+
 // @desc    Delete a plant
 // @route   DELETE /api/my-plants/:id
 // @access  Private
@@ -238,6 +328,17 @@ export const deletePlant = async (req: Request, res: Response, next: NextFunctio
     if (!plant) {
       throw new AppError({ code: 'RESOURCE_NOT_FOUND', statusCode: 404, message: 'Plant not found or unauthorized' });
     }
+
+    if (plant.imageUrl) {
+      await deleteCloudinaryImage(plant.imageUrl);
+    }
+
+    await Promise.all([
+      WateringLog.deleteMany({ plant: plant._id }),
+      DiaryEntry.deleteMany({ plantId: plant._id }),
+      Reminder.deleteMany({ plantId: plant._id }),
+      DiagnosisHistory.deleteMany({ plantId: plant._id }),
+    ]);
 
     return ok(res, {
       message: "Plant deleted successfully"
@@ -331,12 +432,50 @@ export const uploadPlantImage = async (req: Request, res: Response, next: NextFu
       stream.end(req.file!.buffer);
     });
 
+    if (plant.imageUrl) {
+      await deleteCloudinaryImage(plant.imageUrl);
+    }
     plant.imageUrl = imageUrl;
     await plant.save();
 
     return ok(res, {
       imageUrl,
       plant: { id: plant._id, imageUrl: plant.imageUrl }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get dashboard analytics for a plant
+// @route   GET /api/my-plants/:id/dashboard
+// @access  Private
+export const getPlantDashboard = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user.id;
+    const plantId = req.params.id;
+
+    const plant = await MyPlant.findOne({ _id: plantId, user: userId });
+    if (!plant) {
+      return res.status(404).json({ success: false, message: "Plant not found" });
+    }
+
+    const [waterings, diaries, diagnoses, reminders] = await Promise.all([
+      WateringLog.countDocuments({ plant: plantId }),
+      DiaryEntry.countDocuments({ plantId: plantId }),
+      DiagnosisHistory.countDocuments({ plantId: plantId }),
+      Reminder.countDocuments({ plantId: plantId }),
+    ]);
+
+    const daysAlive = Math.floor((Date.now() - new Date(plant.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+
+    return ok(res, {
+      totalWaterings: waterings,
+      totalDiaries: diaries,
+      totalDiagnoses: diagnoses,
+      totalReminders: reminders,
+      daysAlive: daysAlive >= 0 ? daysAlive : 0,
+      healthStatus: plant.healthStatus,
     });
   } catch (error) {
     next(error);

@@ -35,7 +35,7 @@ export const getReminders = async (req: Request, res: Response) => {
         items: reminders.map(r => ({
           id: r._id,
           title: r.title,
-          plantName: r.plantName,
+          plantId: r.plantId,
           timeLabel: r.timeLabel,
           iconCodePoint: r.iconCodePoint,
           enabled: r.enabled,
@@ -57,7 +57,7 @@ export const getReminders = async (req: Request, res: Response) => {
       reminders: reminders.map(r => ({
         id: r._id,
         title: r.title,
-        plantName: r.plantName,
+        plantId: r.plantId,
         timeLabel: r.timeLabel,
         iconCodePoint: r.iconCodePoint,
         enabled: r.enabled,
@@ -76,10 +76,10 @@ export const getReminders = async (req: Request, res: Response) => {
 export const createReminder = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const { title, plantName, timeLabel, iconCodePoint, enabled, scheduledAt, timeZone, recurrence, clientOperationId } = req.body;
+    const { title, plantId, timeLabel, iconCodePoint, enabled, scheduledAt, timeZone, recurrence, clientOperationId } = req.body;
 
-    if (!title || !plantName) {
-      return res.status(400).json({ errorCode: "VALIDATION_FAILED", message: "Title and plantName are required" });
+    if (!title || !plantId) {
+      return res.status(400).json({ errorCode: "VALIDATION_FAILED", message: "Title and plantId are required" });
     }
 
     if (scheduledAt && !validateIsoDate(scheduledAt)) {
@@ -97,7 +97,7 @@ export const createReminder = async (req: Request, res: Response) => {
     const reminder = new Reminder({
       user: userId,
       title: title.trim(),
-      plantName: plantName.trim(),
+      plantId: plantId,
       timeLabel: timeLabel ? timeLabel.trim() : (scheduledAt ? new Date(scheduledAt).toLocaleTimeString() : 'Review Needed'),
       iconCodePoint: iconCodePoint !== undefined ? Number(iconCodePoint) : undefined,
       enabled: enabled !== undefined ? Boolean(enabled) : true,
@@ -122,7 +122,7 @@ export const createReminder = async (req: Request, res: Response) => {
     const responsePayload = {
       id: reminder._id,
       title: reminder.title,
-      plantName: reminder.plantName,
+      plantId: reminder.plantId,
       timeLabel: reminder.timeLabel,
       iconCodePoint: reminder.iconCodePoint,
       enabled: reminder.enabled,
@@ -151,7 +151,7 @@ export const createReminder = async (req: Request, res: Response) => {
 export const updateReminder = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const { title, plantName, timeLabel, iconCodePoint, enabled, scheduledAt, timeZone, recurrence, version } = req.body;
+    const { title, plantId, timeLabel, iconCodePoint, enabled, scheduledAt, timeZone, recurrence, version } = req.body;
 
     const reminder = await Reminder.findOne({ _id: req.params.id, user: userId });
     if (!reminder) {
@@ -175,7 +175,7 @@ export const updateReminder = async (req: Request, res: Response) => {
     }
 
     if (title !== undefined) reminder.title = title.trim();
-    if (plantName !== undefined) reminder.plantName = plantName.trim();
+    if (plantId !== undefined) reminder.plantId = plantId;
     if (timeLabel !== undefined) reminder.timeLabel = timeLabel.trim();
     if (iconCodePoint !== undefined) reminder.iconCodePoint = Number(iconCodePoint);
     if (enabled !== undefined) reminder.enabled = Boolean(enabled);
@@ -191,7 +191,7 @@ export const updateReminder = async (req: Request, res: Response) => {
     const responsePayload = {
       id: reminder._id,
       title: reminder.title,
-      plantName: reminder.plantName,
+      plantId: reminder.plantId,
       timeLabel: reminder.timeLabel,
       iconCodePoint: reminder.iconCodePoint,
       enabled: reminder.enabled,

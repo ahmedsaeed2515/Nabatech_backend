@@ -3,6 +3,7 @@ import cloudinary from "../config/cloudinary";
 import DiagnosisHistory from "../models/diagnosis_history_model";
 import { orchestrateAssistantRequest } from "../services/ai/ai_orchestrator_service";
 import { isProviderError, sanitizeErrorMessage } from "../services/ai/ai_errors";
+import { buildAssistantPrompt } from "../services/ai/assistant_prompt_builder";
 
 // Simple translation dictionary for common plant diseases
 export const translateToAr = (nameEn: string): string => {
@@ -81,7 +82,7 @@ export const predictPlantDisease = async (req: Request, res: Response) => {
           severity: existing.severity,
           imageUrl: existing.imageUrl,
           candidates: existing.candidates,
-          advice: null,
+          advice: existing.advice,
           source: existing.source,
           provider: { name: existing.provider },
           lowConfidenceWarning: existing.uncertain ? "Low confidence result" : null,
@@ -90,18 +91,20 @@ export const predictPlantDisease = async (req: Request, res: Response) => {
       }
     }
 
-    // 1. Run full pipeline: CNN + LLM advice BEFORE uploading
-    const result = await orchestrateAssistantRequest({
+    // 1. Run CNN inference only
+    const cnnResult = await orchestrateAssistantRequest({
       userId,
       fileBuffer: req.file.buffer,
       originalName: req.file.originalname,
-      question: "Explain the diagnosis in simple terms and give safe care guidance.",
+      question: "",
       history: [],
+      skipAdvice: true,
     });
 
-    const prediction = result.diagnosis?.prediction || "unknown";
-    const confidence = result.diagnosis?.confidence ?? 0;
-    const candidates = result.diagnosis?.candidates || [];
+    const prediction = cnnResult.diagnosis?.prediction || "unknown";
+    const confidence = cnnResult.diagnosis?.confidence ?? 0;
+    const candidates = cnnResult.diagnosis?.candidates || [];
+    const isUncertain = Boolean(cnnResult.lowConfidenceWarning);
 
     // 2. Upload to Cloudinary folder "diagnoses" only if inference succeeded
     const cloudinaryUpload = (fileBuffer: Buffer) => {
@@ -120,7 +123,25 @@ export const predictPlantDisease = async (req: Request, res: Response) => {
     const uploadResult = await cloudinaryUpload(req.file.buffer);
     uploadedImagePublicId = uploadResult.public_id;
 
-    // 3. Save diagnosis log in database history
+    // 3. Generate LLM Advice asynchronously (Sequential flow)
+    const prompt = buildAssistantPrompt({
+      userQuestion: "Explain the diagnosis in simple terms and give safe care guidance.",
+      history: [],
+      cnn: {
+        prediction,
+        confidence,
+        candidates,
+      },
+      lowConfidenceWarning: cnnResult.lowConfidenceWarning || "",
+    });
+
+    const llmResult = await orchestrateAssistantRequest({
+      userId,
+      question: prompt,
+      history: [],
+    });
+
+    // 4. Save diagnosis log in database history
     const diseaseNameAr = translateToAr(prediction);
     const severity = estimateSeverity(confidence, prediction);
 
@@ -136,12 +157,13 @@ export const predictPlantDisease = async (req: Request, res: Response) => {
       severity,
       candidates: candidates.map((c: any) => ({ label: c.label, confidence: c.confidence })),
       isOffline: false,
-      modelId: result.diagnosis?.provider || "unknown",
-      provider: result.provider,
-      source: result.source,
-      sourceIds: result.providerChain,
-      uncertain: Boolean(result.lowConfidenceWarning),
-      needsNewImage: result.needsNewImage,
+      modelId: cnnResult.diagnosis?.provider || "unknown",
+      provider: cnnResult.provider,
+      source: llmResult.source,
+      sourceIds: [...cnnResult.providerChain, ...(llmResult.providerChain || [])],
+      uncertain: isUncertain,
+      needsNewImage: cnnResult.needsNewImage,
+      advice: llmResult.message,
     });
 
     res.status(200).json({
@@ -153,17 +175,17 @@ export const predictPlantDisease = async (req: Request, res: Response) => {
       severity,
       imageUrl: uploadResult.secure_url,
       candidates,
-      advice: result.message || null,
-      source: result.source,
-      provider: { name: result.provider },
-      lowConfidenceWarning: result.lowConfidenceWarning || null,
-      needsNewImage: result.needsNewImage || false,
-      uncertain: Boolean(result.lowConfidenceWarning),
+      advice: llmResult.message || null,
+      source: llmResult.source,
+      provider: { name: cnnResult.provider, llm: llmResult.provider },
+      lowConfidenceWarning: cnnResult.lowConfidenceWarning || null,
+      needsNewImage: cnnResult.needsNewImage || false,
+      uncertain: isUncertain,
     });
   } catch (error: any) {
     console.error("Diagnosis error:", sanitizeErrorMessage(error));
     if (uploadedImagePublicId) {
-      // Outbox / Rollback mechanism for Cloudinary if DB failed
+      // Outbox / Rollback mechanism for Cloudinary if DB/LLM failed
       try {
         await cloudinary.uploader.destroy(uploadedImagePublicId);
       } catch (delErr) {
@@ -255,5 +277,55 @@ export const syncOfflineDiagnosis = async (req: Request, res: Response) => {
       }
     }
     return res.status(500).json({ success: false, message: "Failed to sync offline diagnosis" });
+  }
+};
+
+// @desc    Generate AI advice asynchronously for an existing diagnosis
+// @route   GET /api/diagnosis/:historyId/advice
+// @access  Private
+export const generateDiagnosisAdvice = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const historyId = req.params.historyId;
+
+    const history = await DiagnosisHistory.findOne({ _id: historyId, user: userId });
+    if (!history) {
+      return res.status(404).json({ success: false, message: "Diagnosis history not found" });
+    }
+
+    if (history.advice) {
+      return res.status(200).json({ success: true, advice: history.advice, source: history.source });
+    }
+
+    const prompt = buildAssistantPrompt({
+      userQuestion: "Explain the diagnosis in simple terms and give safe care guidance.",
+      history: [],
+      cnn: {
+        prediction: history.diseaseNameEn,
+        confidence: history.confidence,
+        candidates: history.candidates || [],
+      },
+      lowConfidenceWarning: history.uncertain ? "Low confidence result" : "",
+    });
+
+    const result = await orchestrateAssistantRequest({
+      userId,
+      question: prompt,
+      history: [],
+    });
+
+    history.advice = result.message;
+    if (result.source) history.source = result.source;
+    await history.save();
+
+    res.status(200).json({
+      success: true,
+      advice: history.advice,
+      source: history.source,
+    });
+  } catch (error: any) {
+    console.error("Advice generation error:", sanitizeErrorMessage(error));
+    const status = isProviderError(error) ? 502 : 500;
+    res.status(status).json({ success: false, message: "Failed to generate advice" });
   }
 };

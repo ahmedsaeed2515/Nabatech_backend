@@ -7,11 +7,15 @@ import DiaryEntry from "../models/diary_entry_model";
 export const getDiaryEntries = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const entries = await DiaryEntry.find({ user: userId }).sort({ date: -1 });
+    const { plantId } = req.query;
+    const query: any = { user: userId };
+    if (plantId) query.plantId = plantId;
+    
+    const entries = await DiaryEntry.find(query).sort({ date: -1 });
 
     const payload = entries.map(e => ({
       id: e._id,
-      plantName: e.plantName,
+      plantId: e.plantId,
       title: e.title,
       notes: e.notes,
       date: e.date,
@@ -34,15 +38,15 @@ export const getDiaryEntries = async (req: Request, res: Response) => {
 export const createDiaryEntry = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const { plantName, title, notes, date, moodCode, healthScore } = req.body;
+    const { plantId, title, notes, date, moodCode, healthScore } = req.body;
 
-    if (!plantName || !title || !notes) {
-      return res.status(400).json({ message: "Plant name, title and notes are required" });
+    if (!plantId || !title || !notes) {
+      return res.status(400).json({ message: "Plant ID, title and notes are required" });
     }
 
     const entry = await DiaryEntry.create({
       user: userId,
-      plantName: plantName.trim(),
+      plantId: plantId,
       title: title.trim(),
       notes: notes.trim(),
       date: date ? new Date(date) : undefined,
@@ -54,7 +58,7 @@ export const createDiaryEntry = async (req: Request, res: Response) => {
       success: true,
       entry: {
         id: entry._id,
-        plantName: entry.plantName,
+        plantId: entry.plantId,
         title: entry.title,
         notes: entry.notes,
         date: entry.date,
@@ -74,14 +78,14 @@ export const createDiaryEntry = async (req: Request, res: Response) => {
 export const updateDiaryEntry = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const { plantName, title, notes, date, moodCode, healthScore } = req.body;
+    const { plantId, title, notes, date, moodCode, healthScore } = req.body;
 
     const entry = await DiaryEntry.findOne({ _id: req.params.id, user: userId });
     if (!entry) {
       return res.status(404).json({ message: "Diary entry not found" });
     }
 
-    if (plantName !== undefined) entry.plantName = plantName.trim();
+    if (plantId !== undefined) entry.plantId = plantId;
     if (title !== undefined) entry.title = title.trim();
     if (notes !== undefined) entry.notes = notes.trim();
     if (date !== undefined) entry.date = new Date(date);
@@ -94,7 +98,7 @@ export const updateDiaryEntry = async (req: Request, res: Response) => {
       success: true,
       entry: {
         id: entry._id,
-        plantName: entry.plantName,
+        plantId: entry.plantId,
         title: entry.title,
         notes: entry.notes,
         date: entry.date,
