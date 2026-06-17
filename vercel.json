@@ -11,11 +11,5 @@
       "src": "/(.*)",
       "dest": "dist/server.js"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/internal/jobs/drain",
-      "schedule": "* * * * *"
-    }
   ]
 }
