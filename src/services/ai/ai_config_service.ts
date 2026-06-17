@@ -136,7 +136,7 @@ const envDefaults = (): AiSettingsShape => ({
   cnn: {
     enabled: true,
     provider: process.env.CNN_PROVIDER || "huggingface-space",
-    endpointUrl: process.env.CNN_ENDPOINT_URL || "",
+    endpointUrl: process.env.IMAGE_API_URL || process.env.CNN_ENDPOINT_URL || "",
     timeoutMs: toNum(process.env.AI_CNN_TIMEOUT_MS, 35000),
     inputSize: toNum(process.env.CNN_INPUT_SIZE, 224),
     preprocessRequired: (process.env.CNN_PREPROCESS_REQUIRED || "false").toLowerCase() === "true",
@@ -145,7 +145,7 @@ const envDefaults = (): AiSettingsShape => ({
   },
   rag: {
     enabled: true,
-    endpointUrl: process.env.RAG_ENDPOINT_URL || "",
+    endpointUrl: process.env.CHAT_API_URL || process.env.RAG_ENDPOINT_URL || "",
     timeoutMs: toNum(process.env.AI_RAG_TIMEOUT_MS, 20000),
     topK: toNum(process.env.AI_CHAT_TOP_K, 8),
   },
