@@ -35,7 +35,7 @@ const registerUser = async (req, res, next) => {
         const user = new user_model_1.default({
             name,
             email,
-            password: hashedPassword,
+            passwordHash: hashedPassword,
             phoneNumber,
             emailVerificationTokenHash,
             emailVerificationExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
@@ -102,7 +102,7 @@ const loginUser = async (req, res, next) => {
             logger_1.logger.info('auth.login.failed', { userId: user._id, reason: 'disabled' });
             throw new app_error_1.AppError({ code: 'AUTH_ACCOUNT_DISABLED', statusCode: 403, message: 'Account is disabled' });
         }
-        const isMatch = await bcryptjs_1.default.compare(password, user.password);
+        const isMatch = await bcryptjs_1.default.compare(password, user.passwordHash || user.password || '');
         if (!isMatch) {
             logger_1.logger.info('auth.login.failed', { userId: user._id, reason: 'bad_password' });
             throw new app_error_1.AppError({ code: 'AUTH_INVALID_CREDENTIALS', statusCode: 401, message: 'Invalid email or password' });

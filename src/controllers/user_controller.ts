@@ -138,7 +138,7 @@ export const changePassword = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    const isMatch = await bcrypt.compare(currentPassword, user.passwordHash || user.password || '');
     if (!isMatch) {
       return res.status(400).json({ message: "Current password is incorrect" });
     }
@@ -149,7 +149,7 @@ export const changePassword = async (req: Request, res: Response) => {
       });
     }
 
-    user.password = await bcrypt.hash(newPassword, 10);
+    user.passwordHash = await bcrypt.hash(newPassword, 10);
     await user.save();
 
     res.status(200).json({

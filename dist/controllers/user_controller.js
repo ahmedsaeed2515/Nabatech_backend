@@ -134,7 +134,7 @@ const changePassword = async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
-        const isMatch = await bcryptjs_1.default.compare(currentPassword, user.password);
+        const isMatch = await bcryptjs_1.default.compare(currentPassword, user.passwordHash || user.password || '');
         if (!isMatch) {
             return res.status(400).json({ message: "Current password is incorrect" });
         }
@@ -143,7 +143,7 @@ const changePassword = async (req, res) => {
                 message: "New password must be at least 6 characters and contain both letters and numbers"
             });
         }
-        user.password = await bcryptjs_1.default.hash(newPassword, 10);
+        user.passwordHash = await bcryptjs_1.default.hash(newPassword, 10);
         await user.save();
         res.status(200).json({
             success: true,

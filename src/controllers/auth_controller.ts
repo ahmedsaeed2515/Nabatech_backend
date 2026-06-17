@@ -37,7 +37,7 @@ export const registerUser = async (req: Request, res: Response, next: NextFuncti
     const user = new User({
       name,
       email,
-      password: hashedPassword,
+      passwordHash: hashedPassword,
       phoneNumber,
       emailVerificationTokenHash,
       emailVerificationExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
@@ -114,7 +114,7 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
       throw new AppError({ code: 'AUTH_ACCOUNT_DISABLED', statusCode: 403, message: 'Account is disabled' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(password, user.passwordHash || user.password || '');
     if (!isMatch) {
       logger.info('auth.login.failed', { userId: user._id, reason: 'bad_password' });
       throw new AppError({ code: 'AUTH_INVALID_CREDENTIALS', statusCode: 401, message: 'Invalid email or password' });
