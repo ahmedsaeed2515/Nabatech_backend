@@ -4,6 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
+const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
+const swagger_1 = __importDefault(require("./docs/swagger"));
 const helmet_1 = __importDefault(require("helmet"));
 const express_mongo_sanitize_1 = __importDefault(require("express-mongo-sanitize"));
 const auth_middleware_1 = require("./middlewares/auth_middleware");
@@ -104,7 +106,7 @@ app.get("/health/ready", async (req, res) => {
 app.use("/api/test", test_routers_1.default);
 app.use("/api/auth", auth_router_1.default);
 app.use("/api/upload", upload_routes_1.default);
-// app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/api-docs', swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(swagger_1.default));
 app.use("/api/chat", chat_routes_1.default);
 app.use("/api/users", user_router_1.default);
 app.use("/api/my-plants", my_plants_router_1.default);

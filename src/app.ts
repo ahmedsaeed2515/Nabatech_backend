@@ -108,7 +108,7 @@ app.get("/health/ready", async (req: Request, res: Response) => {
 app.use("/api/test", testRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/upload", uploadRouter);
-// app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/api/chat", chatRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/my-plants", myPlantsRouter);
