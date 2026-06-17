@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import User, { UserRole } from "../models/user_model";
 import CommunityPost from "../models/community_post_model";
 import DiagnosisHistory from "../models/diagnosis_history_model";

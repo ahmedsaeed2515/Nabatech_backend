@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv_1 = __importDefault(require("dotenv"));
-const bcrypt_1 = __importDefault(require("bcrypt"));
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const database_1 = __importDefault(require("../config/database"));
 const user_model_1 = __importDefault(require("../models/user_model"));
@@ -155,7 +155,7 @@ function randomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 async function ensureDemoUsers() {
-    const passwordHash = await bcrypt_1.default.hash("Demo1234", 10);
+    const passwordHash = await bcryptjs_1.default.hash("Demo1234", 10);
     const users = [];
     for (const seed of demoUsers) {
         let user = await user_model_1.default.findOne({ email: seed.email });

@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateFcmToken = exports.getDashboardStats = exports.getUserDetails = exports.deleteUser = exports.updateUserRole = exports.changePassword = exports.updateProfile = exports.getCurrentUser = exports.getAllUsers = void 0;
-const bcrypt_1 = __importDefault(require("bcrypt"));
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const user_model_1 = __importDefault(require("../models/user_model"));
 const community_post_model_1 = __importDefault(require("../models/community_post_model"));
 const diagnosis_history_model_1 = __importDefault(require("../models/diagnosis_history_model"));
@@ -134,7 +134,7 @@ const changePassword = async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
-        const isMatch = await bcrypt_1.default.compare(currentPassword, user.password);
+        const isMatch = await bcryptjs_1.default.compare(currentPassword, user.password);
         if (!isMatch) {
             return res.status(400).json({ message: "Current password is incorrect" });
         }
@@ -143,7 +143,7 @@ const changePassword = async (req, res) => {
                 message: "New password must be at least 6 characters and contain both letters and numbers"
             });
         }
-        user.password = await bcrypt_1.default.hash(newPassword, 10);
+        user.password = await bcryptjs_1.default.hash(newPassword, 10);
         await user.save();
         res.status(200).json({
             success: true,

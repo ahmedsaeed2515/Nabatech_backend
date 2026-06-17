@@ -1,7 +1,7 @@
 import Plant from "../models/plant_model";
 import Disease from "../models/disease_model";
 import User from "../models/user_model";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 
 export const seedPlantLibrary = async () => {
   try {

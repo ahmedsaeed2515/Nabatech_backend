@@ -7,7 +7,7 @@ exports.seedDefaultAdmin = exports.seedPlantLibrary = void 0;
 const plant_model_1 = __importDefault(require("../models/plant_model"));
 const disease_model_1 = __importDefault(require("../models/disease_model"));
 const user_model_1 = __importDefault(require("../models/user_model"));
-const bcrypt_1 = __importDefault(require("bcrypt"));
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const seedPlantLibrary = async () => {
     try {
         const plantCount = await plant_model_1.default.countDocuments();
@@ -48,7 +48,7 @@ const seedDefaultAdmin = async () => {
         const exists = await user_model_1.default.findOne({ email: adminEmail });
         if (exists)
             return;
-        const hashed = await bcrypt_1.default.hash(adminPassword, 10);
+        const hashed = await bcryptjs_1.default.hash(adminPassword, 10);
         await user_model_1.default.create({
             name: adminName,
             email: adminEmail,

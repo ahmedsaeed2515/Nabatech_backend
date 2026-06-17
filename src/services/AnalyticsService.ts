@@ -67,7 +67,7 @@ export class AnalyticsService {
 
   async triggerAiAnalysis(userId: string) {
     // Add job to BullMQ queue
-    await aiAnalysisQueue.add('analyzeGarden', { userId });
+    await aiAnalysisQueue?.add('analyzeGarden', { userId });
     return { status: 'queued', message: 'AI analysis has been queued' };
   }
 }

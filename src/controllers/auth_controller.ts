@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";

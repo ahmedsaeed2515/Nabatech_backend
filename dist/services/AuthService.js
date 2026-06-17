@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
-const bcrypt_1 = __importDefault(require("bcrypt"));
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const UserRepository_1 = require("../repositories/UserRepository");
 class AuthService {
@@ -17,7 +17,7 @@ class AuthService {
             throw new Error('Email already in use');
         }
         // Usually passwordHash comes raw from client, we hash it
-        const hashed = await bcrypt_1.default.hash(passwordHash, 10);
+        const hashed = await bcryptjs_1.default.hash(passwordHash, 10);
         return this.userRepository.create({ email, passwordHash: hashed });
     }
     async login(email, passwordHash) {
@@ -25,7 +25,7 @@ class AuthService {
         if (!user) {
             throw new Error('Invalid credentials');
         }
-        const isValid = await bcrypt_1.default.compare(passwordHash, user.passwordHash);
+        const isValid = await bcryptjs_1.default.compare(passwordHash, user.passwordHash);
         if (!isValid) {
             throw new Error('Invalid credentials');
         }

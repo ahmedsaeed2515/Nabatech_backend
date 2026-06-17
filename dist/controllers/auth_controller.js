@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.resendVerification = exports.verifyEmail = exports.resetPassword = exports.forgotPassword = exports.logoutAll = exports.logoutUser = exports.refreshAccessToken = exports.loginUser = exports.registerUser = void 0;
-const bcrypt_1 = __importDefault(require("bcrypt"));
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const crypto_1 = __importDefault(require("crypto"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const mongoose_1 = __importDefault(require("mongoose"));
@@ -29,7 +29,7 @@ const registerUser = async (req, res, next) => {
         if (userExists) {
             throw new app_error_1.AppError({ code: 'AUTH_EMAIL_EXISTS', statusCode: 400, message: 'User already exists' });
         }
-        const hashedPassword = await bcrypt_1.default.hash(password, 10);
+        const hashedPassword = await bcryptjs_1.default.hash(password, 10);
         const emailVerificationToken = crypto_1.default.randomBytes(32).toString("hex");
         const emailVerificationTokenHash = (0, generateToken_1.hashToken)(emailVerificationToken);
         const user = new user_model_1.default({
@@ -102,7 +102,7 @@ const loginUser = async (req, res, next) => {
             logger_1.logger.info('auth.login.failed', { userId: user._id, reason: 'disabled' });
             throw new app_error_1.AppError({ code: 'AUTH_ACCOUNT_DISABLED', statusCode: 403, message: 'Account is disabled' });
         }
-        const isMatch = await bcrypt_1.default.compare(password, user.password);
+        const isMatch = await bcryptjs_1.default.compare(password, user.password);
         if (!isMatch) {
             logger_1.logger.info('auth.login.failed', { userId: user._id, reason: 'bad_password' });
             throw new app_error_1.AppError({ code: 'AUTH_INVALID_CREDENTIALS', statusCode: 401, message: 'Invalid email or password' });
@@ -319,7 +319,7 @@ const resetPassword = async (req, res, next) => {
         if (!user) {
             throw new app_error_1.AppError({ code: 'AUTH_RESET_INVALID', statusCode: 400, message: 'Invalid or expired reset token' });
         }
-        user.password = await bcrypt_1.default.hash(newPassword, 10);
+        user.password = await bcryptjs_1.default.hash(newPassword, 10);
         user.tokenVersion += 1; // Increment version to invalidate active access tokens
         await user.save({ session });
         resetRequest.used = true;

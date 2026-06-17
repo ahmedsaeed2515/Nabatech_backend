@@ -23,7 +23,7 @@ export class CareService {
       notes
     });
 
-    await careSyncQueue.add('care.sync.action', { plantId, userId });
+    await careSyncQueue?.add('care.sync.action', { plantId, userId });
 
     return action;
   }
@@ -37,7 +37,7 @@ export class CareService {
       date
     });
 
-    await careSyncQueue.add('care.sync.fertilizer', { plantId, userId });
+    await careSyncQueue?.add('care.sync.fertilizer', { plantId, userId });
 
     return fertLog;
   }

@@ -1,5 +1,5 @@
 import request from "supertest";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import app from "../app";
 import User from "../models/user_model";
 import MyPlant from "../models/my_plant_model";

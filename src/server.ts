@@ -16,10 +16,10 @@ import { ReminderCron } from "./crons/ReminderCron";
 import { WeatherCron } from "./crons/WeatherCron";
 import { StreakCron } from "./crons/StreakCron";
 
-// Ensure worker is registered
-careSyncWorker.on('error', (err: Error) => logger.error('careSyncWorker error:', err));
-aiAnalysisWorker.on('error', (err: Error) => logger.error('aiAnalysisWorker error:', err));
-timelapseWorker.on('error', (err: Error) => logger.error('timelapseWorker error:', err));
+// Ensure workers are registered (only if Redis is available)
+careSyncWorker?.on('error', (err: Error) => logger.error('careSyncWorker error:', err));
+aiAnalysisWorker?.on('error', (err: Error) => logger.error('aiAnalysisWorker error:', err));
+timelapseWorker?.on('error', (err: Error) => logger.error('timelapseWorker error:', err));
 
 const PORT = process.env.PORT || 10000;
 

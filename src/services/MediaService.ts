@@ -16,7 +16,7 @@ export class MediaService {
     });
 
     // 2. Queue the job
-    await timelapseQueue.add('generate', {
+    await timelapseQueue?.add('generate', {
       jobId: job._id.toString(),
       plantId,
       userId
