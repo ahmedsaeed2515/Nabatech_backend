@@ -34,6 +34,7 @@ export interface User extends Document {
   emailVerificationToken?: string;
   refreshToken?: string;
   emailVerificationTokenHash?: string;
+  emailVerificationExpiresAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date | null;
@@ -49,6 +50,7 @@ const userSchema = new mongoose.Schema<User>({
   autoAddEnabled: { type: Boolean, default: true },
   latitude: { type: Number, required: false },
   longitude: { type: Number, required: false },
+  emailVerificationExpiresAt: { type: Date, required: false },
   deletedAt: { type: Date, default: null }
 }, {
   timestamps: true
