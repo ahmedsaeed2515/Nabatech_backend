@@ -10,15 +10,16 @@ import { logger } from '../utils/logger';
 import fs from 'fs';
 
 export class VoiceService {
-  private speechClient: v1.SpeechClient;
+  private speechClient: v1.SpeechClient | undefined;
   private ai: GoogleGenAI;
   private voiceRepo: VoiceCommandRepository;
   private careService: CareService;
   private plantRepo: PlantRepository;
 
   constructor() {
-    this.speechClient = new v1.SpeechClient();
-    this.ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+    // Lazy-init: don't create SpeechClient at construction time
+    // (requires Google credentials which may not exist in serverless env)
+    this.ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY || 'placeholder' });
     this.voiceRepo = new VoiceCommandRepository();
     this.careService = new CareService();
     this.plantRepo = new PlantRepository();
@@ -26,6 +27,20 @@ export class VoiceService {
 
   async processAudio(userId: string, audioFilePath: string) {
     try {
+      // Initialize SpeechClient lazily (requires Google credentials)
+      if (!this.speechClient) {
+        try {
+          this.speechClient = new v1.SpeechClient();
+        } catch (e) {
+          logger.error('Google Speech client unavailable:', e);
+          return await this.voiceRepo.create({
+            user: userId as any,
+            transcript: '',
+            status: VoiceCommandStatus.FAILED,
+            response: 'Voice service unavailable in this environment'
+          });
+        }
+      }
       // 1. Transcribe audio
       const file = fs.readFileSync(audioFilePath);
       const audioBytes = file.toString('base64');
