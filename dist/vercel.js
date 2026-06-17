@@ -1,10 +1,10 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-const app_1 = __importDefault(require("./app"));
-const database_1 = __importDefault(require("./config/database"));
-// Initialize database connection
-(0, database_1.default)().catch(console.error);
-module.exports = app_1.default;
+exports.default = handler;
+async function handler(req, res) {
+    res.status(200).json({
+        success: true,
+        message: "Hello from Vercel! Your basic routing works. The full app is temporarily disabled for debugging."
+    });
+}
+module.exports = handler;
