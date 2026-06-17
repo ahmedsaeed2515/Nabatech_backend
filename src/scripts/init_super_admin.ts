@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
-import User from '../models/user_model';
+import User, { UserRole } from '../models/user_model';
 
 dotenv.config();
 
@@ -15,8 +15,8 @@ const initSuperAdmin = async () => {
 
     const existingAdmin = await User.findOne({ email: adminEmail });
     if (existingAdmin) {
-      if (existingAdmin.role !== 'super_admin') {
-        existingAdmin.role = 'super_admin';
+      if (existingAdmin.role !== UserRole.SUPER_ADMIN) {
+        existingAdmin.role = UserRole.SUPER_ADMIN;
         await existingAdmin.save();
         console.log(`Updated existing user ${adminEmail} to super_admin`);
       } else {
@@ -31,7 +31,7 @@ const initSuperAdmin = async () => {
       name: 'Super Admin',
       email: adminEmail,
       password: hashedPassword,
-      role: 'super_admin',
+      role: UserRole.SUPER_ADMIN,
       emailVerified: true
     });
 

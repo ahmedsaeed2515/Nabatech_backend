@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import bcrypt from "bcrypt";
-import User from "../models/user_model";
+import User, { UserRole } from "../models/user_model";
 import CommunityPost from "../models/community_post_model";
 import DiagnosisHistory from "../models/diagnosis_history_model";
 import MyPlant from "../models/my_plant_model";
@@ -173,7 +173,7 @@ export const updateUserRole = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    user.role = role as 'user' | 'moderator' | 'admin' | 'super_admin';
+    user.role = role as UserRole;
     await user.save();
 
     res.status(200).json({
