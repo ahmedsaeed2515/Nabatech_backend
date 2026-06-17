@@ -1,0 +1,37 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.PlantStage = void 0;
+const mongoose_1 = __importDefault(require("mongoose"));
+var PlantStage;
+(function (PlantStage) {
+    PlantStage["SEED"] = "SEED";
+    PlantStage["SPROUT"] = "SPROUT";
+    PlantStage["VEGETATIVE"] = "VEGETATIVE";
+    PlantStage["FLOWERING"] = "FLOWERING";
+    PlantStage["FRUITING"] = "FRUITING";
+    PlantStage["MATURE"] = "MATURE";
+    PlantStage["DEAD"] = "DEAD";
+})(PlantStage || (exports.PlantStage = PlantStage = {}));
+const plantSchema = new mongoose_1.default.Schema({
+    zone: { type: mongoose_1.default.Schema.Types.ObjectId, ref: 'Zone', required: true, index: true },
+    dna: { type: mongoose_1.default.Schema.Types.ObjectId, ref: 'PlantDna', required: true },
+    user: { type: mongoose_1.default.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    name: { type: String, required: true },
+    imageUrl: { type: String, default: '' },
+    stage: { type: String, enum: Object.values(PlantStage), default: PlantStage.SEED },
+    healthScore: { type: Number, default: 100 },
+    lastWatered: { type: Date },
+    deletedAt: { type: Date, default: null }
+}, {
+    timestamps: true
+});
+// Exclude soft-deleted records from basic queries
+plantSchema.pre(/^find/, function (next) {
+    const query = this;
+    query.find({ deletedAt: { $eq: null } });
+    next();
+});
+exports.default = mongoose_1.default.model('Plant', plantSchema);

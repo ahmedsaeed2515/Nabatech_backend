@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_middleware_1 = require("../middlewares/auth_middleware");
+const ai_models_controller_1 = require("../controllers/ai_models_controller");
+const router = (0, express_1.Router)();
+router.get("/manifest", ai_models_controller_1.getAiModelsManifest);
+router.get("/manifest/:id/proxy-url", auth_middleware_1.protect, ai_models_controller_1.getAiModelProxyUrl);
+router.post("/manifest", auth_middleware_1.protect, auth_middleware_1.admin, ai_models_controller_1.createAiModelManifestItem);
+router.put("/manifest/:id", auth_middleware_1.protect, auth_middleware_1.admin, ai_models_controller_1.updateAiModelManifestItem);
+router.delete("/manifest/:id", auth_middleware_1.protect, auth_middleware_1.admin, ai_models_controller_1.deleteAiModelManifestItem);
+exports.default = router;

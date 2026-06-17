@@ -1,0 +1,24 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const validate_request_middleware_1 = require("../middlewares/validate_request_middleware");
+const specialist_offer_schemas_1 = require("../validation/specialist_offer_schemas");
+const community_schemas_1 = require("../validation/community_schemas");
+const community_controller_1 = require("../controllers/community_controller");
+const specialist_offers_controller_1 = require("../controllers/specialist_offers_controller");
+const auth_middleware_1 = require("../middlewares/auth_middleware");
+const upload_middleware_1 = __importDefault(require("../middlewares/upload_middleware"));
+const router = (0, express_1.Router)();
+router.get("/posts", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.feedQuerySchema), community_controller_1.getCommunityPosts);
+router.post("/posts", auth_middleware_1.protect, upload_middleware_1.default.single("file"), (0, validate_request_middleware_1.validateRequest)(community_schemas_1.createPostSchema), community_controller_1.createPost);
+router.post("/posts/:id/like", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.toggleLikeSchema), community_controller_1.toggleLike);
+router.get("/posts/:id/comments", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.commentsQuerySchema), community_controller_1.getComments);
+router.post("/posts/:id/comments", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.createCommentSchema), community_controller_1.createComment);
+router.post('/offers', auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(specialist_offer_schemas_1.createOfferSchema), specialist_offers_controller_1.createSpecialistOffer);
+router.get("/offers/sent", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(specialist_offer_schemas_1.offersQuerySchema), specialist_offers_controller_1.getSentSpecialistOffers);
+router.get("/offers/received", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(specialist_offer_schemas_1.offersQuerySchema), specialist_offers_controller_1.getReceivedSpecialistOffers);
+router.patch('/offers/:id/status', auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(specialist_offer_schemas_1.updateOfferStatusSchema), specialist_offers_controller_1.updateSpecialistOfferStatus);
+exports.default = router;

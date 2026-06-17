@@ -1,0 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_middleware_1 = require("../middlewares/auth_middleware");
+const ai_settings_controller_1 = require("../controllers/ai_settings_controller");
+const router = (0, express_1.Router)();
+router.get("/", auth_middleware_1.protect, auth_middleware_1.admin, ai_settings_controller_1.getAdminAiSettings);
+router.put("/", auth_middleware_1.protect, auth_middleware_1.admin, ai_settings_controller_1.putAdminAiSettings);
+router.post("/test", auth_middleware_1.protect, auth_middleware_1.admin, ai_settings_controller_1.testAdminAiSettings);
+router.get("/logs", auth_middleware_1.protect, auth_middleware_1.admin, ai_settings_controller_1.getAdminAiLogs);
+exports.default = router;

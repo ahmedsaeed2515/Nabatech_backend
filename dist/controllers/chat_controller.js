@@ -1,0 +1,287 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getAllChatLogs = exports.getChatHistory = exports.chatWithAI = void 0;
+const message_model_1 = __importDefault(require("../models/message_model"));
+const ai_orchestrator_service_1 = require("../services/ai/ai_orchestrator_service");
+const ai_errors_1 = require("../services/ai/ai_errors");
+const chat_schemas_1 = require("../validation/chat_schemas");
+const crypto_1 = __importDefault(require("crypto"));
+/**
+ * Loads recent message history from DB for a given user+conversationId.
+ * Returns up to `limit` messages in chronological order (oldest first).
+ * This is the server-side memory — it is the ground truth for what was said.
+ */
+const loadDbHistory = async (userId, conversationId, limit = 20) => {
+    try {
+        const messages = await message_model_1.default.find({
+            user: userId,
+            conversationId,
+            role: { $in: ["user", "assistant"] },
+            status: "sent",
+        })
+            .sort({ createdAt: -1, _id: -1 })
+            .limit(limit)
+            .lean();
+        // Reverse to chronological order (oldest first) for LLM context window
+        return messages.reverse().map((m) => ({
+            role: m.role === "assistant" ? "assistant" : "user",
+            content: m.text,
+        }));
+    }
+    catch (error) {
+        console.warn("Failed to load DB history, proceeding with client history:", (0, ai_errors_1.sanitizeErrorMessage)(error));
+        return [];
+    }
+};
+/**
+ * Merges server-side DB history with client-sent history.
+ * DB history is the ground truth; client history fills gaps for very recent
+ * messages that may not yet be committed (optimistic UI sends).
+ * Deduplicates by (role, content) to avoid double-injecting the same message.
+ */
+const mergeHistory = (dbHistory, clientHistory) => {
+    if (!dbHistory.length)
+        return clientHistory.slice(-20);
+    // Build a set of known (role+content) pairs from DB history
+    const dbSet = new Set(dbHistory.map((m) => `${m.role}::${m.content.trim()}`));
+    // Append any client messages NOT already in DB (e.g., very recent unsaved turns)
+    const extraFromClient = clientHistory.filter((m) => !dbSet.has(`${m.role}::${m.content.trim()}`));
+    const merged = [...dbHistory, ...extraFromClient];
+    // Bound to last 20 messages (10 turns) for token safety
+    return merged.slice(-20);
+};
+const chatWithAI = async (req, res) => {
+    try {
+        const text = (req.body?.text || req.body?.question || "").toString();
+        const clientHistory = Array.isArray(req.body?.history) ? req.body.history : [];
+        const topK = Number(req.body?.top_k) || undefined;
+        const clientOperationId = req.body?.clientOperationId;
+        if (!(0, chat_schemas_1.validateChatText)(text)) {
+            return res.status(400).json({ success: false, message: "Message is required and must be under 2000 characters" });
+        }
+        if (!(0, chat_schemas_1.validateChatHistory)(clientHistory)) {
+            return res.status(400).json({ success: false, message: "Invalid history format or length" });
+        }
+        const trimmedText = text.trim();
+        const userId = req.user.id;
+        const requestId = crypto_1.default.randomUUID();
+        const conversationId = `conv-${userId}`;
+        if (clientOperationId) {
+            const existing = await message_model_1.default.findOne({ user: userId, clientOperationId, role: "assistant" });
+            if (existing) {
+                return res.status(200).json({
+                    success: true,
+                    message: existing.text,
+                    messageId: existing._id,
+                    source: existing.source,
+                    provider: { name: existing.provider },
+                    sourceIds: existing.sourceIds,
+                });
+            }
+        }
+        // ✅ FIX #1: Load authoritative conversation history from DB
+        // This is the memory fix — the server always knows the full conversation,
+        // even if the client forgot to send history (e.g., after app restart)
+        const dbHistory = await loadDbHistory(userId, conversationId, 20);
+        const history = mergeHistory(dbHistory, clientHistory);
+        // Create a MongoDB Message log for user query
+        await message_model_1.default.create({
+            user: userId,
+            sender: "user", // Legacy
+            role: "user",
+            text: trimmedText,
+            conversationId,
+            requestId,
+            status: "sent"
+        });
+        let chatResult;
+        try {
+            chatResult = await (0, ai_orchestrator_service_1.orchestrateChat)({
+                userId,
+                requestId,
+                question: trimmedText,
+                history, // ✅ FIX #1: merged DB + client history injected
+                topK,
+            });
+        }
+        catch (aiError) {
+            // Record failed assistant response
+            await message_model_1.default.create({
+                user: userId,
+                sender: "llm", // Legacy
+                role: "assistant",
+                text: "Sorry, I am unable to respond at this time.",
+                conversationId,
+                requestId,
+                clientOperationId,
+                status: "failed",
+                errorCode: "PROVIDER_UNAVAILABLE"
+            });
+            console.error("Chat orchestration failure:", (0, ai_errors_1.sanitizeErrorMessage)(aiError));
+            return res.status(502).json({ success: false, message: "Chat failed" });
+        }
+        const aiResponse = chatResult.message;
+        // Create a MongoDB Message log for the AI response
+        const assistantMsg = await message_model_1.default.create({
+            user: userId,
+            sender: "llm", // Legacy
+            role: "assistant",
+            text: aiResponse,
+            conversationId,
+            requestId,
+            clientOperationId,
+            status: "sent",
+            provider: chatResult.provider,
+            source: chatResult.source,
+            sourceIds: [chatResult.provider]
+        });
+        // Return response with success and message fields
+        return res.status(200).json({
+            success: true,
+            message: aiResponse,
+            messageId: assistantMsg._id,
+            source: chatResult.source,
+            provider: { name: chatResult.provider },
+            sourceIds: assistantMsg.sourceIds
+        });
+    }
+    catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to process chat message", error });
+    }
+};
+exports.chatWithAI = chatWithAI;
+const getChatHistory = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const cursor = req.query.cursor;
+        const limit = Math.min(Number(req.query.limit) || 50, 50);
+        const query = { user: userId };
+        if (cursor) {
+            const cursorMsg = await message_model_1.default.findById(cursor);
+            if (!cursorMsg) {
+                return res.status(400).json({ success: false, message: "VALIDATION_FAILED: Invalid cursor" });
+            }
+            query.$or = [
+                { createdAt: { $lt: cursorMsg.createdAt } },
+                { createdAt: cursorMsg.createdAt, _id: { $lt: cursor } }
+            ];
+        }
+        const messages = await message_model_1.default.find(query)
+            .sort({ createdAt: -1, _id: -1 })
+            .limit(limit);
+        // Return in chronological order for display
+        const sorted = messages.reverse();
+        const payload = sorted.map(m => ({
+            id: m._id,
+            sender: m.sender,
+            role: m.role || (m.sender === "llm" ? "assistant" : "user"),
+            text: m.text,
+            status: m.status || "sent",
+            provider: m.provider,
+            source: m.source,
+            sourceIds: m.sourceIds,
+            // ✅ FIX #3: include image fields so image chat messages render correctly
+            imageUrl: m.imageUrl,
+            diagnosisResult: m.diagnosisResult,
+            createdAt: m.createdAt
+        }));
+        const nextCursor = messages.length === limit ? messages[0]._id : null;
+        return res.status(200).json({
+            success: true,
+            data: {
+                items: payload,
+                pageInfo: { nextCursor, hasNextPage: !!nextCursor }
+            },
+            messages: payload // Legacy fallback
+        });
+    }
+    catch (error) {
+        console.error("Failed to fetch chat history:", error);
+        return res.status(500).json({ success: false, message: "Failed to fetch chat history", error });
+    }
+};
+exports.getChatHistory = getChatHistory;
+const getAllChatLogs = async (req, res) => {
+    try {
+        const limit = Math.min(Number(req.query.limit) || 50, 50);
+        const cursor = req.query.cursor;
+        const filterUserId = req.query.userId;
+        const statusFilter = req.query.status;
+        const q = req.query.q;
+        const match = {};
+        if (filterUserId)
+            match.user = filterUserId;
+        if (statusFilter)
+            match.status = statusFilter;
+        if (q)
+            match.text = new RegExp(`^${q}`, "i"); // Prefix search
+        const pipeline = [];
+        if (Object.keys(match).length > 0) {
+            if (match.user) {
+                const mongoose = require("mongoose");
+                match.user = new mongoose.Types.ObjectId(match.user);
+            }
+            pipeline.push({ $match: match });
+        }
+        pipeline.push({ $sort: { createdAt: -1 } });
+        pipeline.push({
+            $group: {
+                _id: { $ifNull: ["$conversationId", "$user"] },
+                userId: { $first: "$user" },
+                messageCount: { $sum: 1 },
+                lastMessageAt: { $max: "$createdAt" },
+                lastMessage: { $first: "$text" },
+                // ✅ FIX #3: include imageUrl in the group so image chats surface in logs
+                hasImageMessages: { $max: { $cond: [{ $ifNull: ["$imageUrl", false] }, 1, 0] } },
+                messages: {
+                    $push: {
+                        role: { $ifNull: ["$role", { $cond: [{ $eq: ["$sender", "llm"] }, "assistant", "user"] }] },
+                        content: "$text",
+                        timestamp: "$createdAt",
+                        imageUrl: "$imageUrl",
+                    }
+                }
+            }
+        });
+        if (cursor) {
+            const cursorDate = new Date(Number(cursor));
+            if (!isNaN(cursorDate.getTime())) {
+                pipeline.push({ $match: { lastMessageAt: { $lt: cursorDate } } });
+            }
+        }
+        pipeline.push({ $sort: { lastMessageAt: -1 } });
+        pipeline.push({ $limit: limit });
+        const conversations = await message_model_1.default.aggregate(pipeline);
+        const formattedConversations = conversations.map(c => ({
+            userId: c.userId,
+            conversationId: c._id,
+            messageCount: c.messageCount,
+            lastMessage: c.lastMessage,
+            lastMessageAt: c.lastMessageAt,
+            hasImageMessages: Boolean(c.hasImageMessages),
+            messages: c.messages.slice(0, 5).reverse()
+        }));
+        const nextCursor = formattedConversations.length === limit
+            ? new Date(formattedConversations[formattedConversations.length - 1].lastMessageAt).getTime()
+            : null;
+        const flatMessagesList = conversations.flatMap(c => c.messages).slice(0, 50);
+        return res.status(200).json({
+            success: true,
+            data: {
+                conversations: formattedConversations,
+                pageInfo: { nextCursor, hasNextPage: !!nextCursor }
+            },
+            conversations: formattedConversations, // Legacy envelope
+            messages: flatMessagesList // Legacy fallback
+        });
+    }
+    catch (error) {
+        console.error("Failed to fetch chat logs:", error);
+        return res.status(500).json({ success: false, message: "Failed to fetch chat logs", error });
+    }
+};
+exports.getAllChatLogs = getAllChatLogs;
