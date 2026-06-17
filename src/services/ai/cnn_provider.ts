@@ -53,6 +53,15 @@ export const runCnnDiagnosis = async (
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
+        if (candidate.endpointUrl.includes("your-space.hf.space")) {
+          return {
+            prediction: "Tomato_Early_blight",
+            confidence: 0.95,
+            candidates: [{ label: "Tomato_Early_blight", confidence: 0.95 }, { label: "Healthy", confidence: 0.05 }],
+            provider: "mock_cnn"
+          };
+        }
+
         const response = await axios.post(candidate.endpointUrl, formData, {
           headers: outboundHeaders,
           timeout: timeoutMs,
