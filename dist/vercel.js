@@ -7,4 +7,4 @@ const app_1 = __importDefault(require("./app"));
 const database_1 = __importDefault(require("./config/database"));
 // Initialize database connection
 (0, database_1.default)().catch(console.error);
-exports.default = app_1.default;
+module.exports = app_1.default;
