@@ -13,15 +13,19 @@ import { logger } from '../utils/logger';
 
 dotenv.config();
 
-const connection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', { maxRetriesPerRequest: null });
-
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-export const timelapseWorker = new Worker('timelapse.generate', async (job) => {
+export let timelapseWorker: Worker | null = null;
+
+const redisUrl = process.env.REDIS_URL;
+if (redisUrl) {
+  const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null });
+
+  timelapseWorker = new Worker('timelapse.generate', async (job) => {
   const { jobId, plantId } = job.data;
   const jobRepo = new TimelapseJobRepository();
 
@@ -103,12 +107,15 @@ export const timelapseWorker = new Worker('timelapse.generate', async (job) => {
       errorLog: err.message || 'Unknown error'
     });
   }
-}, { connection: connection as any });
+  }, { connection: connection as any });
 
-timelapseWorker.on('completed', job => {
-  logger.info(`Timelapse job completed: ${job.id}`);
-});
+  timelapseWorker.on('completed', job => {
+    logger.info(`Timelapse job completed: ${job.id}`);
+  });
 
-timelapseWorker.on('failed', (job, err) => {
-  logger.error(`Timelapse job failed: ${job?.id}`, err);
-});
+  timelapseWorker.on('failed', (job, err) => {
+    logger.error(`Timelapse job failed: ${job?.id}`, err);
+  });
+} else {
+  logger.warn('Redis unavailable – timelapse worker disabled (serverless mode).');
+}

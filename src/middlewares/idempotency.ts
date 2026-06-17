@@ -12,6 +12,11 @@ export const IdempotencyCheck = async (req: Request, res: Response, next: NextFu
     return next();
   }
 
+  // If Redis is unavailable (serverless/no REDIS_URL), skip idempotency silently
+  if (!redisClient) {
+    return next();
+  }
+
   const redisKey = `idemp:${idempotencyKey}`;
 
   try {
@@ -32,7 +37,7 @@ export const IdempotencyCheck = async (req: Request, res: Response, next: NextFu
       };
 
       // TTL: 48h (48 * 60 * 60 = 172800)
-      redisClient.set(redisKey, JSON.stringify(responseToCache), 'EX', 172800).catch((err: any) => {
+      redisClient!.set(redisKey, JSON.stringify(responseToCache), 'EX', 172800).catch((err: any) => {
         logger.error('Failed to cache idempotency response', err);
       });
 

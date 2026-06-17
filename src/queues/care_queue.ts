@@ -4,6 +4,15 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const connection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', { maxRetriesPerRequest: null });
+// careSyncQueue is only available when REDIS_URL is set
+let careSyncQueue: Queue | null = null;
 
-export const careSyncQueue = new Queue('care.sync', { connection: connection as any });
+const redisUrl = process.env.REDIS_URL;
+if (redisUrl) {
+  const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null });
+  careSyncQueue = new Queue('care.sync', { connection: connection as any });
+} else {
+  console.warn('REDIS_URL not set – careSyncQueue disabled (serverless mode).');
+}
+
+export { careSyncQueue };

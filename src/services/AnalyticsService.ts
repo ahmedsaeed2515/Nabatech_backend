@@ -6,7 +6,9 @@ import mongoose from 'mongoose';
 import { Queue } from 'bullmq';
 import redisClient from '../config/redis';
 
-export const aiAnalysisQueue = new Queue('ai.analysis', { connection: redisClient as any });
+export const aiAnalysisQueue = redisClient
+  ? new Queue('ai.analysis', { connection: redisClient as any })
+  : null;
 
 export class AnalyticsService {
   private snapshotRepo: AnalyticsSnapshotRepository;

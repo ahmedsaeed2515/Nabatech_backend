@@ -7,9 +7,13 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const connection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', { maxRetriesPerRequest: null });
+export let careSyncWorker: Worker | null = null;
 
-export const careSyncWorker = new Worker('care.sync', async (job) => {
+const redisUrl = process.env.REDIS_URL;
+if (redisUrl) {
+  const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null });
+
+  careSyncWorker = new Worker('care.sync', async (job) => {
   const { plantId, userId } = job.data;
   
   logger.info(`Processing care.sync for plant: ${plantId}`);
@@ -21,12 +25,15 @@ export const careSyncWorker = new Worker('care.sync', async (job) => {
   const actionType = job.name === 'care.sync.action' ? 'WATER' : 'FERTILIZER'; // Extracted purely for default tracking if payload is minimal
   await gamificationService.awardXp(userId, actionType);
   
-}, { connection: connection as any });
+  }, { connection: connection as any });
 
-careSyncWorker.on('completed', job => {
-  logger.info(`Job completed: care.sync ${job.id}`);
-});
+  careSyncWorker.on('completed', job => {
+    logger.info(`Job completed: care.sync ${job.id}`);
+  });
 
-careSyncWorker.on('failed', (job, err) => {
-  logger.error(`Job failed: care.sync ${job?.id}`, err);
-});
+  careSyncWorker.on('failed', (job, err) => {
+    logger.error(`Job failed: care.sync ${job?.id}`, err);
+  });
+} else {
+  logger.warn('Redis unavailable – care.sync worker disabled (serverless mode).');
+}
