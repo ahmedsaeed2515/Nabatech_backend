@@ -1,8 +1,8 @@
 # Node modules
 node_modules/
 .env
-# Build output
-dist/
+# Build output - kept in repo for Vercel deployment
+# dist/
 data
 # Logs
 *.log
