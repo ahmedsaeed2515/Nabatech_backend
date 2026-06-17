@@ -79,6 +79,19 @@ app.get("/health/live", (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: { status: 'live' } });
 });
 
+app.get("/health/debug", (req: Request, res: Response) => {
+  res.status(200).json({
+    success: true,
+    data: {
+      hasMongo: !!(process.env.MONGODB_URI || process.env.MONGO_URI),
+      hasJwtSecret: !!process.env.JWT_SECRET,
+      hasRefreshSecret: !!process.env.JWT_REFRESH_SECRET,
+      hasTokenHash: !!process.env.TOKEN_HASH_SECRET,
+      envKeys: Object.keys(process.env)
+    }
+  });
+});
+
 app.get("/health/ready", async (req: Request, res: Response) => {
   try {
     // Basic dependency check stub
