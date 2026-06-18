@@ -10,9 +10,15 @@ export enum FertilizerType {
 export interface FertilizerLog extends Document {
   user: Types.ObjectId;
   plant: Types.ObjectId;
-  type: FertilizerType;
-  amount: string;
-  date: Date;
+  // New field names
+  fertilizerType: FertilizerType;
+  amountGrams: string;
+  fertilizedAt: Date;
+  note?: string;
+  // Legacy fields for backward compatibility (optional)
+  type?: FertilizerType;
+  amount?: string;
+  date?: Date;
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date | null;
@@ -21,9 +27,14 @@ export interface FertilizerLog extends Document {
 const fertilizerLogSchema = new Schema<FertilizerLog>({
   user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   plant: { type: Schema.Types.ObjectId, ref: 'Plant', required: true, index: true },
-  type: { type: String, enum: Object.values(FertilizerType), required: true },
-  amount: { type: String, required: true },
-  date: { type: Date, required: true, default: Date.now },
+  fertilizerType: { type: String, enum: Object.values(FertilizerType), required: true },
+  amountGrams: { type: String, required: true },
+  fertilizedAt: { type: Date, required: true, default: Date.now },
+  note: { type: String },
+  // Legacy fields (optional) to preserve old data
+  type: { type: String, enum: Object.values(FertilizerType) },
+  amount: { type: String },
+  date: { type: Date },
   deletedAt: { type: Date, default: null }
 }, { timestamps: true });
 

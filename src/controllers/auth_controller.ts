@@ -368,23 +368,19 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
       throw new AppError({ code: 'AUTH_RESET_INVALID', statusCode: 400, message: 'Invalid or expired reset token' });
     }
 
-    user.password = await bcrypt.hash(newPassword, 10);
-    user.tokenVersion += 1; // Increment version to invalidate active access tokens
+    user.passwordHash = await bcrypt.hash(newPassword, 10);
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1; // Invalidate all active access tokens
     await user.save({ session });
 
     resetRequest.used = true;
     resetRequest.usedAt = new Date();
     await resetRequest.save({ session });
 
-    // Revoke all refresh sessions
+    // Revoke all refresh sessions so the user must re-login everywhere
     await RefreshSession.updateMany(
       { user: user._id },
       { $set: { revokedAt: new Date() } }
     ).session(session);
-
-    // Legacy
-    // user.refreshToken = undefined; // Removed
-    await user.save({ session });
 
     await session.commitTransaction();
     logger.info('auth.password_reset.completed', { userId: user._id });
@@ -460,13 +456,12 @@ export const resendVerification = async (req: Request, res: Response, next: Next
     
     await user.save({ session });
 
-    // Versioning for idempotency key
-    const version = user.tokenVersion || 1;
-
+    // Idempotency key: scoped per user + minute (prevents duplicate sends within 60s)
+    const minuteBucket = Math.floor(Date.now() / 60000);
     const outboxJob = new OutboxJob({
       type: 'email_verification',
       aggregateId: user._id.toString(),
-      idempotencyKey: `email-verify:${user._id}:${version + Math.random()}`, // Added random for forced resends
+      idempotencyKey: `email-verify:${user._id}:${minuteBucket}`,
       payload: { email: user.email, token: emailVerificationToken }
     });
 

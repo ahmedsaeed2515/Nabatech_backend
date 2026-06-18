@@ -12,7 +12,8 @@ export class GrowthController {
 
   logMeasurement = async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const { id: rawId } = req.params;
+const id = Array.isArray(rawId) ? rawId[0] : rawId;
       const userId = (req as any).user._id || (req as any).user.userId;
       
       const parsed = growthMeasurementSchema.parse(req.body);
@@ -44,7 +45,8 @@ export class GrowthController {
 
   getTimeline = async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const { id: rawId } = req.params;
+const id = Array.isArray(rawId) ? rawId[0] : rawId;
       const userId = (req as any).user._id || (req as any).user.userId;
       
       const timeline = await this.growthService.getTimeline(id, userId);

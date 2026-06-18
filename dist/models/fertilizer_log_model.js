@@ -45,9 +45,14 @@ var FertilizerType;
 const fertilizerLogSchema = new mongoose_1.Schema({
     user: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     plant: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Plant', required: true, index: true },
-    type: { type: String, enum: Object.values(FertilizerType), required: true },
-    amount: { type: String, required: true },
-    date: { type: Date, required: true, default: Date.now },
+    fertilizerType: { type: String, enum: Object.values(FertilizerType), required: true },
+    amountGrams: { type: String, required: true },
+    fertilizedAt: { type: Date, required: true, default: Date.now },
+    note: { type: String },
+    // Legacy fields (optional) to preserve old data
+    type: { type: String, enum: Object.values(FertilizerType) },
+    amount: { type: String },
+    date: { type: Date },
     deletedAt: { type: Date, default: null }
 }, { timestamps: true });
 fertilizerLogSchema.pre(/^find/, function (next) {

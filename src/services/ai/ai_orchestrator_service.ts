@@ -100,51 +100,45 @@ export const orchestrateChat = async (args: {
   const settings = await getAiSettings();
   const started = Date.now();
   const reqId = args.requestId || crypto.randomUUID();
-  let lastError: unknown;
-
-  for (const source of settings.fallback.chatOrder) {
+  
+  let ragContext: string | undefined;
+  if (settings.rag.enabled && settings.rag.endpointUrl) {
     try {
-      if (source === "rag") {
-        // ✅ FIX #2: RAG receives ONLY the clean user question — no prompt preamble
-        const rag = await askRag(settings, args.question, args.history, args.topK);
-        await logAiCall({
-          userId: args.userId,
-          requestId: reqId,
-          feature: "chat",
-          provider: rag.provider,
-          status: "success",
-          latencyMs: Date.now() - started,
-          inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
-          outputMeta: { responseLength: rag.message?.length || 0, source: rag.source },
-        });
-        return rag;
-      }
-
-      if (source === "llm") {
-        const llmSource = settings.rag.enabled ? "fallback" : "llm";
-        // ✅ FIX #1: pass history to askLlm so the LLM sees prior conversation turns
-        const llm = await askLlm(settings, args.question, llmSource, args.history);
-        await logAiCall({
-          userId: args.userId,
-          requestId: reqId,
-          feature: "chat",
-          provider: llm.provider,
-          status: "success",
-          latencyMs: Date.now() - started,
-          inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
-          outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
-        });
-        return llm;
-      }
+      const ragQuery = extractRagQuery(args.question);
+      const rag = await askRag(settings, ragQuery, args.history, args.topK);
+      ragContext = rag.message;
     } catch (error) {
-      lastError = error;
+      console.warn("RAG retrieval failed for text chat:", sanitizeErrorMessage(error));
     }
+  }
+
+  const prompt = buildAssistantPrompt({
+    userQuestion: args.question,
+    history: args.history,
+    ragContext,
+  });
+
+  let lastError: unknown;
+  try {
+    const llm = await askLlm(settings, prompt, "llm", args.history);
+    await logAiCall({
+      userId: args.userId,
+      requestId: reqId,
+      feature: "chat",
+      provider: llm.provider,
+      status: "success",
+      latencyMs: Date.now() - started,
+      inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
+      outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
+    });
+    return { ...llm, ragContext };
+  } catch (error) {
+    lastError = error;
   }
 
   if (settings.features.allowBackendFallbackToLLM) {
     try {
-      // ✅ FIX #1: fallback path also gets history
-      const llm = await askLlm(settings, args.question, "fallback", args.history);
+      const llm = await askLlm(settings, prompt, "fallback", args.history);
       await logAiCall({
         userId: args.userId,
         requestId: reqId,
@@ -155,7 +149,7 @@ export const orchestrateChat = async (args: {
         inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
         outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
       });
-      return llm;
+      return { ...llm, ragContext };
     } catch (error) {
       lastError = error;
     }
@@ -172,35 +166,6 @@ export const orchestrateChat = async (args: {
     errorMessage: sanitizeErrorMessage(lastError),
   });
 
-  throw lastError instanceof Error ? lastError : new Error("No AI provider succeeded");
-};
-
-const runChatWithQuestion = async (args: {
-  settings: Awaited<ReturnType<typeof getAiSettings>>;
-  question: string;
-  history: Array<{ role: string; content: string }>;
-  topK?: number;
-}) => {
-  let lastError: unknown;
-  for (const source of args.settings.fallback.chatOrder) {
-    try {
-      if (source === "rag") {
-        // ✅ FIX #2: RAG always gets the clean question (already validated by caller)
-        return await askRag(args.settings, args.question, args.history, args.topK);
-      }
-      if (source === "llm") {
-        const llmSource = args.settings.rag.enabled ? "fallback" : "llm";
-        // ✅ FIX #1: pass history so LLM has conversation context
-        return await askLlm(args.settings, args.question, llmSource, args.history);
-      }
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  if (args.settings.features.allowBackendFallbackToLLM) {
-    // ✅ FIX #1: fallback also gets history
-    return await askLlm(args.settings, args.question, "fallback", args.history);
-  }
   throw lastError instanceof Error ? lastError : new Error("No AI provider succeeded");
 };
 
@@ -225,10 +190,8 @@ export const orchestrateAssistantRequest = async (args: {
   }
 
   if (!hasFile && question) {
-    // ✅ FIX #1 + #2: text-only path — question goes directly to orchestrateChat
-    // which passes clean question to RAG and history to LLM
     const chat = await orchestrateChat({ userId: args.userId, requestId: reqId, question, history: args.history, topK: args.topK });
-    return { mode: "chat" as const, message: chat.message, source: chat.source, provider: chat.provider, providerChain: [chat.provider] };
+    return { mode: "chat" as const, message: chat.message, source: chat.source, provider: chat.provider, providerChain: [chat.provider], ragContext: chat.ragContext };
   }
 
   const providerChain: string[] = [];
@@ -279,30 +242,41 @@ export const orchestrateAssistantRequest = async (args: {
   let source: "rag" | "llm" | "fallback" | "cnn" = "cnn";
   let provider = cnnResult?.provider || "cnn";
   let ragContext: string | undefined;
+  let kbAdvice: string | undefined;
+  let kbSeverity: string | undefined;
 
   if (isLowConfidence && settings.pipeline.lowConfidenceBehavior === "block") {
     message = "The image confidence is too low. Please upload a clearer image of the plant to receive advice.";
   } else if (shouldGenerateAnswer) {
-    // ✅ FIX #2: STEP 1 — extract a CLEAN query for RAG retrieval
-    // RAG must see ONLY the user's question, not the full prompt with CNN data
     const ragQuery = extractRagQuery(question || (cnnResult?.prediction ? `${cnnResult.prediction} plant disease treatment` : "plant disease diagnosis"));
 
-    // ✅ FIX #2: STEP 2 — retrieve from RAG using the CLEAN query
-    // Then pass the retrieved context INTO the LLM prompt (not the other way around)
     let ragRetrievedContext: string | undefined;
     if (settings.rag.enabled && settings.rag.endpointUrl) {
       try {
-        const ragResult = await askRag(settings, ragQuery, [], args.topK); // empty history for RAG embedding
+        const ragResult = await askRag(settings, ragQuery, [], args.topK);
         ragRetrievedContext = ragResult.message;
         ragContext = ragRetrievedContext;
       } catch (ragError) {
-        // RAG failure is non-fatal — LLM will fall back to its training knowledge
         console.warn("RAG retrieval failed for image chat, proceeding without context:", sanitizeErrorMessage(ragError));
       }
     }
 
-    // ✅ FIX #2: STEP 3 — build the ENRICHED LLM prompt AFTER retrieval
-    // This is the message body sent to the LLM; history is passed separately as chat turns
+    if (cnnResult?.prediction) {
+       try {
+         const { DiseaseKnowledgeRecord } = await import("../../models/disease_knowledge_record_model");
+         const kbRecord = await DiseaseKnowledgeRecord.findOne({
+            $or: [
+              { diseaseNameEn: cnnResult.prediction },
+              { diseaseNameEn: cnnResult.prediction.replace(/_/g, " ") }
+            ]
+         });
+         kbAdvice = kbRecord?.advice;
+         kbSeverity = kbRecord?.severity;
+       } catch (err) {
+         console.warn("KB lookup failed in orchestrator:", sanitizeErrorMessage(err));
+       }
+    }
+
     const prompt = buildAssistantPrompt({
       userQuestion: question || "Explain diagnosis and safe care guidance for this plant.",
       history: args.history,
@@ -313,6 +287,8 @@ export const orchestrateAssistantRequest = async (args: {
             candidates: cnnResult.candidates,
           }
         : undefined,
+      kbAdvice,
+      kbSeverity,
       lowConfidenceWarning:
         settings.pipeline.lowConfidenceBehavior === "warn" || settings.pipeline.lowConfidenceBehavior === "ask_for_new_image"
           ? lowConfidenceWarning
@@ -320,17 +296,25 @@ export const orchestrateAssistantRequest = async (args: {
       ragContext: ragRetrievedContext,
     });
 
-    // ✅ FIX #1: STEP 4 — pass history to LLM so it remembers the conversation
-    const chat = await runChatWithQuestion({
-      settings,
-      question: prompt,
-      history: args.history, // conversation history passed as separate turns
-      topK: args.topK,
-    });
-    providerChain.push(chat.provider);
-    message = chat.message;
-    source = chat.source;
-    provider = chat.provider;
+    let chatResult: { message: string, source: "llm"|"fallback", provider: string };
+    try {
+      chatResult = await askLlm(settings, prompt, "llm", args.history);
+    } catch (llmError) {
+       if (settings.features.allowBackendFallbackToLLM) {
+          try {
+             chatResult = await askLlm(settings, prompt, "fallback", args.history);
+          } catch (fallbackError) {
+             throw fallbackError;
+          }
+       } else {
+          throw llmError;
+       }
+    }
+    
+    providerChain.push(chatResult.provider);
+    message = chatResult.message;
+    source = chatResult.source;
+    provider = chatResult.provider;
   }
 
   if (isLowConfidence && settings.pipeline.lowConfidenceBehavior === "ask_for_new_image") {
@@ -387,5 +371,8 @@ export const orchestrateAssistantRequest = async (args: {
       ? "review_with_caution"
       : "upload_clearer_image",
     providerChain,
+    ragContext,
+    kbAdvice,
+    kbSeverity,
   };
 };

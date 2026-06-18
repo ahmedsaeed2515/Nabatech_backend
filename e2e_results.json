@@ -5,13 +5,13 @@
     "0.3 Register User": true,
     "0.4 Login": true,
     "1.1 First Message": true,
-    "1.2 Coreference \"it\" = basil": false,
-    "1.3 Disease reference": false,
-    "1.4 Arabic memory": false,
-    "1.5 DB history load (no client history)": false,
+    "1.2 Coreference \"it\" = basil": true,
+    "1.3 Disease reference": true,
+    "1.4 Arabic memory": true,
+    "1.5 DB history load (no client history)": true,
     "1.6 Long conversation (>12 msgs)": true,
-    "4.1 CNN direct diagnosis": false,
-    "4.2 Full image pipeline": false,
+    "4.1 CNN direct diagnosis": true,
+    "4.2 Full image pipeline": true,
     "5.1 Image message stored in Message collection": false,
     "5.2 imageUrl in history API": false,
     "5.3 History survives restart": true,
@@ -26,9 +26,9 @@
     "8.4 History size limit (20)": true
   },
   "benchmarks": {
-    "/health/live": 50.69930000000002,
-    "Text chat (LLM only)": 426.8513,
-    "Image assistant (CNN+RAG+LLM)": 406.16589999999997,
-    "GET chat history": 25.30069999999978
+    "/health/live": 51.529600000000016,
+    "Text chat (LLM only)": 21451.0661,
+    "Image assistant (CNN+RAG+LLM)": 57655.93040000001,
+    "GET chat history": 302.41829999996116
   }
 }

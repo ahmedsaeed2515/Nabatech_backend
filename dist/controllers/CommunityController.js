@@ -31,7 +31,8 @@ class CommunityController {
         this.deletePost = async (req, res) => {
             try {
                 const userId = req.user._id || req.user.userId;
-                const { id } = req.params;
+                const { id: rawId } = req.params;
+                const id = Array.isArray(rawId) ? rawId[0] : rawId;
                 const post = await this.postRepo.findById(id);
                 if (!post || post.user.toString() !== userId.toString()) {
                     res.status(403).json({ status: 'error', message: 'Unauthorized' });

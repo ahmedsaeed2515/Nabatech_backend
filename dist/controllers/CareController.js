@@ -7,7 +7,8 @@ class CareController {
     constructor() {
         this.logCareAction = async (req, res) => {
             try {
-                const { id } = req.params;
+                const { id: rawId } = req.params;
+                const id = Array.isArray(rawId) ? rawId[0] : rawId;
                 const parsed = v2_1.careActionSchema.parse(req.body);
                 const userId = req.user._id || req.user.userId;
                 const date = parsed.date ? new Date(parsed.date) : new Date();
@@ -20,7 +21,8 @@ class CareController {
         };
         this.logFertilizer = async (req, res) => {
             try {
-                const { id } = req.params;
+                const { id: rawId } = req.params;
+                const id = Array.isArray(rawId) ? rawId[0] : rawId;
                 const parsed = v2_1.fertilizerSchema.parse(req.body);
                 const userId = req.user._id || req.user.userId;
                 const date = parsed.date ? new Date(parsed.date) : new Date();

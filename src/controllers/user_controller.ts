@@ -150,6 +150,8 @@ export const changePassword = async (req: Request, res: Response) => {
     }
 
     user.passwordHash = await bcrypt.hash(newPassword, 10);
+    // Increment tokenVersion to invalidate all previously issued access tokens
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     await user.save();
 
     res.status(200).json({

@@ -9,7 +9,7 @@ class ChatController {
             try {
                 const parsed = v2_1.chatMessageSchema.parse(req.body);
                 const userId = req.user._id || req.user.userId;
-                const aiResponse = await this.aiOrchestrator.processChat(userId, parsed.message);
+                const aiResponse = await this.aiOrchestrator.processChat(userId, parsed.body.message);
                 res.status(200).json({ status: 'success', data: aiResponse });
             }
             catch (err) {

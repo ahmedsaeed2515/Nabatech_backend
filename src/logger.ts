@@ -1,6 +1,6 @@
 import winston from 'winston';
 
-const transports = [new winston.transports.Console()];
+const transports: winston.transport[] = [new winston.transports.Console()];
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   transports.push(new winston.transports.File({ filename: 'logs/app.log' }));
 }

@@ -39,7 +39,8 @@ export class CommunityController {
   deletePost = async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user._id || (req as any).user.userId;
-      const { id } = req.params;
+      const { id: rawId } = req.params;
+const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
       const post = await this.postRepo.findById(id);
       if (!post || post.user.toString() !== userId.toString()) {

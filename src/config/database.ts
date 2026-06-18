@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import mongoose from "mongoose";
+import { logger } from "../utils/logger";
 dotenv.config();
 
 const connectDB = async () => {
@@ -14,7 +15,7 @@ const connectDB = async () => {
         socketTimeoutMS: 45000,
         family: 4 // Force IPv4
       });
-      console.log(`Database connected successfully ${conn.connection.host}`);
+      logger.info(`Database connected: ${conn.connection.host}`);
     } catch (error) {
       throw error;
     }
@@ -22,3 +23,4 @@ const connectDB = async () => {
 
 
 export default connectDB;
+

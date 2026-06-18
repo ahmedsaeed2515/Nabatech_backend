@@ -11,7 +11,8 @@ class GrowthController {
     constructor() {
         this.logMeasurement = async (req, res) => {
             try {
-                const { id } = req.params;
+                const { id: rawId } = req.params;
+                const id = Array.isArray(rawId) ? rawId[0] : rawId;
                 const userId = req.user._id || req.user.userId;
                 const parsed = v2_1.growthMeasurementSchema.parse(req.body);
                 let photoUrl = undefined;
@@ -38,7 +39,8 @@ class GrowthController {
         };
         this.getTimeline = async (req, res) => {
             try {
-                const { id } = req.params;
+                const { id: rawId } = req.params;
+                const id = Array.isArray(rawId) ? rawId[0] : rawId;
                 const userId = req.user._id || req.user.userId;
                 const timeline = await this.growthService.getTimeline(id, userId);
                 res.status(200).json({ status: 'success', data: timeline });

@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv_1 = __importDefault(require("dotenv"));
 const mongoose_1 = __importDefault(require("mongoose"));
+const logger_1 = require("../utils/logger");
 dotenv_1.default.config();
 const connectDB = async () => {
     try {
@@ -18,7 +19,7 @@ const connectDB = async () => {
             socketTimeoutMS: 45000,
             family: 4 // Force IPv4
         });
-        console.log(`Database connected successfully ${conn.connection.host}`);
+        logger_1.logger.info(`Database connected: ${conn.connection.host}`);
     }
     catch (error) {
         throw error;

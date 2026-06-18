@@ -32,6 +32,9 @@ import adminSpecialistOffersRouter from "./routers/admin_specialist_offers_route
 import adminCommunityRouter from "./routers/admin_community_router";
 import adminHomeToolsRouter from "./routers/admin_home_tools_router";
 import adminMyPlantsRouter from "./routers/admin_my_plants_router";
+import articleRouter from "./routers/article_router";
+import adminArticleRouter from "./routers/admin_article_router";
+import v2Router from "./routers/v2";
 const app = express();
 
 // CORS Middleware - Strict allowed origins
@@ -80,6 +83,10 @@ app.get("/health/live", (req: Request, res: Response) => {
 });
 
 app.get("/health/debug", (req: Request, res: Response) => {
+  // Only expose diagnostic info in non-production environments
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ success: false });
+  }
   res.status(200).json({
     success: true,
     data: {
@@ -87,7 +94,7 @@ app.get("/health/debug", (req: Request, res: Response) => {
       hasJwtSecret: !!process.env.JWT_SECRET,
       hasRefreshSecret: !!process.env.JWT_REFRESH_SECRET,
       hasTokenHash: !!process.env.TOKEN_HASH_SECRET,
-      envKeys: Object.keys(process.env)
+      nodeEnv: process.env.NODE_ENV
     }
   });
 });
@@ -130,10 +137,6 @@ app.use("/api/admin/community", adminCommunityRouter);
 app.use("/api/admin/home-tools", adminHomeToolsRouter);
 app.use("/api/admin/my-plants", adminMyPlantsRouter);
 app.use("/api/ai", aiAssistantRouter);
-import articleRouter from "./routers/article_router";
-import adminArticleRouter from "./routers/admin_article_router";
-import v2Router from "./routers/v2";
-
 app.use("/api/articles", articleRouter);
 app.use("/api/admin/articles", adminArticleRouter);
 app.use("/api/internal/jobs", internalJobsRouter);

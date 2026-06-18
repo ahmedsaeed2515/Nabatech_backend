@@ -29,6 +29,11 @@ const envSchema = zod_1.z.object({
 });
 const _env = envSchema.safeParse(process.env);
 if (!_env.success) {
-    console.error('❌ Invalid environment variables:', JSON.stringify(_env.error.format(), null, 2));
+    console.error('❌ FATAL: Invalid environment variables:');
+    console.error(JSON.stringify(_env.error.format(), null, 2));
+    // Fail fast — never run with broken config in production
+    if (process.env.NODE_ENV !== 'test') {
+        process.exit(1);
+    }
 }
 exports.env = _env.success ? _env.data : process.env;

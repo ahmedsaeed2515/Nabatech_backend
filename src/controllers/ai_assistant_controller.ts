@@ -120,7 +120,10 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
             sourceIds: result.providerChain,
             uncertain: Boolean(result.lowConfidenceWarning),
             needsNewImage: result.needsNewImage,
+            advice: kbRecord?.advice || result.message,
             llmResponse: result.message,
+            cnnResult: JSON.stringify(result.diagnosis),
+            ragContext: result.ragContext ? [result.ragContext] : [],
           });
         } catch (error) {
           console.warn("Assistant diagnosis history save failed:", sanitizeErrorMessage(error));

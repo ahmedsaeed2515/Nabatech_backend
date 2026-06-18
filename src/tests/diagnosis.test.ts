@@ -49,7 +49,7 @@ beforeEach(async () => {
   jest.clearAllMocks();
 });
 
-describe("Diagnosis Predict API Endpoints", () => {
+describe("Diagnosis Predict API Endpoints (Migrated to AI Assistant)", () => {
   let userToken: string;
   let userId: string;
 
@@ -79,10 +79,10 @@ describe("Diagnosis Predict API Endpoints", () => {
     });
   });
 
-  describe("POST /api/diagnosis/predict", () => {
+  describe("POST /api/ai/assistant", () => {
     it("should reject request if no token is provided", async () => {
       const res = await request(app)
-        .post("/api/diagnosis/predict")
+        .post("/api/ai/assistant")
         .attach("file", Buffer.from("dummy-image-data"), "plant.jpg");
 
       expect(res.status).toBe(401);
@@ -91,7 +91,7 @@ describe("Diagnosis Predict API Endpoints", () => {
 
     it("should fail if no file is uploaded in the request", async () => {
       const res = await request(app)
-        .post("/api/diagnosis/predict")
+        .post("/api/ai/assistant")
         .set("Authorization", `Bearer ${userToken}`)
         .field("dummy", "value"); // ensure multipart
 
@@ -120,16 +120,16 @@ describe("Diagnosis Predict API Endpoints", () => {
       const fakeImageBuffer = Buffer.from("this is a fake jpeg image buffer");
 
       const res = await request(app)
-        .post("/api/diagnosis/predict")
+        .post("/api/ai/assistant")
         .set("Authorization", `Bearer ${userToken}`)
         .attach("file", fakeImageBuffer, "leaves.jpg");
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.prediction).toBe("powdery mildew");
-      expect(res.body.confidence).toBe(0.95);
-      expect(res.body.advice).toBe("This disease can be treated by neem oil.");
-      expect(res.body.candidates.length).toBe(1);
+      expect(res.body.diagnosis.prediction).toBe("powdery mildew");
+      expect(res.body.diagnosis.confidence).toBe(0.95);
+      expect(res.body.message).toBe("This disease can be treated by neem oil.");
+      expect(res.body.diagnosis.candidates.length).toBe(1);
       expect(res.body.historyId).toBeDefined();
 
       const dbHistory = await DiagnosisHistory.findOne({ user: userId });
@@ -163,7 +163,7 @@ describe("Diagnosis Predict API Endpoints", () => {
       const plantId = "60c72b2f9b1d8b001c8e4b5a"; // Random valid ObjectId
 
       const res = await request(app)
-        .post("/api/diagnosis/predict")
+        .post("/api/ai/assistant")
         .set("Authorization", `Bearer ${userToken}`)
         .field("plantId", plantId)
         .attach("file", fakeImageBuffer, "leaves.jpg");
@@ -190,7 +190,7 @@ describe("Diagnosis Predict API Endpoints", () => {
       const fakeImageBuffer = Buffer.from("this is a fake jpeg image buffer");
 
       const res = await request(app)
-        .post("/api/diagnosis/predict")
+        .post("/api/ai/assistant")
         .set("Authorization", `Bearer ${userToken}`)
         .attach("file", fakeImageBuffer, "leaves.jpg");
 
@@ -215,7 +215,7 @@ describe("Diagnosis Predict API Endpoints", () => {
       const clientOpId = "idemp-op-123";
 
       const res1 = await request(app)
-        .post("/api/diagnosis/predict")
+        .post("/api/ai/assistant")
         .set("Authorization", `Bearer ${userToken}`)
         .field("clientOperationId", clientOpId)
         .attach("file", fakeImageBuffer, "leaves.jpg");
@@ -223,7 +223,7 @@ describe("Diagnosis Predict API Endpoints", () => {
       expect(res1.status).toBe(200);
 
       const res2 = await request(app)
-        .post("/api/diagnosis/predict")
+        .post("/api/ai/assistant")
         .set("Authorization", `Bearer ${userToken}`)
         .field("clientOperationId", clientOpId)
         .attach("file", fakeImageBuffer, "leaves.jpg");
@@ -254,7 +254,7 @@ describe("Diagnosis Predict API Endpoints", () => {
       const createSpy = jest.spyOn(DiagnosisHistory, "create").mockRejectedValueOnce(new Error("DB Error"));
 
       const res = await request(app)
-        .post("/api/diagnosis/predict")
+        .post("/api/ai/assistant")
         .set("Authorization", `Bearer ${userToken}`)
         .attach("file", fakeImageBuffer, "leaves.jpg");
 

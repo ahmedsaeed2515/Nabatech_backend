@@ -37,6 +37,9 @@ const admin_specialist_offers_router_1 = __importDefault(require("./routers/admi
 const admin_community_router_1 = __importDefault(require("./routers/admin_community_router"));
 const admin_home_tools_router_1 = __importDefault(require("./routers/admin_home_tools_router"));
 const admin_my_plants_router_1 = __importDefault(require("./routers/admin_my_plants_router"));
+const article_router_1 = __importDefault(require("./routers/article_router"));
+const admin_article_router_1 = __importDefault(require("./routers/admin_article_router"));
+const v2_1 = __importDefault(require("./routers/v2"));
 const app = (0, express_1.default)();
 // CORS Middleware - Strict allowed origins
 app.use((req, res, next) => {
@@ -79,6 +82,10 @@ app.get("/health/live", (req, res) => {
     res.status(200).json({ success: true, data: { status: 'live' } });
 });
 app.get("/health/debug", (req, res) => {
+    // Only expose diagnostic info in non-production environments
+    if (process.env.NODE_ENV === 'production') {
+        return res.status(404).json({ success: false });
+    }
     res.status(200).json({
         success: true,
         data: {
@@ -86,7 +93,7 @@ app.get("/health/debug", (req, res) => {
             hasJwtSecret: !!process.env.JWT_SECRET,
             hasRefreshSecret: !!process.env.JWT_REFRESH_SECRET,
             hasTokenHash: !!process.env.TOKEN_HASH_SECRET,
-            envKeys: Object.keys(process.env)
+            nodeEnv: process.env.NODE_ENV
         }
     });
 });
@@ -128,9 +135,6 @@ app.use("/api/admin/community", admin_community_router_1.default);
 app.use("/api/admin/home-tools", admin_home_tools_router_1.default);
 app.use("/api/admin/my-plants", admin_my_plants_router_1.default);
 app.use("/api/ai", ai_assistant_router_1.default);
-const article_router_1 = __importDefault(require("./routers/article_router"));
-const admin_article_router_1 = __importDefault(require("./routers/admin_article_router"));
-const v2_1 = __importDefault(require("./routers/v2"));
 app.use("/api/articles", article_router_1.default);
 app.use("/api/admin/articles", admin_article_router_1.default);
 app.use("/api/internal/jobs", internal_jobs_router_1.default);
