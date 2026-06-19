@@ -136,7 +136,7 @@ export const orchestrateChat = async (args: {
     communityContext,
   });
 
-  let chatResult: { message: string, source: "llm"|"fallback"|"rag", provider: string };
+  let chatResult: { message: string, source: "llm"|"fallback"|"rag"|"hf-rag-fallback", provider: string };
   try {
     chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
     if (chatResult.source !== "fallback") {
@@ -262,7 +262,7 @@ export const orchestrateAssistantRequest = async (args: {
     !(isLowConfidence && settings.pipeline.lowConfidenceBehavior === "block");
 
   let message = "";
-  let source: "rag" | "llm" | "fallback" | "cnn" = "cnn";
+  let source: "rag" | "llm" | "fallback" | "cnn" | "hf-rag-fallback" = "cnn";
   let provider = cnnResult?.provider || "cnn";
   let ragContext: string | undefined;
   let communityContext: string | undefined;
@@ -339,7 +339,7 @@ export const orchestrateAssistantRequest = async (args: {
       communityContext,
     });
 
-    let chatResult: { message: string, source: "llm"|"fallback"|"rag"|"cnn", provider: string };
+    let chatResult: { message: string, source: "llm"|"fallback"|"rag"|"cnn"|"hf-rag-fallback", provider: string };
     try {
       chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
       if (chatResult.source !== "fallback") {
@@ -354,7 +354,7 @@ export const orchestrateAssistantRequest = async (args: {
           try {
              const fallbackLlm = await askLlm(settings, prompt, "fallback", sanitizedHistory);
              if (fallbackLlm.source !== "fallback") {
-                 console.log("[LLM_SUCCESS] Backend fallback LLM succeeded");
+                 console.log(`[LLM_SUCCESS] Backend fallback LLM succeeded with source: ${fallbackLlm.source}`);
                  chatResult = fallbackLlm;
              } else {
                  console.warn("[LLM_FAILED] Backend fallback LLM returned safe fallback");
@@ -381,11 +381,11 @@ export const orchestrateAssistantRequest = async (args: {
               cnnMessage += `\nPlease monitor your plant carefully and ensure proper watering and light conditions.`;
            }
            chatResult = { message: cnnMessage, source: "cnn", provider: cnnResult.provider || "cnn" };
-       } else {
+        } else {
            console.log("[FINAL_RESPONSE_SOURCE] fallback");
-       }
+        }
     } else {
-       console.log("[FINAL_RESPONSE_SOURCE] llm");
+       console.log(`[FINAL_RESPONSE_SOURCE] ${chatResult.source}`);
     }
 
     providerChain.push(chatResult.provider);

@@ -4,7 +4,7 @@ import { AiProviderError, toProviderError } from "./ai_errors";
 
 export type LlmResult = {
   message: string;
-  source: "llm" | "fallback";
+  source: "llm" | "fallback" | "hf-rag-fallback";
   provider: string;
 };
 
@@ -225,6 +225,46 @@ const callProvider = async (args: {
     .trim();
 };
 
+// ───────────────────────────────────────────────────────────────────────────
+// HuggingFace RAG /ask — used as FINAL FALLBACK after all LLM pool providers fail
+// This reuses the Qwen LLM running inside the HF Space (the RAG's own LLM).
+// ───────────────────────────────────────────────────────────────────────────
+const askRagFallback = async (
+  endpointUrl: string,
+  question: string,
+  history: HistoryTurn[],
+  timeoutMs: number
+): Promise<string> => {
+  // Build history in RAG's expected format
+  const ragHistory = boundHistory(history).map((h) => ({
+    role: h.role === "user" ? "user" : "assistant",
+    content: h.content,
+  }));
+
+  const response = await axios.post(
+    endpointUrl,
+    {
+      question: question.substring(0, 2000),
+      history: ragHistory,
+      top_k: 5,
+    },
+    {
+      timeout: timeoutMs,
+      headers: { "Content-Type": "application/json" },
+    }
+  );
+
+  const data = (response.data || {}) as any;
+  const answer = (
+    data.answer || data.response || data.result || data.message || ""
+  ).toString().trim();
+
+  if (!answer || answer.length < 5) {
+    throw new Error("Empty response from HF RAG /ask fallback");
+  }
+  return answer;
+};
+
 export const askLlm = async (
   settings: AiSettingsShape,
   message: string,
@@ -291,8 +331,27 @@ export const askLlm = async (
     }
   }
 
-  console.warn("LLM providers failed, using safe fallback. Last error:", lastError);
+  console.warn("LLM providers failed, trying HuggingFace RAG /ask fallback. Last error:", lastError);
 
+  // ── Stage 2: HuggingFace RAG /ask (Qwen inside HF Space) ──────────────────────────────
+  if (settings.ragFallback?.enabled && settings.ragFallback?.endpointUrl) {
+    try {
+      const ragAnswer = await askRagFallback(
+        settings.ragFallback.endpointUrl,
+        message,
+        history,
+        settings.ragFallback.timeoutMs
+      );
+      console.log("[LLM_HF_FALLBACK_SUCCESS] HuggingFace RAG /ask responded.");
+      return { message: ragAnswer, source: "hf-rag-fallback", provider: "hf-rag-fallback" };
+    } catch (ragFallbackErr) {
+      console.warn("[LLM_HF_FALLBACK_FAILED] HuggingFace RAG /ask also failed:", ragFallbackErr);
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────────────
+
+  // ── Stage 3: Static text fallback (last resort) ──────────────────────────────────────
+  console.warn("[LLM_ALL_FAILED] All LLM providers + HF RAG fallback failed. Using local text.");
   const lowerMsg = message.toLowerCase();
   let fallbackText = "I am currently experiencing high traffic and unable to generate a detailed AI response. Please rely on the standard offline advice provided for your plant's care.";
   

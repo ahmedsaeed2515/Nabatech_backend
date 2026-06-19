@@ -41,6 +41,13 @@ export type AiSettingsShape = {
       timeoutMs?: number;
     }>;
   };
+  // ── HuggingFace RAG /ask used as last-resort LLM fallback ──────────────────
+  ragFallback: {
+    enabled: boolean;
+    endpointUrl: string;   // Full URL to HF Space /ask endpoint
+    timeoutMs: number;
+  };
+  // ─────────────────────────────────────────────────────────────────────────────
   fallback: {
     chatOrder: Array<"rag" | "llm">;
     diagnosisOrder: Array<"cnn">;
@@ -145,7 +152,7 @@ const envDefaults = (): AiSettingsShape => ({
   },
   rag: {
     enabled: true,
-    endpointUrl: process.env.CHAT_API_URL || process.env.RAG_ENDPOINT_URL || "",
+    endpointUrl: process.env.NEW_RAG_URL || process.env.CHAT_API_URL || process.env.RAG_ENDPOINT_URL || "",
     timeoutMs: toNum(process.env.AI_RAG_TIMEOUT_MS, 20000),
     topK: toNum(process.env.AI_CHAT_TOP_K, 8),
   },
@@ -156,6 +163,13 @@ const envDefaults = (): AiSettingsShape => ({
     timeoutMs: toNum(process.env.AI_LLM_TIMEOUT_MS, 25000),
     systemPrompt: process.env.AI_SYSTEM_PROMPT || "You are a helpful agriculture assistant.",
     pool: [],
+  },
+  ragFallback: {
+    enabled: (process.env.RAG_FALLBACK_ENABLED || "true").toLowerCase() === "true",
+    endpointUrl: (
+      process.env.NEW_RAG_URL || process.env.CHAT_API_URL || process.env.RAG_ENDPOINT_URL || ""
+    ).replace(/\/retrieve$/, "").replace(/\/$/, "") + "/ask",
+    timeoutMs: toNum(process.env.RAG_FALLBACK_TIMEOUT_MS, 60000),
   },
   fallback: {
     chatOrder: dedupe((process.env.AI_CHAT_FALLBACK_ORDER || "rag,llm").split(",").map((s) => s.trim()).filter((s): s is "rag" | "llm" => s === "rag" || s === "llm")),
@@ -201,6 +215,7 @@ const mergeSettings = (defaults: AiSettingsShape, db: Partial<IAiSettings> | nul
         : defaults.cnn.pool,
     },
     rag: { ...defaults.rag, ...(plain.rag || {}) },
+    ragFallback: { ...defaults.ragFallback, ...(plain.ragFallback || {}) },
     llm: {
       ...defaults.llm,
       ...(plain.llm || {}),
@@ -236,7 +251,7 @@ export const getAiSettings = async (): Promise<AiSettingsShape> => {
 };
 
 const assertAllowedTopKeys = (payload: Record<string, unknown>) => {
-  const allowed = new Set(["cnn", "rag", "llm", "fallback", "features", "pipeline", "secrets"]);
+  const allowed = new Set(["cnn", "rag", "ragFallback", "llm", "fallback", "features", "pipeline", "secrets"]);
   const disallowed = Object.keys(payload).filter((k) => !allowed.has(k));
   if (disallowed.length) {
     throw new Error(`Unknown fields are not allowed: ${disallowed.join(", ")}`);

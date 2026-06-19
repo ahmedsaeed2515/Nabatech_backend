@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import AiCallLog from "../models/ai_call_log_model";
 import { getAiSettings, redactAiSettings, updateAiSettings } from "../services/ai/ai_config_service";
 import { askLlm } from "../services/ai/llm_provider";
-import { askRag } from "../services/ai/rag_provider";
+import { retrieveRagChunks } from "../services/ai/rag_provider";
 import { orchestrateDiagnosis } from "../services/ai/ai_orchestrator_service";
 import { sanitizeErrorMessage } from "../services/ai/ai_errors";
 
@@ -44,8 +44,8 @@ export const testAdminAiSettings = async (req: Request, res: Response) => {
 
     if (provider === "all" || provider === "rag") {
       try {
-        const rag = await askRag(settings, String(question), [], settings.rag.topK);
-        results.rag = { success: true, provider: rag.provider, source: rag.source };
+        const ragResult = await retrieveRagChunks(settings, "test disease", String(question), settings.rag.topK);
+        results.rag = { success: true, provider: "rag-retrieve", chunksReturned: ragResult.chunks.length };
       } catch (error) {
         results.rag = { success: false, error: sanitizeErrorMessage(error) || "RAG test failed" };
       }
