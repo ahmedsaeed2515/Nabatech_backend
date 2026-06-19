@@ -1,7 +1,7 @@
 import FormData from "form-data";
 import AiCallLog from "../../models/ai_call_log_model";
 import { askLlm } from "./llm_provider";
-import { askRag, retrieveRagChunks } from "./rag_provider";
+import { retrieveRagChunks } from "./rag_provider";
 import { runCnnDiagnosis } from "./cnn_provider";
 import { getAiSettings } from "./ai_config_service";
 import { sanitizeErrorMessage } from "./ai_errors";
@@ -106,10 +106,14 @@ export const orchestrateChat = async (args: {
   let ragContext: string | undefined;
   if (settings.rag.enabled && settings.rag.endpointUrl) {
     try {
-      const ragQuery = extractRagQuery(args.question);
-      const rag = await askRag(settings, ragQuery, sanitizedHistory, args.topK);
-      ragContext = rag.message;
-      console.log("[RAG_SUCCESS]");
+      const ragResult = await retrieveRagChunks(
+        settings,
+        "",
+        args.question,
+        args.topK
+      );
+      ragContext = ragResult.contextText;
+      console.log(`[RAG_SUCCESS] ${ragResult.chunks.length} chunks retrieved for text chat`);
     } catch (error) {
       console.warn("[RAG_FAILED] RAG retrieval failed for text chat:", sanitizeErrorMessage(error));
     }
