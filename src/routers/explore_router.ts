@@ -31,7 +31,7 @@ router.get("/outbreaks", getOutbreaks);
 router.post("/outbreaks", protect, admin, createOutbreak);
 router.put("/outbreaks/:id", protect, admin, updateOutbreak);
 router.delete("/outbreaks/:id", protect, admin, deleteOutbreak);
-router.get('/ar-scan-sessions', protect, (req, res, next) => next(), getArScanSessions);
-router.post('/ar-scan-sessions', protect, (req, res, next) => next(), createArScanSession);
+// router.get('/ar-scan-sessions', protect, (req, res, next) => next(), getArScanSessions);
+// router.post('/ar-scan-sessions', protect, (req, res, next) => next(), createArScanSession);
 
 export default router;

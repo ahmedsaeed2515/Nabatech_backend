@@ -38,10 +38,14 @@ const formatRelativeTime = (date: Date): string => {
 // @access  Private
 export const getCommunityPosts = async (req: Request, res: Response) => {
   try {
-    const { category, cursor, limit, status } = req.query;
+    const { category, cursor, limit, status, authorId } = req.query;
     const qLimit = limit ? parseInt(limit as string, 10) : 20;
     
     const query: any = { status: 'visible' };
+
+    if (authorId) {
+      query.author = authorId;
+    }
 
     if (category && category !== "all") {
       let mappedTag = category as string;
@@ -59,6 +63,7 @@ export const getCommunityPosts = async (req: Request, res: Response) => {
 
     let posts = await CommunityPost.find(query)
       .populate("author", "name role")
+      .populate("linkedDiagnosis", "diseaseNameEn confidence severity")
       .sort({ createdAt: -1, _id: -1 })
       .limit(qLimit + 1);
 
@@ -82,6 +87,10 @@ export const getCommunityPosts = async (req: Request, res: Response) => {
       comments: p.commentsCount,
       imagePath: p.imagePath,
       liked: p.likedBy.includes((req as any).user.id),
+      linkedDiagnosisId: (p.linkedDiagnosis as any)?._id?.toString(),
+      diagnosisDisease: (p.linkedDiagnosis as any)?.diseaseNameEn,
+      diagnosisConfidence: (p.linkedDiagnosis as any)?.confidence,
+      diagnosisSeverity: (p.linkedDiagnosis as any)?.severity,
     }));
 
     res.status(200).json({
@@ -106,7 +115,7 @@ export const createPost = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
     const username = (req as any).user.name;
-    const { title, content, plantTag, clientOperationId } = req.body;
+    const { title, content, plantTag, clientOperationId, linkedDiagnosisId } = req.body;
 
     // Validation is mostly handled by Zod now, but idempotency check happens here
     if (clientOperationId) {
@@ -146,6 +155,7 @@ export const createPost = async (req: Request, res: Response) => {
       imagePath: imageUrl,
       imagePublicId,
       clientOperationId,
+      linkedDiagnosis: linkedDiagnosisId || undefined,
     });
 
     logger.info('Created community post', {
@@ -254,6 +264,7 @@ export const getComments = async (req: Request, res: Response) => {
 
     const comments = await Comment.find(query)
       .sort({ createdAt: -1, _id: -1 })
+      .populate('author', 'role')
       .limit(qLimit + 1);
 
     // Seed mock comments if list is empty
@@ -295,6 +306,7 @@ export const getComments = async (req: Request, res: Response) => {
     const mappedComments = comments.map(c => ({
       id: c._id,
       authorName: c.authorName,
+      authorRole: (c.author as any)?.role ?? 'user',
       text: c.text,
       timeLabel: formatRelativeTime(c.createdAt),
     }));
@@ -369,6 +381,7 @@ export const createComment = async (req: Request, res: Response, next: NextFunct
       comment: {
         id: comment._id,
         authorName: comment.authorName,
+        authorRole: (req as any).user.role ?? 'user',
         text: comment.text,
         timeLabel: "now",
       },
@@ -383,5 +396,38 @@ export const createComment = async (req: Request, res: Response, next: NextFunct
     }
     logger.error('Failed to create comment', { event: 'community_feed_and_moderation.create_comment.error', error });
     next(error);
+  }
+};
+
+// @desc    Delete a community post
+// @route   DELETE /api/community/posts/:id
+// @access  Private
+export const deletePost = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user.id;
+    const postId = req.params.id;
+
+    const post = await CommunityPost.findOne({ _id: postId });
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found", code: 'RESOURCE_NOT_FOUND' });
+    }
+
+    if (post.author.toString() !== userId) {
+      return res.status(403).json({ success: false, message: "Not authorized to delete this post", code: 'FORBIDDEN' });
+    }
+
+    await CommunityPost.updateOne({ _id: postId }, { status: 'removed' });
+
+    logger.info('User deleted community post', {
+      event: 'community_feed_and_moderation.delete_post',
+      requestId: (req as any).id,
+      actorId: userId,
+      targetId: postId,
+    });
+
+    res.status(200).json({ success: true, message: "Post deleted successfully" });
+  } catch (error: any) {
+    logger.error('Failed to delete post', { event: 'community_feed_and_moderation.delete_post.error', error });
+    res.status(500).json({ message: "Failed to delete post" });
   }
 };

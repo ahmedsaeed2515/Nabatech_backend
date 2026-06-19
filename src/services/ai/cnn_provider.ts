@@ -46,7 +46,7 @@ export const runCnnDiagnosis = async (
       ...(cnnApiKey ? { Authorization: `Bearer ${cnnApiKey}` } : {}),
     };
     const maxRetries = 2;
-    const timeoutMs = Math.min(candidate.timeoutMs || settings.cnn.timeoutMs || 5000, 5000);
+    const timeoutMs = candidate.timeoutMs || settings.cnn.timeoutMs || 60000;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -92,14 +92,11 @@ export const runCnnDiagnosis = async (
     }
   }
 
-  console.warn("CNN providers failed or not configured, using mock fallback. Last error:", lastError);
-  return {
-    prediction: "Tomato_Early_blight",
-    confidence: 0.95,
-    candidates: [
-      { label: "Tomato_Early_blight", confidence: 0.95 },
-      { label: "Healthy", confidence: 0.05 }
-    ],
-    provider: "mock_cnn"
-  };
+  if (lastError) {
+    throw lastError;
+  }
+  
+  throw new AiProviderError("CNN providers failed or not configured", {
+    code: "CNN_UNAVAILABLE"
+  });
 };

@@ -44,6 +44,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
         id: user._id,
         name: user.name,
         email: user.email,
+        role: user.role,
         phoneNumber: user.phoneNumber,
         avatarUrl: user.avatarUrl,
         createdAt: user.createdAt
@@ -109,6 +110,7 @@ export const updateProfile = async (req: Request, res: Response) => {
         id: user._id,
         name: user.name,
         email: user.email,
+        role: user.role,
         phoneNumber: user.phoneNumber,
         avatarUrl: user.avatarUrl,
         selectedCountry: user.selectedCountry,

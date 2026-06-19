@@ -64,7 +64,7 @@ const envDefaults = () => ({
         enabled: true,
         provider: process.env.CNN_PROVIDER || "huggingface-space",
         endpointUrl: process.env.IMAGE_API_URL || process.env.CNN_ENDPOINT_URL || "",
-        timeoutMs: toNum(process.env.AI_CNN_TIMEOUT_MS, 35000),
+        timeoutMs: toNum(process.env.AI_CNN_TIMEOUT_MS, 60000),
         inputSize: toNum(process.env.CNN_INPUT_SIZE, 224),
         preprocessRequired: (process.env.CNN_PREPROCESS_REQUIRED || "false").toLowerCase() === "true",
         confidenceThreshold: toNum(process.env.CNN_CONFIDENCE_THRESHOLD, 0),

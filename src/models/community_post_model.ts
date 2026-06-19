@@ -16,6 +16,7 @@ export interface ICommunityPost extends Document {
   moderatedBy?: mongoose.Types.ObjectId;
   moderatedAt?: Date;
   clientOperationId?: string;
+  linkedDiagnosis?: mongoose.Types.ObjectId;
   version: number;
   createdAt: Date;
   updatedAt: Date;
@@ -38,6 +39,7 @@ const communityPostSchema = new Schema<ICommunityPost>(
     moderatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     moderatedAt: { type: Date },
     clientOperationId: { type: String, index: true },
+    linkedDiagnosis: { type: Schema.Types.ObjectId, ref: "DiagnosisHistory" },
     version: { type: Number, default: 0 },
   },
   { timestamps: true }

@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const explore_controller_1 = require("../controllers/explore_controller");
-const ar_scan_controller_1 = require("../controllers/ar_scan_controller");
 const auth_middleware_1 = require("../middlewares/auth_middleware");
 const router = (0, express_1.Router)();
 router.get("/store-products", explore_controller_1.getStoreProducts);
@@ -16,6 +15,6 @@ router.get("/outbreaks", explore_controller_1.getOutbreaks);
 router.post("/outbreaks", auth_middleware_1.protect, auth_middleware_1.admin, explore_controller_1.createOutbreak);
 router.put("/outbreaks/:id", auth_middleware_1.protect, auth_middleware_1.admin, explore_controller_1.updateOutbreak);
 router.delete("/outbreaks/:id", auth_middleware_1.protect, auth_middleware_1.admin, explore_controller_1.deleteOutbreak);
-router.get('/ar-scan-sessions', auth_middleware_1.protect, (req, res, next) => next(), ar_scan_controller_1.getArScanSessions);
-router.post('/ar-scan-sessions', auth_middleware_1.protect, (req, res, next) => next(), ar_scan_controller_1.createArScanSession);
+// router.get('/ar-scan-sessions', protect, (req, res, next) => next(), getArScanSessions);
+// router.post('/ar-scan-sessions', protect, (req, res, next) => next(), createArScanSession);
 exports.default = router;

@@ -26,7 +26,7 @@ const toOfferPayload = (offer) => ({
 const createSpecialistOffer = async (req, res) => {
     try {
         const specialistUser = req.user;
-        if (specialistUser.accountType !== 'specialist' || !specialistUser.specialistVerifiedAt) {
+        if (specialistUser.role !== 'expert') {
             return res.status(403).json({ success: false, message: 'AUTH_FORBIDDEN', code: 'AUTH_FORBIDDEN' });
         }
         const { postId, plan, price, clientOperationId } = req.body;

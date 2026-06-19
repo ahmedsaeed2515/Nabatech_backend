@@ -17,7 +17,8 @@ router.post("/posts", auth_middleware_1.protect, upload_middleware_1.default.sin
 router.post("/posts/:id/like", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.toggleLikeSchema), community_controller_1.toggleLike);
 router.get("/posts/:id/comments", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.commentsQuerySchema), community_controller_1.getComments);
 router.post("/posts/:id/comments", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.createCommentSchema), community_controller_1.createComment);
-router.post('/offers', auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(specialist_offer_schemas_1.createOfferSchema), specialist_offers_controller_1.createSpecialistOffer);
+router.delete("/posts/:id", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.deletePostSchema), community_controller_1.deletePost);
+router.post('/offers', auth_middleware_1.protect, (0, auth_middleware_1.authorizeRoles)('expert'), (0, validate_request_middleware_1.validateRequest)(specialist_offer_schemas_1.createOfferSchema), specialist_offers_controller_1.createSpecialistOffer);
 router.get("/offers/sent", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(specialist_offer_schemas_1.offersQuerySchema), specialist_offers_controller_1.getSentSpecialistOffers);
 router.get("/offers/received", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(specialist_offer_schemas_1.offersQuerySchema), specialist_offers_controller_1.getReceivedSpecialistOffers);
 router.patch('/offers/:id/status', auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(specialist_offer_schemas_1.updateOfferStatusSchema), specialist_offers_controller_1.updateSpecialistOfferStatus);

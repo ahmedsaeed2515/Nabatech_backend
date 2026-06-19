@@ -100,12 +100,13 @@ export const orchestrateChat = async (args: {
   const settings = await getAiSettings();
   const started = Date.now();
   const reqId = args.requestId || crypto.randomUUID();
+  const sanitizedHistory = args.history.filter(msg => msg.role !== "system");
   
   let ragContext: string | undefined;
   if (settings.rag.enabled && settings.rag.endpointUrl) {
     try {
       const ragQuery = extractRagQuery(args.question);
-      const rag = await askRag(settings, ragQuery, args.history, args.topK);
+      const rag = await askRag(settings, ragQuery, sanitizedHistory, args.topK);
       ragContext = rag.message;
     } catch (error) {
       console.warn("RAG retrieval failed for text chat:", sanitizeErrorMessage(error));
@@ -114,13 +115,13 @@ export const orchestrateChat = async (args: {
 
   const prompt = buildAssistantPrompt({
     userQuestion: args.question,
-    history: args.history,
+    history: sanitizedHistory,
     ragContext,
   });
 
   let lastError: unknown;
   try {
-    const llm = await askLlm(settings, prompt, "llm", args.history);
+    const llm = await askLlm(settings, prompt, "llm", sanitizedHistory);
     await logAiCall({
       userId: args.userId,
       requestId: reqId,
@@ -138,7 +139,7 @@ export const orchestrateChat = async (args: {
 
   if (settings.features.allowBackendFallbackToLLM) {
     try {
-      const llm = await askLlm(settings, prompt, "fallback", args.history);
+      const llm = await askLlm(settings, prompt, "fallback", sanitizedHistory);
       await logAiCall({
         userId: args.userId,
         requestId: reqId,
@@ -184,13 +185,14 @@ export const orchestrateAssistantRequest = async (args: {
   const reqId = args.requestId || crypto.randomUUID();
   const question = (args.question || "").trim();
   const hasFile = Boolean(args.fileBuffer && args.fileBuffer.length);
+  const sanitizedHistory = args.history.filter(msg => msg.role !== "system");
 
   if (!hasFile && !question) {
     throw new Error("Either file or question is required");
   }
 
   if (!hasFile && question) {
-    const chat = await orchestrateChat({ userId: args.userId, requestId: reqId, question, history: args.history, topK: args.topK });
+    const chat = await orchestrateChat({ userId: args.userId, requestId: reqId, question, history: sanitizedHistory, topK: args.topK });
     return { mode: "chat" as const, message: chat.message, source: chat.source, provider: chat.provider, providerChain: [chat.provider], ragContext: chat.ragContext };
   }
 
@@ -279,7 +281,7 @@ export const orchestrateAssistantRequest = async (args: {
 
     const prompt = buildAssistantPrompt({
       userQuestion: question || "Explain diagnosis and safe care guidance for this plant.",
-      history: args.history,
+      history: sanitizedHistory,
       cnn: cnnResult
         ? {
             prediction: cnnResult.prediction,
@@ -298,11 +300,11 @@ export const orchestrateAssistantRequest = async (args: {
 
     let chatResult: { message: string, source: "llm"|"fallback", provider: string };
     try {
-      chatResult = await askLlm(settings, prompt, "llm", args.history);
+      chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
     } catch (llmError) {
        if (settings.features.allowBackendFallbackToLLM) {
           try {
-             chatResult = await askLlm(settings, prompt, "fallback", args.history);
+             chatResult = await askLlm(settings, prompt, "fallback", sanitizedHistory);
           } catch (fallbackError) {
              throw fallbackError;
           }

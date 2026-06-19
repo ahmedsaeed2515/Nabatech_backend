@@ -49,6 +49,7 @@ const getCurrentUser = async (req, res) => {
                 id: user._id,
                 name: user.name,
                 email: user.email,
+                role: user.role,
                 phoneNumber: user.phoneNumber,
                 avatarUrl: user.avatarUrl,
                 createdAt: user.createdAt
@@ -107,6 +108,7 @@ const updateProfile = async (req, res) => {
                 id: user._id,
                 name: user.name,
                 email: user.email,
+                role: user.role,
                 phoneNumber: user.phoneNumber,
                 avatarUrl: user.avatarUrl,
                 selectedCountry: user.selectedCountry,

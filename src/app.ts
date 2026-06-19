@@ -34,6 +34,7 @@ import adminHomeToolsRouter from "./routers/admin_home_tools_router";
 import adminMyPlantsRouter from "./routers/admin_my_plants_router";
 import articleRouter from "./routers/article_router";
 import adminArticleRouter from "./routers/admin_article_router";
+import expertRouter from "./routers/expert_router";
 import v2Router from "./routers/v2";
 const app = express();
 
@@ -139,6 +140,7 @@ app.use("/api/admin/my-plants", adminMyPlantsRouter);
 app.use("/api/ai", aiAssistantRouter);
 app.use("/api/articles", articleRouter);
 app.use("/api/admin/articles", adminArticleRouter);
+app.use("/api/experts", expertRouter);
 app.use("/api/internal/jobs", internalJobsRouter);
 app.use("/api/v1", v2Router);
 

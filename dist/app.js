@@ -39,6 +39,7 @@ const admin_home_tools_router_1 = __importDefault(require("./routers/admin_home_
 const admin_my_plants_router_1 = __importDefault(require("./routers/admin_my_plants_router"));
 const article_router_1 = __importDefault(require("./routers/article_router"));
 const admin_article_router_1 = __importDefault(require("./routers/admin_article_router"));
+const expert_router_1 = __importDefault(require("./routers/expert_router"));
 const v2_1 = __importDefault(require("./routers/v2"));
 const app = (0, express_1.default)();
 // CORS Middleware - Strict allowed origins
@@ -137,6 +138,7 @@ app.use("/api/admin/my-plants", admin_my_plants_router_1.default);
 app.use("/api/ai", ai_assistant_router_1.default);
 app.use("/api/articles", article_router_1.default);
 app.use("/api/admin/articles", admin_article_router_1.default);
+app.use("/api/experts", expert_router_1.default);
 app.use("/api/internal/jobs", internal_jobs_router_1.default);
 app.use("/api/v1", v2_1.default);
 app.get("/", (req, res) => {

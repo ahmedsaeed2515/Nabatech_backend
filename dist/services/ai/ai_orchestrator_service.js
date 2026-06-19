@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -81,49 +114,44 @@ const orchestrateChat = async (args) => {
     const settings = await (0, ai_config_service_1.getAiSettings)();
     const started = Date.now();
     const reqId = args.requestId || crypto_1.default.randomUUID();
-    let lastError;
-    for (const source of settings.fallback.chatOrder) {
+    const sanitizedHistory = args.history.filter(msg => msg.role !== "system");
+    let ragContext;
+    if (settings.rag.enabled && settings.rag.endpointUrl) {
         try {
-            if (source === "rag") {
-                // ✅ FIX #2: RAG receives ONLY the clean user question — no prompt preamble
-                const rag = await (0, rag_provider_1.askRag)(settings, args.question, args.history, args.topK);
-                await logAiCall({
-                    userId: args.userId,
-                    requestId: reqId,
-                    feature: "chat",
-                    provider: rag.provider,
-                    status: "success",
-                    latencyMs: Date.now() - started,
-                    inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
-                    outputMeta: { responseLength: rag.message?.length || 0, source: rag.source },
-                });
-                return rag;
-            }
-            if (source === "llm") {
-                const llmSource = settings.rag.enabled ? "fallback" : "llm";
-                // ✅ FIX #1: pass history to askLlm so the LLM sees prior conversation turns
-                const llm = await (0, llm_provider_1.askLlm)(settings, args.question, llmSource, args.history);
-                await logAiCall({
-                    userId: args.userId,
-                    requestId: reqId,
-                    feature: "chat",
-                    provider: llm.provider,
-                    status: "success",
-                    latencyMs: Date.now() - started,
-                    inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
-                    outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
-                });
-                return llm;
-            }
+            const ragQuery = (0, assistant_prompt_builder_1.extractRagQuery)(args.question);
+            const rag = await (0, rag_provider_1.askRag)(settings, ragQuery, sanitizedHistory, args.topK);
+            ragContext = rag.message;
         }
         catch (error) {
-            lastError = error;
+            console.warn("RAG retrieval failed for text chat:", (0, ai_errors_1.sanitizeErrorMessage)(error));
         }
+    }
+    const prompt = (0, assistant_prompt_builder_1.buildAssistantPrompt)({
+        userQuestion: args.question,
+        history: sanitizedHistory,
+        ragContext,
+    });
+    let lastError;
+    try {
+        const llm = await (0, llm_provider_1.askLlm)(settings, prompt, "llm", sanitizedHistory);
+        await logAiCall({
+            userId: args.userId,
+            requestId: reqId,
+            feature: "chat",
+            provider: llm.provider,
+            status: "success",
+            latencyMs: Date.now() - started,
+            inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
+            outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
+        });
+        return { ...llm, ragContext };
+    }
+    catch (error) {
+        lastError = error;
     }
     if (settings.features.allowBackendFallbackToLLM) {
         try {
-            // ✅ FIX #1: fallback path also gets history
-            const llm = await (0, llm_provider_1.askLlm)(settings, args.question, "fallback", args.history);
+            const llm = await (0, llm_provider_1.askLlm)(settings, prompt, "fallback", sanitizedHistory);
             await logAiCall({
                 userId: args.userId,
                 requestId: reqId,
@@ -134,7 +162,7 @@ const orchestrateChat = async (args) => {
                 inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
                 outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
             });
-            return llm;
+            return { ...llm, ragContext };
         }
         catch (error) {
             lastError = error;
@@ -153,44 +181,19 @@ const orchestrateChat = async (args) => {
     throw lastError instanceof Error ? lastError : new Error("No AI provider succeeded");
 };
 exports.orchestrateChat = orchestrateChat;
-const runChatWithQuestion = async (args) => {
-    let lastError;
-    for (const source of args.settings.fallback.chatOrder) {
-        try {
-            if (source === "rag") {
-                // ✅ FIX #2: RAG always gets the clean question (already validated by caller)
-                return await (0, rag_provider_1.askRag)(args.settings, args.question, args.history, args.topK);
-            }
-            if (source === "llm") {
-                const llmSource = args.settings.rag.enabled ? "fallback" : "llm";
-                // ✅ FIX #1: pass history so LLM has conversation context
-                return await (0, llm_provider_1.askLlm)(args.settings, args.question, llmSource, args.history);
-            }
-        }
-        catch (error) {
-            lastError = error;
-        }
-    }
-    if (args.settings.features.allowBackendFallbackToLLM) {
-        // ✅ FIX #1: fallback also gets history
-        return await (0, llm_provider_1.askLlm)(args.settings, args.question, "fallback", args.history);
-    }
-    throw lastError instanceof Error ? lastError : new Error("No AI provider succeeded");
-};
 const orchestrateAssistantRequest = async (args) => {
     const settings = await (0, ai_config_service_1.getAiSettings)();
     const started = Date.now();
     const reqId = args.requestId || crypto_1.default.randomUUID();
     const question = (args.question || "").trim();
     const hasFile = Boolean(args.fileBuffer && args.fileBuffer.length);
+    const sanitizedHistory = args.history.filter(msg => msg.role !== "system");
     if (!hasFile && !question) {
         throw new Error("Either file or question is required");
     }
     if (!hasFile && question) {
-        // ✅ FIX #1 + #2: text-only path — question goes directly to orchestrateChat
-        // which passes clean question to RAG and history to LLM
-        const chat = await (0, exports.orchestrateChat)({ userId: args.userId, requestId: reqId, question, history: args.history, topK: args.topK });
-        return { mode: "chat", message: chat.message, source: chat.source, provider: chat.provider, providerChain: [chat.provider] };
+        const chat = await (0, exports.orchestrateChat)({ userId: args.userId, requestId: reqId, question, history: sanitizedHistory, topK: args.topK });
+        return { mode: "chat", message: chat.message, source: chat.source, provider: chat.provider, providerChain: [chat.provider], ragContext: chat.ragContext };
     }
     const providerChain = [];
     let cnnResult = null;
@@ -233,32 +236,43 @@ const orchestrateAssistantRequest = async (args) => {
     let source = "cnn";
     let provider = cnnResult?.provider || "cnn";
     let ragContext;
+    let kbAdvice;
+    let kbSeverity;
     if (isLowConfidence && settings.pipeline.lowConfidenceBehavior === "block") {
         message = "The image confidence is too low. Please upload a clearer image of the plant to receive advice.";
     }
     else if (shouldGenerateAnswer) {
-        // ✅ FIX #2: STEP 1 — extract a CLEAN query for RAG retrieval
-        // RAG must see ONLY the user's question, not the full prompt with CNN data
         const ragQuery = (0, assistant_prompt_builder_1.extractRagQuery)(question || (cnnResult?.prediction ? `${cnnResult.prediction} plant disease treatment` : "plant disease diagnosis"));
-        // ✅ FIX #2: STEP 2 — retrieve from RAG using the CLEAN query
-        // Then pass the retrieved context INTO the LLM prompt (not the other way around)
         let ragRetrievedContext;
         if (settings.rag.enabled && settings.rag.endpointUrl) {
             try {
-                const ragResult = await (0, rag_provider_1.askRag)(settings, ragQuery, [], args.topK); // empty history for RAG embedding
+                const ragResult = await (0, rag_provider_1.askRag)(settings, ragQuery, [], args.topK);
                 ragRetrievedContext = ragResult.message;
                 ragContext = ragRetrievedContext;
             }
             catch (ragError) {
-                // RAG failure is non-fatal — LLM will fall back to its training knowledge
                 console.warn("RAG retrieval failed for image chat, proceeding without context:", (0, ai_errors_1.sanitizeErrorMessage)(ragError));
             }
         }
-        // ✅ FIX #2: STEP 3 — build the ENRICHED LLM prompt AFTER retrieval
-        // This is the message body sent to the LLM; history is passed separately as chat turns
+        if (cnnResult?.prediction) {
+            try {
+                const { DiseaseKnowledgeRecord } = await Promise.resolve().then(() => __importStar(require("../../models/disease_knowledge_record_model")));
+                const kbRecord = await DiseaseKnowledgeRecord.findOne({
+                    $or: [
+                        { diseaseNameEn: cnnResult.prediction },
+                        { diseaseNameEn: cnnResult.prediction.replace(/_/g, " ") }
+                    ]
+                });
+                kbAdvice = kbRecord?.advice;
+                kbSeverity = kbRecord?.severity;
+            }
+            catch (err) {
+                console.warn("KB lookup failed in orchestrator:", (0, ai_errors_1.sanitizeErrorMessage)(err));
+            }
+        }
         const prompt = (0, assistant_prompt_builder_1.buildAssistantPrompt)({
             userQuestion: question || "Explain diagnosis and safe care guidance for this plant.",
-            history: args.history,
+            history: sanitizedHistory,
             cnn: cnnResult
                 ? {
                     prediction: cnnResult.prediction,
@@ -266,22 +280,34 @@ const orchestrateAssistantRequest = async (args) => {
                     candidates: cnnResult.candidates,
                 }
                 : undefined,
+            kbAdvice,
+            kbSeverity,
             lowConfidenceWarning: settings.pipeline.lowConfidenceBehavior === "warn" || settings.pipeline.lowConfidenceBehavior === "ask_for_new_image"
                 ? lowConfidenceWarning
                 : "",
             ragContext: ragRetrievedContext,
         });
-        // ✅ FIX #1: STEP 4 — pass history to LLM so it remembers the conversation
-        const chat = await runChatWithQuestion({
-            settings,
-            question: prompt,
-            history: args.history, // conversation history passed as separate turns
-            topK: args.topK,
-        });
-        providerChain.push(chat.provider);
-        message = chat.message;
-        source = chat.source;
-        provider = chat.provider;
+        let chatResult;
+        try {
+            chatResult = await (0, llm_provider_1.askLlm)(settings, prompt, "llm", sanitizedHistory);
+        }
+        catch (llmError) {
+            if (settings.features.allowBackendFallbackToLLM) {
+                try {
+                    chatResult = await (0, llm_provider_1.askLlm)(settings, prompt, "fallback", sanitizedHistory);
+                }
+                catch (fallbackError) {
+                    throw fallbackError;
+                }
+            }
+            else {
+                throw llmError;
+            }
+        }
+        providerChain.push(chatResult.provider);
+        message = chatResult.message;
+        source = chatResult.source;
+        provider = chatResult.provider;
     }
     if (isLowConfidence && settings.pipeline.lowConfidenceBehavior === "ask_for_new_image") {
         const suffix = "Please upload a clearer image of the plant for a more accurate analysis.";
@@ -336,6 +362,9 @@ const orchestrateAssistantRequest = async (args) => {
                 ? "review_with_caution"
                 : "upload_clearer_image",
         providerChain,
+        ragContext,
+        kbAdvice,
+        kbSeverity,
     };
 };
 exports.orchestrateAssistantRequest = orchestrateAssistantRequest;

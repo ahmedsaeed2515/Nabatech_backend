@@ -1,23 +1,14 @@
 import { Router, Request, Response } from 'express';
 import SpecialistOffer from '../models/specialist_offer_model';
 import { logger } from '../utils/logger';
-import { protect } from '../middlewares/auth_middleware';
+import { protect, admin } from '../middlewares/auth_middleware';
 import { validateRequest } from '../middlewares/validate_request_middleware';
 import { adminOffersQuerySchema, adminModerationSchema } from '../validation/specialist_offer_schemas';
 
 const router = Router();
 
-// Middleware to check admin role
-const requireAdmin = (req: any, res: any, next: any) => {
-  if (req.user && req.user.accountType === 'admin') {
-    next();
-  } else {
-    return res.status(403).json({ success: false, message: 'Admin access required', code: 'AUTH_FORBIDDEN' });
-  }
-};
-
 // Admin list offers with cursor pagination
-router.get('/', protect, requireAdmin, validateRequest(adminOffersQuerySchema), async (req: Request, res: Response) => {
+router.get('/', protect, admin, validateRequest(adminOffersQuerySchema), async (req: Request, res: Response) => {
   try {
     const { cursor, limit, status, adminStatus, farmerId, specialistId } = req.query;
     const qLimit = limit ? parseInt(limit as string, 10) : 20;
@@ -67,7 +58,7 @@ router.get('/', protect, requireAdmin, validateRequest(adminOffersQuerySchema), 
 });
 
 // Admin moderate offer
-router.patch('/:id/moderation', protect, requireAdmin, validateRequest(adminModerationSchema), async (req: Request, res: Response) => {
+router.patch('/:id/moderation', protect, admin, validateRequest(adminModerationSchema), async (req: Request, res: Response) => {
   try {
     const { action, reason, version } = req.body;
     

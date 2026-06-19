@@ -10,17 +10,8 @@ const auth_middleware_1 = require("../middlewares/auth_middleware");
 const validate_request_middleware_1 = require("../middlewares/validate_request_middleware");
 const specialist_offer_schemas_1 = require("../validation/specialist_offer_schemas");
 const router = (0, express_1.Router)();
-// Middleware to check admin role
-const requireAdmin = (req, res, next) => {
-    if (req.user && req.user.accountType === 'admin') {
-        next();
-    }
-    else {
-        return res.status(403).json({ success: false, message: 'Admin access required', code: 'AUTH_FORBIDDEN' });
-    }
-};
 // Admin list offers with cursor pagination
-router.get('/', auth_middleware_1.protect, requireAdmin, (0, validate_request_middleware_1.validateRequest)(specialist_offer_schemas_1.adminOffersQuerySchema), async (req, res) => {
+router.get('/', auth_middleware_1.protect, auth_middleware_1.admin, (0, validate_request_middleware_1.validateRequest)(specialist_offer_schemas_1.adminOffersQuerySchema), async (req, res) => {
     try {
         const { cursor, limit, status, adminStatus, farmerId, specialistId } = req.query;
         const qLimit = limit ? parseInt(limit, 10) : 20;
@@ -70,7 +61,7 @@ router.get('/', auth_middleware_1.protect, requireAdmin, (0, validate_request_mi
     }
 });
 // Admin moderate offer
-router.patch('/:id/moderation', auth_middleware_1.protect, requireAdmin, (0, validate_request_middleware_1.validateRequest)(specialist_offer_schemas_1.adminModerationSchema), async (req, res) => {
+router.patch('/:id/moderation', auth_middleware_1.protect, auth_middleware_1.admin, (0, validate_request_middleware_1.validateRequest)(specialist_offer_schemas_1.adminModerationSchema), async (req, res) => {
     try {
         const { action, reason, version } = req.body;
         const offer = await specialist_offer_model_1.default.findById(req.params.id);

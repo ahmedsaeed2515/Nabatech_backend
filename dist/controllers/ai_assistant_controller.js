@@ -119,7 +119,10 @@ const postAssistantRequest = async (req, res) => {
                         sourceIds: result.providerChain,
                         uncertain: Boolean(result.lowConfidenceWarning),
                         needsNewImage: result.needsNewImage,
+                        advice: kbRecord?.advice || result.message,
                         llmResponse: result.message,
+                        cnnResult: JSON.stringify(result.diagnosis),
+                        ragContext: result.ragContext ? [result.ragContext] : [],
                     });
                 }
                 catch (error) {

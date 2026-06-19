@@ -6,6 +6,7 @@ export const feedQuerySchema = z.object({
     limit: z.coerce.number().int().min(1).max(20).default(10),
     category: z.string().optional(),
     status: z.enum(['visible', 'hidden', 'removed', 'all']).optional(),
+    authorId: z.string().optional(),
   }),
 });
 
@@ -15,6 +16,7 @@ export const createPostSchema = z.object({
     content: z.string().min(10),
     plantTag: z.enum(['Diagnosis', 'Care Tips', 'Watering', 'Pests', 'General']),
     clientOperationId: z.string().min(1),
+    linkedDiagnosisId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid diagnosis ID format').optional(),
   }),
   // file validation is handled by upload_middleware but we can validate its presence if needed
 });
@@ -26,6 +28,12 @@ export const toggleLikeSchema = z.object({
   body: z.object({
     clientOperationId: z.string().optional(),
   }).optional(),
+});
+
+export const deletePostSchema = z.object({
+  params: z.object({
+    id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid post ID format'),
+  }),
 });
 
 export const commentsQuerySchema = z.object({

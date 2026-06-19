@@ -14,6 +14,7 @@ var UserLevel;
 var UserRole;
 (function (UserRole) {
     UserRole["USER"] = "user";
+    UserRole["EXPERT"] = "expert";
     UserRole["MODERATOR"] = "moderator";
     UserRole["ADMIN"] = "admin";
     UserRole["SUPER_ADMIN"] = "super_admin";
@@ -51,7 +52,7 @@ const userSchema = new mongoose_1.default.Schema({
     // ── Refresh token (legacy — superseded by RefreshSession collection) ───────
     refreshToken: { type: String, select: false },
     // ── Soft-delete ───────────────────────────────────────────────────────────
-    deletedAt: { type: Date, default: null }
+    deletedAt: { type: Date, default: null },
 }, {
     timestamps: true
 });

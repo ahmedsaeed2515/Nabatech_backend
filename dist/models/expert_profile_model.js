@@ -34,26 +34,12 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
-const communityPostSchema = new mongoose_1.Schema({
-    author: { type: mongoose_1.Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    authorName: { type: String, required: true },
-    plantTag: { type: String, enum: ["Diagnosis", "Care Tips", "Watering", "Pests", "General"], required: true },
-    title: { type: String, required: true },
-    content: { type: String, required: true },
-    likes: { type: Number, default: 0 },
-    commentsCount: { type: Number, default: 0 },
-    imagePath: { type: String, default: "" },
-    imagePublicId: { type: String },
-    likedBy: [{ type: mongoose_1.Schema.Types.ObjectId, ref: "User" }],
-    status: { type: String, enum: ["visible", "hidden", "removed"], default: "visible" },
-    moderationReason: { type: String },
-    moderatedBy: { type: mongoose_1.Schema.Types.ObjectId, ref: "User" },
-    moderatedAt: { type: Date },
-    clientOperationId: { type: String, index: true },
-    linkedDiagnosis: { type: mongoose_1.Schema.Types.ObjectId, ref: "DiagnosisHistory" },
-    version: { type: Number, default: 0 },
+const expertProfileSchema = new mongoose_1.Schema({
+    userId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
+    bio: { type: String, trim: true },
+    specialization: { type: String, trim: true },
+    yearsExperience: { type: Number, min: 0 },
+    expertPostsCount: { type: Number, default: 0 },
+    expertRepliesCount: { type: Number, default: 0 },
 }, { timestamps: true });
-// Indexes for feed and idempotency
-communityPostSchema.index({ status: 1, createdAt: -1, _id: -1 });
-communityPostSchema.index({ author: 1, clientOperationId: 1 }, { unique: true, sparse: true });
-exports.default = mongoose_1.default.model("CommunityPost", communityPostSchema);
+exports.default = mongoose_1.default.model('ExpertProfile', expertProfileSchema);

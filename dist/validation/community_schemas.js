@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminModerationSchema = exports.adminCommunityQuerySchema = exports.createCommentSchema = exports.commentsQuerySchema = exports.toggleLikeSchema = exports.createPostSchema = exports.feedQuerySchema = void 0;
+exports.adminModerationSchema = exports.adminCommunityQuerySchema = exports.createCommentSchema = exports.commentsQuerySchema = exports.deletePostSchema = exports.toggleLikeSchema = exports.createPostSchema = exports.feedQuerySchema = void 0;
 const zod_1 = require("zod");
 exports.feedQuerySchema = zod_1.z.object({
     query: zod_1.z.object({
@@ -8,6 +8,7 @@ exports.feedQuerySchema = zod_1.z.object({
         limit: zod_1.z.coerce.number().int().min(1).max(20).default(10),
         category: zod_1.z.string().optional(),
         status: zod_1.z.enum(['visible', 'hidden', 'removed', 'all']).optional(),
+        authorId: zod_1.z.string().optional(),
     }),
 });
 exports.createPostSchema = zod_1.z.object({
@@ -16,6 +17,7 @@ exports.createPostSchema = zod_1.z.object({
         content: zod_1.z.string().min(10),
         plantTag: zod_1.z.enum(['Diagnosis', 'Care Tips', 'Watering', 'Pests', 'General']),
         clientOperationId: zod_1.z.string().min(1),
+        linkedDiagnosisId: zod_1.z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid diagnosis ID format').optional(),
     }),
     // file validation is handled by upload_middleware but we can validate its presence if needed
 });
@@ -26,6 +28,11 @@ exports.toggleLikeSchema = zod_1.z.object({
     body: zod_1.z.object({
         clientOperationId: zod_1.z.string().optional(),
     }).optional(),
+});
+exports.deletePostSchema = zod_1.z.object({
+    params: zod_1.z.object({
+        id: zod_1.z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid post ID format'),
+    }),
 });
 exports.commentsQuerySchema = zod_1.z.object({
     params: zod_1.z.object({

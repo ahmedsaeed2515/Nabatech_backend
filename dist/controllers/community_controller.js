@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createComment = exports.getComments = exports.toggleLike = exports.createPost = exports.getCommunityPosts = void 0;
+exports.deletePost = exports.createComment = exports.getComments = exports.toggleLike = exports.createPost = exports.getCommunityPosts = void 0;
 const community_post_model_1 = __importDefault(require("../models/community_post_model"));
 const comment_model_1 = __importDefault(require("../models/comment_model"));
 const cloudinary_1 = __importDefault(require("../config/cloudinary"));
@@ -39,9 +39,12 @@ const formatRelativeTime = (date) => {
 // @access  Private
 const getCommunityPosts = async (req, res) => {
     try {
-        const { category, cursor, limit, status } = req.query;
+        const { category, cursor, limit, status, authorId } = req.query;
         const qLimit = limit ? parseInt(limit, 10) : 20;
         const query = { status: 'visible' };
+        if (authorId) {
+            query.author = authorId;
+        }
         if (category && category !== "all") {
             let mappedTag = category;
             if (mappedTag.toLowerCase() === "diagnosis")
@@ -59,6 +62,7 @@ const getCommunityPosts = async (req, res) => {
         }
         let posts = await community_post_model_1.default.find(query)
             .populate("author", "name role")
+            .populate("linkedDiagnosis", "diseaseNameEn confidence severity")
             .sort({ createdAt: -1, _id: -1 })
             .limit(qLimit + 1);
         const hasNextPage = posts.length > qLimit;
@@ -78,6 +82,10 @@ const getCommunityPosts = async (req, res) => {
             comments: p.commentsCount,
             imagePath: p.imagePath,
             liked: p.likedBy.includes(req.user.id),
+            linkedDiagnosisId: p.linkedDiagnosis?._id?.toString(),
+            diagnosisDisease: p.linkedDiagnosis?.diseaseNameEn,
+            diagnosisConfidence: p.linkedDiagnosis?.confidence,
+            diagnosisSeverity: p.linkedDiagnosis?.severity,
         }));
         res.status(200).json({
             success: true,
@@ -102,7 +110,7 @@ const createPost = async (req, res) => {
     try {
         const userId = req.user.id;
         const username = req.user.name;
-        const { title, content, plantTag, clientOperationId } = req.body;
+        const { title, content, plantTag, clientOperationId, linkedDiagnosisId } = req.body;
         // Validation is mostly handled by Zod now, but idempotency check happens here
         if (clientOperationId) {
             const existing = await community_post_model_1.default.findOne({ author: userId, clientOperationId });
@@ -139,6 +147,7 @@ const createPost = async (req, res) => {
             imagePath: imageUrl,
             imagePublicId,
             clientOperationId,
+            linkedDiagnosis: linkedDiagnosisId || undefined,
         });
         logger_1.logger.info('Created community post', {
             event: 'community_feed_and_moderation.create_post',
@@ -234,6 +243,7 @@ const getComments = async (req, res) => {
         }
         const comments = await comment_model_1.default.find(query)
             .sort({ createdAt: -1, _id: -1 })
+            .populate('author', 'role')
             .limit(qLimit + 1);
         // Seed mock comments if list is empty
         if (comments.length === 0 && !cursor && (req.params.id === "p1" || req.params.id === "p2")) {
@@ -272,6 +282,7 @@ const getComments = async (req, res) => {
         const mappedComments = comments.map(c => ({
             id: c._id,
             authorName: c.authorName,
+            authorRole: c.author?.role ?? 'user',
             text: c.text,
             timeLabel: formatRelativeTime(c.createdAt),
         }));
@@ -340,6 +351,7 @@ const createComment = async (req, res, next) => {
             comment: {
                 id: comment._id,
                 authorName: comment.authorName,
+                authorRole: req.user.role ?? 'user',
                 text: comment.text,
                 timeLabel: "now",
             },
@@ -358,3 +370,32 @@ const createComment = async (req, res, next) => {
     }
 };
 exports.createComment = createComment;
+// @desc    Delete a community post
+// @route   DELETE /api/community/posts/:id
+// @access  Private
+const deletePost = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const postId = req.params.id;
+        const post = await community_post_model_1.default.findOne({ _id: postId });
+        if (!post) {
+            return res.status(404).json({ success: false, message: "Post not found", code: 'RESOURCE_NOT_FOUND' });
+        }
+        if (post.author.toString() !== userId) {
+            return res.status(403).json({ success: false, message: "Not authorized to delete this post", code: 'FORBIDDEN' });
+        }
+        await community_post_model_1.default.updateOne({ _id: postId }, { status: 'removed' });
+        logger_1.logger.info('User deleted community post', {
+            event: 'community_feed_and_moderation.delete_post',
+            requestId: req.id,
+            actorId: userId,
+            targetId: postId,
+        });
+        res.status(200).json({ success: true, message: "Post deleted successfully" });
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to delete post', { event: 'community_feed_and_moderation.delete_post.error', error });
+        res.status(500).json({ message: "Failed to delete post" });
+    }
+};
+exports.deletePost = deletePost;

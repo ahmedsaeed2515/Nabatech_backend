@@ -8,6 +8,7 @@ export enum UserLevel {
 
 export enum UserRole {
   USER = 'user',
+  EXPERT = 'expert',
   MODERATOR = 'moderator',
   ADMIN = 'admin',
   SUPER_ADMIN = 'super_admin'
@@ -81,7 +82,7 @@ const userSchema = new mongoose.Schema<User>({
   refreshToken: { type: String, select: false },
 
   // ── Soft-delete ───────────────────────────────────────────────────────────
-  deletedAt: { type: Date, default: null }
+  deletedAt: { type: Date, default: null },
 }, {
   timestamps: true
 });
