@@ -42,7 +42,7 @@ Draft:
 `;
 
   try {
-    const response = await askLlm(settings, prompt, "chat", []);
+    const response = await askLlm(settings, prompt, "llm", []);
     const parts = response.message.split("|||");
     if (parts.length >= 2) {
       return {

@@ -11,10 +11,11 @@ export enum PlantStage {
 }
 
 export interface Plant extends Document {
-  zone: Types.ObjectId;
-  dna: Types.ObjectId;
-  user: Types.ObjectId;
-  name: string;
+  isLibraryItem?: boolean;
+  zone?: Types.ObjectId;
+  dna?: Types.ObjectId;
+  user?: Types.ObjectId;
+  name?: string;
   imageUrl: string;
   stage: PlantStage;
   healthScore: number;
@@ -50,10 +51,11 @@ export interface Plant extends Document {
 }
 
 const plantSchema = new mongoose.Schema<Plant>({
-  zone: { type: mongoose.Schema.Types.ObjectId, ref: 'Zone', required: true, index: true },
-  dna: { type: mongoose.Schema.Types.ObjectId, ref: 'PlantDna', required: true },
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-  name: { type: String, required: true },
+  isLibraryItem: { type: Boolean, default: false },
+  zone: { type: mongoose.Schema.Types.ObjectId, ref: 'Zone', index: true },
+  dna: { type: mongoose.Schema.Types.ObjectId, ref: 'PlantDna' },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
+  name: { type: String },
   nameAr: { type: String },
   nameEn: { type: String },
   scientificName: { type: String },

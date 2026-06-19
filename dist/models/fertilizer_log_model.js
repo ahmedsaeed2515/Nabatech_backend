@@ -41,20 +41,24 @@ var FertilizerType;
     FertilizerType["GRANULAR"] = "GRANULAR";
     FertilizerType["SLOW_RELEASE"] = "SLOW_RELEASE";
     FertilizerType["ORGANIC"] = "ORGANIC";
+    FertilizerType["NPK"] = "NPK";
+    FertilizerType["CUSTOM"] = "CUSTOM";
 })(FertilizerType || (exports.FertilizerType = FertilizerType = {}));
 const fertilizerLogSchema = new mongoose_1.Schema({
     user: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    plant: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Plant', required: true, index: true },
+    plant: { type: mongoose_1.Schema.Types.ObjectId, ref: 'MyPlant', required: true, index: true },
     fertilizerType: { type: String, enum: Object.values(FertilizerType), required: true },
-    amountGrams: { type: String, required: true },
+    amountGrams: { type: Number, required: true },
     fertilizedAt: { type: Date, required: true, default: Date.now },
     note: { type: String },
+    clientOperationId: { type: String, trim: true },
     // Legacy fields (optional) to preserve old data
     type: { type: String, enum: Object.values(FertilizerType) },
     amount: { type: String },
     date: { type: Date },
     deletedAt: { type: Date, default: null }
 }, { timestamps: true });
+fertilizerLogSchema.index({ user: 1, clientOperationId: 1 }, { unique: true, sparse: true });
 fertilizerLogSchema.pre(/^find/, function (next) {
     const query = this;
     query.find({ deletedAt: { $eq: null } });

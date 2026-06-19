@@ -16,10 +16,11 @@ var PlantStage;
     PlantStage["DEAD"] = "DEAD";
 })(PlantStage || (exports.PlantStage = PlantStage = {}));
 const plantSchema = new mongoose_1.default.Schema({
-    zone: { type: mongoose_1.default.Schema.Types.ObjectId, ref: 'Zone', required: true, index: true },
-    dna: { type: mongoose_1.default.Schema.Types.ObjectId, ref: 'PlantDna', required: true },
-    user: { type: mongoose_1.default.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    name: { type: String, required: true },
+    isLibraryItem: { type: Boolean, default: false },
+    zone: { type: mongoose_1.default.Schema.Types.ObjectId, ref: 'Zone', index: true },
+    dna: { type: mongoose_1.default.Schema.Types.ObjectId, ref: 'PlantDna' },
+    user: { type: mongoose_1.default.Schema.Types.ObjectId, ref: 'User', index: true },
+    name: { type: String },
     nameAr: { type: String },
     nameEn: { type: String },
     scientificName: { type: String },

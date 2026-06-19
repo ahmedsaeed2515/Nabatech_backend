@@ -58,7 +58,7 @@ const id = Array.isArray(rawId) ? rawId[0] : rawId;
   toggleLike = async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user._id || (req as any).user.userId;
-      const { id } = req.params;
+      const id = req.params.id as string;
 
       const result = await this.communityService.toggleLike(userId, id);
       res.status(200).json({ status: 'success', data: result });
@@ -70,7 +70,7 @@ const id = Array.isArray(rawId) ? rawId[0] : rawId;
   addComment = async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user._id || (req as any).user.userId;
-      const { id } = req.params;
+      const id = req.params.id as string;
       const { content } = req.body;
 
       const comment = await this.communityService.addComment(userId, id, content);
@@ -82,7 +82,7 @@ const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
   getComments = async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const comments = await this.communityService.getComments(id);
       res.status(200).json({ status: 'success', data: comments });
     } catch (err: any) {

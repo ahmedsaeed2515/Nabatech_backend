@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import StoreProduct from "../models/store_product_model";
 import Expert from "../models/expert_model";
+import User from "../models/user_model";
+import ExpertProfile from "../models/expert_profile_model";
 import OutbreakSpot from "../models/outbreak_spot_model";
 import { ok } from "../utils/api_response";
 
@@ -36,23 +38,45 @@ export const getStoreProducts = async (req: Request, res: Response) => {
 export const getExperts = async (req: Request, res: Response) => {
   try {
     const { specialty } = req.query;
-    const query: any = {};
+    
+    // Find all users with role 'expert'
+    const users = await User.find({ role: 'expert' }).select('name avatarUrl');
+    const userIds = users.map(u => u._id);
+    
+    // Find their profiles
+    let profilesQuery: any = { userId: { $in: userIds } };
     if (specialty) {
-      query.specialty = specialty;
+      profilesQuery.specialization = specialty;
     }
-    const experts = await Expert.find(query);
+    const profiles = await ExpertProfile.find(profilesQuery);
+    
+    // Map profiles by userId for quick lookup
+    const profileMap = new Map();
+    for (const p of profiles) {
+      profileMap.set(p.userId.toString(), p);
+    }
+    
+    const result = [];
+    for (const u of users) {
+      const p = profileMap.get(u._id.toString());
+      // If filtering by specialty, only include users that have a matching profile
+      if (specialty && !p) continue;
+      
+      result.push({
+        id: u._id,
+        name: u.name,
+        avatarUrl: u.avatarUrl,
+        specialization: p?.specialization || 'General',
+        bio: p?.bio || '',
+        yearsExperience: p?.yearsExperience || 0,
+        postsCount: p?.expertPostsCount || 0,
+        repliesCount: p?.expertRepliesCount || 0,
+      });
+    }
 
     res.status(200).json({
       success: true,
-      data: experts.map(e => ({
-        id: e._id,
-        name: e.name,
-        specialty: e.specialty,
-        rating: e.rating,
-        sessions: e.sessions,
-        fee: e.fee,
-        online: e.online,
-      }))
+      data: { items: result }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to fetch experts", error });

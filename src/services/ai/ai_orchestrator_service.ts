@@ -109,8 +109,9 @@ export const orchestrateChat = async (args: {
       const ragQuery = extractRagQuery(args.question);
       const rag = await askRag(settings, ragQuery, sanitizedHistory, args.topK);
       ragContext = rag.message;
+      console.log("[RAG_SUCCESS]");
     } catch (error) {
-      console.warn("RAG retrieval failed for text chat:", sanitizeErrorMessage(error));
+      console.warn("[RAG_FAILED] RAG retrieval failed for text chat:", sanitizeErrorMessage(error));
     }
   }
 
@@ -131,55 +132,57 @@ export const orchestrateChat = async (args: {
     communityContext,
   });
 
-  let lastError: unknown;
+  let chatResult: { message: string, source: "llm"|"fallback"|"rag", provider: string };
   try {
-    const llm = await askLlm(settings, prompt, "llm", sanitizedHistory);
-    await logAiCall({
-      userId: args.userId,
-      requestId: reqId,
-      feature: "chat",
-      provider: llm.provider,
-      status: "success",
-      latencyMs: Date.now() - started,
-      inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
-      outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
-    });
-    return { ...llm, ragContext, communityContext };
-  } catch (error) {
-    lastError = error;
+    chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
+    if (chatResult.source !== "fallback") {
+      console.log("[LLM_SUCCESS]");
+    } else {
+      console.warn("[LLM_FAILED] Primary LLM returned safe fallback");
+    }
+  } catch (llmError) {
+    console.warn("[LLM_FAILED] Primary LLM threw an error:", sanitizeErrorMessage(llmError));
+    chatResult = { message: "I am currently experiencing high traffic and unable to generate a detailed AI response. Please rely on the standard offline advice provided for your plant's care.", source: "fallback", provider: "local_fallback" };
+    if (settings.features.allowBackendFallbackToLLM) {
+      try {
+        const fallbackLlm = await askLlm(settings, prompt, "fallback", sanitizedHistory);
+        if (fallbackLlm.source !== "fallback") {
+          console.log("[LLM_SUCCESS] Backend fallback LLM succeeded");
+          chatResult = fallbackLlm;
+        } else {
+          console.warn("[LLM_FAILED] Backend fallback LLM returned safe fallback");
+        }
+      } catch (fallbackError) {
+        console.warn("[LLM_FAILED] Backend fallback LLM threw an error");
+      }
+    }
   }
 
-  if (settings.features.allowBackendFallbackToLLM) {
-    try {
-      const llm = await askLlm(settings, prompt, "fallback", sanitizedHistory);
-      await logAiCall({
-        userId: args.userId,
-        requestId: reqId,
-        feature: "chat",
-        provider: llm.provider,
-        status: "success",
-        latencyMs: Date.now() - started,
-        inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
-        outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
-      });
-      return { ...llm, ragContext, communityContext };
-    } catch (error) {
-      lastError = error;
+  // Cascade logic
+  if (chatResult.source === "fallback") {
+    if (ragContext) {
+      console.log("[FINAL_RESPONSE_SOURCE] rag");
+      chatResult = { message: ragContext, source: "rag", provider: "rag" };
+    } else {
+      console.log("[FINAL_RESPONSE_SOURCE] fallback");
     }
+  } else {
+    console.log("[FINAL_RESPONSE_SOURCE] llm");
   }
 
   await logAiCall({
     userId: args.userId,
     requestId: reqId,
     feature: "chat",
-    provider: "none",
-    status: "failure",
+    provider: chatResult.provider,
+    status: chatResult.source === "fallback" ? "failure" : "success",
     latencyMs: Date.now() - started,
     inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
-    errorMessage: sanitizeErrorMessage(lastError),
+    outputMeta: { responseLength: chatResult.message.length, source: chatResult.source },
+    errorMessage: chatResult.source === "fallback" ? "No AI provider succeeded" : undefined,
   });
 
-  throw lastError instanceof Error ? lastError : new Error("No AI provider succeeded");
+  return { ...chatResult, ragContext, communityContext };
 };
 
 export const orchestrateAssistantRequest = async (args: {
@@ -219,7 +222,9 @@ export const orchestrateAssistantRequest = async (args: {
       const rawCnn = await runCnnDiagnosis(settings, formData, formData.getHeaders() as Record<string, string>);
       cnnResult = validateProviderOutput(rawCnn);
       providerChain.push("cnn");
+      console.log("[CNN_SUCCESS]");
     } catch (error) {
+      console.warn("[CNN_FAILED] CNN diagnosis failed:", sanitizeErrorMessage(error));
       if (!settings.pipeline.allowAnswerIfCnnFails) {
         await logAiCall({
           userId: args.userId,
@@ -271,8 +276,9 @@ export const orchestrateAssistantRequest = async (args: {
         const ragResult = await askRag(settings, ragQuery, [], args.topK);
         ragRetrievedContext = ragResult.message;
         ragContext = ragRetrievedContext;
+        console.log("[RAG_SUCCESS]");
       } catch (ragError) {
-        console.warn("RAG retrieval failed for image chat, proceeding without context:", sanitizeErrorMessage(ragError));
+        console.warn("[RAG_FAILED] RAG retrieval failed for image chat, proceeding without context:", sanitizeErrorMessage(ragError));
       }
     }
 
@@ -321,21 +327,55 @@ export const orchestrateAssistantRequest = async (args: {
       communityContext,
     });
 
-    let chatResult: { message: string, source: "llm"|"fallback", provider: string };
+    let chatResult: { message: string, source: "llm"|"fallback"|"rag"|"cnn", provider: string };
     try {
       chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
+      if (chatResult.source !== "fallback") {
+        console.log("[LLM_SUCCESS]");
+      } else {
+        console.warn("[LLM_FAILED] Primary LLM returned safe fallback");
+      }
     } catch (llmError) {
+       console.warn("[LLM_FAILED] Primary LLM threw an error:", sanitizeErrorMessage(llmError));
+       chatResult = { message: "I am currently experiencing high traffic and unable to generate a detailed AI response. Please rely on the standard offline advice provided for your plant's care.", source: "fallback", provider: "local_fallback" };
        if (settings.features.allowBackendFallbackToLLM) {
           try {
-             chatResult = await askLlm(settings, prompt, "fallback", sanitizedHistory);
+             const fallbackLlm = await askLlm(settings, prompt, "fallback", sanitizedHistory);
+             if (fallbackLlm.source !== "fallback") {
+                 console.log("[LLM_SUCCESS] Backend fallback LLM succeeded");
+                 chatResult = fallbackLlm;
+             } else {
+                 console.warn("[LLM_FAILED] Backend fallback LLM returned safe fallback");
+             }
           } catch (fallbackError) {
-             throw fallbackError;
+             console.warn("[LLM_FAILED] Backend fallback LLM threw an error");
           }
-       } else {
-          throw llmError;
        }
     }
     
+    // Cascade logic
+    if (chatResult.source === "fallback") {
+       if (ragContext) {
+           console.log("[FINAL_RESPONSE_SOURCE] rag");
+           chatResult = { message: ragContext, source: "rag", provider: "rag" };
+       } else if (cnnResult) {
+           console.log("[FINAL_RESPONSE_SOURCE] cnn");
+           const confStr = typeof cnnResult.confidence === "number" ? (cnnResult.confidence * 100).toFixed(2) + "%" : "Unknown";
+           let cnnMessage = `Disease Detected: **${cnnResult.prediction.replace(/_/g, " ")}**\n\nConfidence: ${confStr}\n`;
+           if (kbSeverity) cnnMessage += `Severity: ${kbSeverity}\n`;
+           if (kbAdvice) {
+              cnnMessage += `\nRecommended Actions:\n${kbAdvice}`;
+           } else {
+              cnnMessage += `\nPlease monitor your plant carefully and ensure proper watering and light conditions.`;
+           }
+           chatResult = { message: cnnMessage, source: "cnn", provider: cnnResult.provider || "cnn" };
+       } else {
+           console.log("[FINAL_RESPONSE_SOURCE] fallback");
+       }
+    } else {
+       console.log("[FINAL_RESPONSE_SOURCE] llm");
+    }
+
     providerChain.push(chatResult.provider);
     message = chatResult.message;
     source = chatResult.source;

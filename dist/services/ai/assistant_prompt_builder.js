@@ -47,6 +47,7 @@ const buildAssistantPrompt = (ctx) => {
         ctx.kbSeverity ? `Expected Severity: ${ctx.kbSeverity}` : "",
         ctx.lowConfidenceWarning ? `Warning: ${ctx.lowConfidenceWarning}` : "",
         ctx.ragContext ? `\nRetrieved Knowledge Context:\n${ctx.ragContext}` : "",
+        ctx.communityContext ? `\nRetrieved Community Context:\n${ctx.communityContext}` : "",
     ]
         .filter(Boolean)
         .join("\n");

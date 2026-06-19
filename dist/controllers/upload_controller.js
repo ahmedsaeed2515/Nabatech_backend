@@ -12,13 +12,15 @@ const uploadImage = async (req, res) => {
             return res.status(400).json({ success: false, message: "No file uploaded" });
         }
         console.log("Received file:", req.file);
-        const result = await cloudinary_1.default.uploader.upload_stream({ folder: "users" }, (error, result) => {
-            if (error) {
-                return res.status(500).json({ success: false, message: "Cloudinary upload failed", error });
-            }
-            res.status(200).json({ success: true, data: { url: result?.secure_url } });
+        const uploadResult = await new Promise((resolve, reject) => {
+            const stream = cloudinary_1.default.uploader.upload_stream({ folder: "users" }, (error, result) => {
+                if (error)
+                    return reject(error);
+                resolve({ secure_url: result.secure_url });
+            });
+            stream.end(req.file.buffer);
         });
-        result.end(req.file.buffer);
+        res.status(200).json({ success: true, data: { url: uploadResult.secure_url } });
     }
     catch (error) {
         res.status(500).json({ success: false, message: "Image upload failed", error });

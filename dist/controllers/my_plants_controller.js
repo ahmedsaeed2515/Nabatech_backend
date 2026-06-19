@@ -339,6 +339,7 @@ const deletePlant = async (req, res, next) => {
             diary_entry_model_1.default.deleteMany({ plantId: plant._id }),
             reminder_model_1.default.deleteMany({ plantId: plant._id }),
             diagnosis_history_model_1.default.deleteMany({ plantId: plant._id }),
+            fertilizer_log_model_1.default.deleteMany({ plant: plant._id }),
         ]);
         return (0, api_response_1.ok)(res, {
             message: "Plant deleted successfully"
@@ -564,6 +565,13 @@ const getPlantDiagnoses = async (req, res, next) => {
     }
 };
 exports.getPlantDiagnoses = getPlantDiagnoses;
+const normalizeFertilizerType = (type) => {
+    const upper = type.toUpperCase();
+    const mapping = {
+        'SLOW-RELEASE': 'SLOW_RELEASE',
+    };
+    return mapping[upper] ?? upper;
+};
 // @desc    Log plant fertilization
 // @route   POST /api/my-plants/:id/fertilize
 // @access  Private
@@ -571,7 +579,8 @@ const fertilizePlant = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const plantId = req.params.id;
-        const { fertilizedAt, fertilizerType, amountGrams, note, clientOperationId } = req.body;
+        let { fertilizedAt, fertilizerType, amountGrams, note, clientOperationId } = req.body;
+        fertilizerType = normalizeFertilizerType(fertilizerType);
         const plant = await my_plant_model_1.default.findOne({ _id: plantId, user: userId });
         if (!plant) {
             throw new app_error_1.AppError({ code: 'RESOURCE_NOT_FOUND', statusCode: 404, message: 'Plant not found' });

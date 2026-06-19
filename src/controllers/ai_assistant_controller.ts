@@ -76,7 +76,7 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
     });
 
     let imageUrl = "";
-    if (file && result?.diagnosis?.prediction) {
+    if (file) {
       try {
         const uploadResult = await new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
           const stream = cloudinary.uploader.upload_stream({ folder: "diagnoses" }, (error, uploadResult) => {
@@ -92,15 +92,16 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
       }
 
       if (imageUrl) {
-        try {
-          const prediction = result.diagnosis.prediction;
+        if ((result as any)?.diagnosis?.prediction) {
+          try {
+            const prediction = (result as any).diagnosis.prediction;
           const kbRecord = await DiseaseKnowledgeRecord.findOne({
             $or: [
               { diseaseNameEn: prediction },
               { diseaseNameEn: prediction.replace(/_/g, " ") }
             ]
           });
-          const confidence = typeof result.diagnosis.confidence === "number" ? result.diagnosis.confidence : 0.5;
+          const confidence = typeof (result as any).diagnosis.confidence === "number" ? (result as any).diagnosis.confidence : 0.5;
           const severity = kbRecord?.severity || (confidence > 0.6 ? "medium" : "low");
           const diseaseNameAr = kbRecord?.diseaseNameAr || prediction;
 
@@ -114,15 +115,15 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
             confidence,
             severity,
             isOffline: false,
-            modelId: result.diagnosis.provider || "unknown",
+            modelId: (result as any).diagnosis.provider || "unknown",
             provider: result.provider,
             source: result.source,
             sourceIds: result.providerChain,
-            uncertain: Boolean(result.lowConfidenceWarning),
-            needsNewImage: result.needsNewImage,
+            uncertain: Boolean((result as any).lowConfidenceWarning),
+            needsNewImage: (result as any).needsNewImage,
             advice: kbRecord?.advice || result.message,
             llmResponse: result.message,
-            cnnResult: JSON.stringify(result.diagnosis),
+            cnnResult: JSON.stringify((result as any).diagnosis),
             ragContext: result.ragContext ? [result.ragContext] : [],
           });
         } catch (error) {
@@ -136,6 +137,7 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
                console.error("Failed to cleanup Cloudinary on history save error:", sanitizeErrorMessage(delErr));
             }
           }
+        }
         }
 
         // ✅ FIX #3: Persist image conversation to the Message collection so it
@@ -156,11 +158,11 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
             clientOperationId,
             status: "sent",
             imageUrl, // ✅ image URL stored on the user message
-            diagnosisResult: result.diagnosis
+            diagnosisResult: (result as any).diagnosis
               ? {
-                  prediction: result.diagnosis.prediction,
-                  confidence: result.diagnosis.confidence,
-                  candidates: result.diagnosis.candidates || [],
+                  prediction: (result as any).diagnosis.prediction,
+                  confidence: (result as any).diagnosis.confidence,
+                  candidates: (result as any).diagnosis.candidates || [],
                 }
               : undefined,
           });
@@ -187,7 +189,7 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
       }
     }
 
-    return res.status(200).json({ success: true, ...result, imageUrl: imageUrl || undefined, uncertain: Boolean(result.lowConfidenceWarning) });
+    return res.status(200).json({ success: true, ...result, imageUrl: imageUrl || undefined, uncertain: Boolean((result as any).lowConfidenceWarning) });
   } catch (error) {
     console.error("Assistant pipeline failed:", sanitizeErrorMessage(error));
     if (uploadedImagePublicId) {

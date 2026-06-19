@@ -32,7 +32,7 @@ export class HealthEngineService {
     const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
     const now = new Date().getTime();
 
-    if (!lastWatering || (now - new Date(lastWatering.date).getTime() > SEVEN_DAYS_MS)) {
+    if (!lastWatering || !lastWatering.date || (now - new Date(lastWatering.date).getTime() > SEVEN_DAYS_MS)) {
       score -= 10;
       issues.push('Overdue watering');
     }
@@ -40,7 +40,7 @@ export class HealthEngineService {
     // Check recent fertilizer
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
     const fertLogs = await this.fertRepo.findByPlantId(plantId, userId);
-    const recentFert = fertLogs.find(f => (now - new Date(f.date).getTime() <= THIRTY_DAYS_MS));
+    const recentFert = fertLogs.find(f => f.date && (now - new Date(f.date).getTime() <= THIRTY_DAYS_MS));
 
     if (recentFert) {
       score = Math.min(100, score + 5);

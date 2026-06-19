@@ -17,7 +17,7 @@ export const getPlants = async (req: Request, res: Response) => {
   const limitNumber = Math.min(parseInt(limit as string, 10) || 20, 100);
 
   // Build query with normalized search if provided
-  const query: any = {};
+  const query: any = { isLibraryItem: true };
   if (search) {
     const normalized = (search as string).toLowerCase().trim();
     // Prefix search on normalized fields, fallback to regex on original fields
@@ -106,6 +106,7 @@ export const addPlant = async (req: Request, res: Response) => {
       normalizedNameAr: nameAr.toLowerCase(),
       active: true,
       createdBy: (req as any).user?.id || '',
+      isLibraryItem: true,
     });
 
     res.status(201).json({ success: true, data: plant });

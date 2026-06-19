@@ -45,6 +45,7 @@ const cnn_provider_1 = require("./cnn_provider");
 const ai_config_service_1 = require("./ai_config_service");
 const ai_errors_1 = require("./ai_errors");
 const assistant_prompt_builder_1 = require("./assistant_prompt_builder");
+const community_knowledge_retriever_1 = require("./community_knowledge_retriever");
 const crypto_1 = __importDefault(require("crypto"));
 const logAiCall = async (payload) => {
     try {
@@ -126,10 +127,21 @@ const orchestrateChat = async (args) => {
             console.warn("RAG retrieval failed for text chat:", (0, ai_errors_1.sanitizeErrorMessage)(error));
         }
     }
+    let communityContext;
+    try {
+        const commResult = await (0, community_knowledge_retriever_1.retrieveCommunityContext)(undefined, args.question);
+        if (commResult.hasData) {
+            communityContext = commResult.text;
+        }
+    }
+    catch (error) {
+        console.warn("Community context retrieval failed for text chat:", (0, ai_errors_1.sanitizeErrorMessage)(error));
+    }
     const prompt = (0, assistant_prompt_builder_1.buildAssistantPrompt)({
         userQuestion: args.question,
         history: sanitizedHistory,
         ragContext,
+        communityContext,
     });
     let lastError;
     try {
@@ -144,7 +156,7 @@ const orchestrateChat = async (args) => {
             inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
             outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
         });
-        return { ...llm, ragContext };
+        return { ...llm, ragContext, communityContext };
     }
     catch (error) {
         lastError = error;
@@ -162,7 +174,7 @@ const orchestrateChat = async (args) => {
                 inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
                 outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
             });
-            return { ...llm, ragContext };
+            return { ...llm, ragContext, communityContext };
         }
         catch (error) {
             lastError = error;
@@ -193,7 +205,7 @@ const orchestrateAssistantRequest = async (args) => {
     }
     if (!hasFile && question) {
         const chat = await (0, exports.orchestrateChat)({ userId: args.userId, requestId: reqId, question, history: sanitizedHistory, topK: args.topK });
-        return { mode: "chat", message: chat.message, source: chat.source, provider: chat.provider, providerChain: [chat.provider], ragContext: chat.ragContext };
+        return { mode: "chat", message: chat.message, source: chat.source, provider: chat.provider, providerChain: [chat.provider], ragContext: chat.ragContext, communityContext: chat.communityContext };
     }
     const providerChain = [];
     let cnnResult = null;
@@ -236,6 +248,7 @@ const orchestrateAssistantRequest = async (args) => {
     let source = "cnn";
     let provider = cnnResult?.provider || "cnn";
     let ragContext;
+    let communityContext;
     let kbAdvice;
     let kbSeverity;
     if (isLowConfidence && settings.pipeline.lowConfidenceBehavior === "block") {
@@ -270,6 +283,15 @@ const orchestrateAssistantRequest = async (args) => {
                 console.warn("KB lookup failed in orchestrator:", (0, ai_errors_1.sanitizeErrorMessage)(err));
             }
         }
+        try {
+            const commResult = await (0, community_knowledge_retriever_1.retrieveCommunityContext)(cnnResult?.prediction, question);
+            if (commResult.hasData) {
+                communityContext = commResult.text;
+            }
+        }
+        catch (error) {
+            console.warn("Community context retrieval failed for image chat:", (0, ai_errors_1.sanitizeErrorMessage)(error));
+        }
         const prompt = (0, assistant_prompt_builder_1.buildAssistantPrompt)({
             userQuestion: question || "Explain diagnosis and safe care guidance for this plant.",
             history: sanitizedHistory,
@@ -286,6 +308,7 @@ const orchestrateAssistantRequest = async (args) => {
                 ? lowConfidenceWarning
                 : "",
             ragContext: ragRetrievedContext,
+            communityContext,
         });
         let chatResult;
         try {
@@ -341,7 +364,7 @@ const orchestrateAssistantRequest = async (args) => {
             ragContextLength: ragContext?.length || 0,
         },
     });
-    return {
+    const responsePayload = {
         mode: hasFile ? "image_chat" : "chat",
         diagnosis: cnnResult
             ? {
@@ -363,8 +386,29 @@ const orchestrateAssistantRequest = async (args) => {
                 : "upload_clearer_image",
         providerChain,
         ragContext,
+        communityContext,
         kbAdvice,
         kbSeverity,
     };
+    try {
+        const { evaluateRecommendation } = await Promise.resolve().then(() => __importStar(require("./decision_engine")));
+        const decisionResult = evaluateRecommendation({
+            confidence: cnnResult?.confidence,
+            diseaseName: cnnResult?.prediction,
+            isAmbiguous: responsePayload.lowConfidenceWarning !== "",
+            historyLength: args.history.length,
+            userQuestion: question,
+            expertAvailable: true, // simplified for now
+        });
+        // Only recommend if not a simple fallback and we have an actual recommendation
+        if (decisionResult.recommendation !== "none" && args.history.length <= 5) {
+            responsePayload.recommendedAction = decisionResult.recommendation;
+            // We can also attach the reason or score if needed
+        }
+    }
+    catch (err) {
+        console.error("Decision engine failed:", err);
+    }
+    return responsePayload;
 };
 exports.orchestrateAssistantRequest = orchestrateAssistantRequest;

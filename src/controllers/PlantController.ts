@@ -28,7 +28,7 @@ export class PlantController {
 
   getPlantDetails = async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const userId = (req as any).user._id || (req as any).user.userId;
       const plant = await this.plantService.getPlantDetails(id, userId);
       if (!plant) {
@@ -42,7 +42,7 @@ export class PlantController {
 
   updatePlant = async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const parsed = updatePlantSchema.parse(req.body);
       const userId = (req as any).user._id || (req as any).user.userId;
       

@@ -53,7 +53,7 @@ const getPlants = async (req, res) => {
         const { search, category, cursor, limit = "20" } = req.query;
         const limitNumber = Math.min(parseInt(limit, 10) || 20, 100);
         // Build query with normalized search if provided
-        const query = {};
+        const query = { isLibraryItem: true };
         if (search) {
             const normalized = search.toLowerCase().trim();
             // Prefix search on normalized fields, fallback to regex on original fields
@@ -136,6 +136,7 @@ const addPlant = async (req, res) => {
             normalizedNameAr: nameAr.toLowerCase(),
             active: true,
             createdBy: req.user?.id || '',
+            isLibraryItem: true,
         });
         res.status(201).json({ success: true, data: plant });
     }
