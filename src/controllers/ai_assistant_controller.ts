@@ -200,3 +200,27 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
     return res.status(502).json({ success: false, message: "Assistant request failed" });
   }
 };
+
+export const postGenerateDraft = async (req: Request, res: Response) => {
+  try {
+    const text = (req.body?.text || req.body?.question || "").toString().trim();
+    const history = parseHistory(req.body?.history);
+    const diagnosisResult = req.body?.diagnosisResult;
+
+    if (!text && history.length === 0) {
+      return res.status(400).json({ success: false, message: "History or question is required" });
+    }
+
+    const { generateCommunityDraft } = await import("../services/ai/draft_generator");
+    const draft = await generateCommunityDraft({
+      userQuestion: text,
+      history,
+      diagnosisResult,
+    });
+
+    return res.status(200).json({ success: true, draft });
+  } catch (error) {
+    console.error("Draft generation failed:", sanitizeErrorMessage(error));
+    return res.status(500).json({ success: false, message: "Draft generation failed" });
+  }
+};

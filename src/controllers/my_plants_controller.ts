@@ -339,6 +339,7 @@ export const deletePlant = async (req: Request, res: Response, next: NextFunctio
       DiaryEntry.deleteMany({ plantId: plant._id }),
       Reminder.deleteMany({ plantId: plant._id }),
       DiagnosisHistory.deleteMany({ plantId: plant._id }),
+      FertilizerLog.deleteMany({ plant: plant._id }),
     ]);
 
     return ok(res, {
@@ -587,6 +588,14 @@ export const getPlantDiagnoses = async (req: Request, res: Response, next: NextF
   }
 };
 
+const normalizeFertilizerType = (type: string): string => {
+  const upper = type.toUpperCase();
+  const mapping: Record<string, string> = {
+    'SLOW-RELEASE': 'SLOW_RELEASE',
+  };
+  return mapping[upper] ?? upper;
+};
+
 // @desc    Log plant fertilization
 // @route   POST /api/my-plants/:id/fertilize
 // @access  Private
@@ -594,7 +603,8 @@ export const fertilizePlant = async (req: Request, res: Response, next: NextFunc
   try {
     const userId = (req as any).user.id;
     const plantId = req.params.id;
-    const { fertilizedAt, fertilizerType, amountGrams, note, clientOperationId } = req.body;
+    let { fertilizedAt, fertilizerType, amountGrams, note, clientOperationId } = req.body;
+    fertilizerType = normalizeFertilizerType(fertilizerType);
 
     const plant = await MyPlant.findOne({ _id: plantId, user: userId });
     if (!plant) {

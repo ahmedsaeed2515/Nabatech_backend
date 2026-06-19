@@ -6,6 +6,7 @@ import { runCnnDiagnosis } from "./cnn_provider";
 import { getAiSettings } from "./ai_config_service";
 import { sanitizeErrorMessage } from "./ai_errors";
 import { buildAssistantPrompt, extractRagQuery } from "./assistant_prompt_builder";
+import { retrieveCommunityContext } from "./community_knowledge_retriever";
 import crypto from "crypto";
 
 const logAiCall = async (payload: {
@@ -113,10 +114,21 @@ export const orchestrateChat = async (args: {
     }
   }
 
+  let communityContext: string | undefined;
+  try {
+    const commResult = await retrieveCommunityContext(undefined, args.question);
+    if (commResult.hasData) {
+      communityContext = commResult.text;
+    }
+  } catch (error) {
+    console.warn("Community context retrieval failed for text chat:", sanitizeErrorMessage(error));
+  }
+
   const prompt = buildAssistantPrompt({
     userQuestion: args.question,
     history: sanitizedHistory,
     ragContext,
+    communityContext,
   });
 
   let lastError: unknown;
@@ -132,7 +144,7 @@ export const orchestrateChat = async (args: {
       inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
       outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
     });
-    return { ...llm, ragContext };
+    return { ...llm, ragContext, communityContext };
   } catch (error) {
     lastError = error;
   }
@@ -150,7 +162,7 @@ export const orchestrateChat = async (args: {
         inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
         outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
       });
-      return { ...llm, ragContext };
+      return { ...llm, ragContext, communityContext };
     } catch (error) {
       lastError = error;
     }
@@ -193,7 +205,7 @@ export const orchestrateAssistantRequest = async (args: {
 
   if (!hasFile && question) {
     const chat = await orchestrateChat({ userId: args.userId, requestId: reqId, question, history: sanitizedHistory, topK: args.topK });
-    return { mode: "chat" as const, message: chat.message, source: chat.source, provider: chat.provider, providerChain: [chat.provider], ragContext: chat.ragContext };
+    return { mode: "chat" as const, message: chat.message, source: chat.source, provider: chat.provider, providerChain: [chat.provider], ragContext: chat.ragContext, communityContext: chat.communityContext };
   }
 
   const providerChain: string[] = [];
@@ -244,6 +256,7 @@ export const orchestrateAssistantRequest = async (args: {
   let source: "rag" | "llm" | "fallback" | "cnn" = "cnn";
   let provider = cnnResult?.provider || "cnn";
   let ragContext: string | undefined;
+  let communityContext: string | undefined;
   let kbAdvice: string | undefined;
   let kbSeverity: string | undefined;
 
@@ -279,6 +292,15 @@ export const orchestrateAssistantRequest = async (args: {
        }
     }
 
+    try {
+      const commResult = await retrieveCommunityContext(cnnResult?.prediction, question);
+      if (commResult.hasData) {
+        communityContext = commResult.text;
+      }
+    } catch (error) {
+      console.warn("Community context retrieval failed for image chat:", sanitizeErrorMessage(error));
+    }
+
     const prompt = buildAssistantPrompt({
       userQuestion: question || "Explain diagnosis and safe care guidance for this plant.",
       history: sanitizedHistory,
@@ -296,6 +318,7 @@ export const orchestrateAssistantRequest = async (args: {
           ? lowConfidenceWarning
           : "",
       ragContext: ragRetrievedContext,
+      communityContext,
     });
 
     let chatResult: { message: string, source: "llm"|"fallback", provider: string };
@@ -352,7 +375,7 @@ export const orchestrateAssistantRequest = async (args: {
     },
   });
 
-  return {
+  const responsePayload = {
     mode: hasFile ? ("image_chat" as const) : ("chat" as const),
     diagnosis: cnnResult
       ? {
@@ -374,7 +397,30 @@ export const orchestrateAssistantRequest = async (args: {
       : "upload_clearer_image",
     providerChain,
     ragContext,
+    communityContext,
     kbAdvice,
     kbSeverity,
   };
+
+  try {
+    const { evaluateRecommendation } = await import("./decision_engine");
+    const decisionResult = evaluateRecommendation({
+      confidence: cnnResult?.confidence,
+      diseaseName: cnnResult?.prediction,
+      isAmbiguous: responsePayload.lowConfidenceWarning !== "",
+      historyLength: args.history.length,
+      userQuestion: question,
+      expertAvailable: true, // simplified for now
+    });
+    
+    // Only recommend if not a simple fallback and we have an actual recommendation
+    if (decisionResult.recommendation !== "none" && args.history.length <= 5) {
+      responsePayload.recommendedAction = decisionResult.recommendation;
+      // We can also attach the reason or score if needed
+    }
+  } catch (err) {
+    console.error("Decision engine failed:", err);
+  }
+
+  return responsePayload;
 };

@@ -10,6 +10,7 @@ export type AssistantContext = {
   kbAdvice?: string;
   kbSeverity?: string;
   ragContext?: string; // Retrieved context from RAG (injected AFTER retrieval)
+  communityContext?: string; // Retrieved context from community database
 };
 
 const formatCandidates = (candidates: Array<{ label: string; confidence?: number }> = []): string => {
@@ -58,6 +59,7 @@ export const buildAssistantPrompt = (ctx: AssistantContext): string => {
     ctx.kbSeverity ? `Expected Severity: ${ctx.kbSeverity}` : "",
     ctx.lowConfidenceWarning ? `Warning: ${ctx.lowConfidenceWarning}` : "",
     ctx.ragContext ? `\nRetrieved Knowledge Context:\n${ctx.ragContext}` : "",
+    ctx.communityContext ? `\nRetrieved Community Context:\n${ctx.communityContext}` : "",
   ]
     .filter(Boolean)
     .join("\n");
