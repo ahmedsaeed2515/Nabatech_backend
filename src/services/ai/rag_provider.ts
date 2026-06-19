@@ -2,16 +2,40 @@ import axios from "axios";
 import { AiSettingsShape } from "./ai_config_service";
 import { AiProviderError, toProviderError } from "./ai_errors";
 
+// ?? Types ?????????????????????????????????????????????????????????????????????
+
+export type RagChunk = {
+  text: string;
+  source: string;
+  score: number;
+};
+
 export type RagResult = {
-  message: string;
+  contextText: string;
+  chunks: RagChunk[];
+  totalFound: number;
   source: "rag";
   provider: string;
 };
 
-export const askRag = async (
+// ?? Helpers ???????????????????????????????????????????????????????????????????
+
+const formatChunksAsContext = (chunks: RagChunk[]): string => {
+  if (!chunks.length) return "";
+  return chunks
+    .map(
+      (chunk, i) =>
+        `[${i + 1}] [Source: ${chunk.source} | Relevance: ${(chunk.score * 100).toFixed(1)}%]:\n${chunk.text.trim()}`
+    )
+    .join("\n\n---\n\n");
+};
+
+// ?? Primary export ?????????????????????????????????????????????????????????????
+
+export const retrieveRagChunks = async (
   settings: AiSettingsShape,
-  question: string,
-  history: Array<{ role: string; content: string }>,
+  diseaseName: string,
+  question?: string,
   topK?: number
 ): Promise<RagResult> => {
   if (!settings.rag.enabled || !settings.rag.endpointUrl) {
@@ -21,15 +45,105 @@ export const askRag = async (
     });
   }
 
+  const ragApiKey = (settings.secrets.ragApiKey || "").trim();
+
+  const rawEndpoint = process.env.NEW_RAG_URL || settings.rag.endpointUrl;
+  const baseUrl = rawEndpoint
+    .replace(/\/ask(\/stream)?$/, "")
+    .replace(/\/$/, "");
+  const retrieveUrl = `${baseUrl}/retrieve`;
+
+  const sanitizedDisease = diseaseName.trim().substring(0, 200);
+
+  const skipPhrases = ["please analyze", "analyze this", "analyze my", "please check"];
+  const lowerQ = (question || "").toLowerCase();
+  const usefulQuestion =
+    question && !skipPhrases.some((p) => lowerQ.includes(p))
+      ? question.substring(0, 500)
+      : "";
+
   let response: any;
   try {
-    const ragApiKey = (settings.secrets.ragApiKey || "").trim();
-    
-    // Context Assembly bounds token limits
-    const maxHistoryItems = 5;
-    const boundedHistory = history.slice(-maxHistoryItems);
-    const boundedQuestion = question.substring(0, 1000); // Max 1000 chars
+    response = await axios.post(
+      retrieveUrl,
+      {
+        disease_name: sanitizedDisease,
+        question: usefulQuestion,
+        top_k: topK || settings.rag.topK || 8,
+      },
+      {
+        timeout: settings.rag.timeoutMs,
+        headers: ragApiKey ? { Authorization: "Bearer " } : undefined,
+      }
+    );
+  } catch (error) {
+    throw toProviderError(
+      error,
+      "RAG /retrieve request failed for disease: ",
+      "RAG_UPSTREAM_FAILED"
+    );
+  }
 
+  const data = (response.data || {}) as any;
+  const rawChunks: any[] = Array.isArray(data.chunks) ? data.chunks : [];
+
+  if (!rawChunks.length) {
+    throw new AiProviderError(
+      "RAG returned no chunks for disease: ",
+      { code: "RAG_EMPTY_RESPONSE" }
+    );
+  }
+
+  const chunks: RagChunk[] = rawChunks
+    .filter((c) => c && typeof c.text === "string" && c.text.trim().length > 10)
+    .map((c) => ({
+      text: String(c.text).trim(),
+      source: String(c.source || "Unknown").trim(),
+      score: typeof c.score === "number" ? Math.max(0, Math.min(1, c.score)) : 0,
+    }));
+
+  if (!chunks.length) {
+    throw new AiProviderError("RAG chunks were all empty or malformed", {
+      code: "RAG_INVALID_RESPONSE",
+    });
+  }
+
+  const contextText = formatChunksAsContext(chunks);
+
+  console.log(
+    `[RAG_RETRIEVE_SUCCESS] disease="${sanitizedDisease}" | chunks=${chunks.length}`
+  );
+
+  return {
+    contextText,
+    chunks,
+    totalFound: data.total_found || chunks.length,
+    source: "rag",
+    provider: "rag",
+  };
+};
+
+// ?? Legacy wrapper (text-only chat path) ??????????????????????????????????????
+
+export const askRag = async (
+  settings: AiSettingsShape,
+  question: string,
+  history: Array<{ role: string; content: string }>,
+  topK?: number
+): Promise<{ message: string; source: "rag"; provider: string }> => {
+  if (!settings.rag.enabled || !settings.rag.endpointUrl) {
+    throw new AiProviderError("RAG disabled or not configured", {
+      code: "RAG_NOT_CONFIGURED",
+      isUpstream: false,
+    });
+  }
+
+  const ragApiKey = (settings.secrets.ragApiKey || "").trim();
+  const boundedHistory = history.slice(-5);
+  const boundedQuestion = question.substring(0, 1000);
+
+  let response: any;
+  try {
     response = await axios.post(
       settings.rag.endpointUrl,
       {
@@ -39,17 +153,22 @@ export const askRag = async (
       },
       {
         timeout: settings.rag.timeoutMs,
-        headers: ragApiKey ? { Authorization: `Bearer ${ragApiKey}` } : undefined,
+        headers: ragApiKey ? { Authorization: "Bearer " } : undefined,
       }
     );
   } catch (error) {
-    throw toProviderError(error, "RAG provider request failed", "RAG_UPSTREAM_FAILED");
+    throw toProviderError(error, "RAG /ask request failed", "RAG_UPSTREAM_FAILED");
   }
 
   const data = (response.data || {}) as any;
-  const message = (data.answer || data.response || data.result || data.message || "").toString().trim();
+  const message = (
+    data.answer || data.response || data.result || data.message || ""
+  )
+    .toString()
+    .trim();
+
   if (!message) {
-    throw new AiProviderError("Empty response from RAG provider", {
+    throw new AiProviderError("Empty response from RAG /ask", {
       code: "RAG_EMPTY_RESPONSE",
     });
   }

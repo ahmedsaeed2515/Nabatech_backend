@@ -1,7 +1,7 @@
 import FormData from "form-data";
 import AiCallLog from "../../models/ai_call_log_model";
 import { askLlm } from "./llm_provider";
-import { askRag } from "./rag_provider";
+import { askRag, retrieveRagChunks } from "./rag_provider";
 import { runCnnDiagnosis } from "./cnn_provider";
 import { getAiSettings } from "./ai_config_service";
 import { sanitizeErrorMessage } from "./ai_errors";
@@ -268,19 +268,27 @@ export const orchestrateAssistantRequest = async (args: {
   if (isLowConfidence && settings.pipeline.lowConfidenceBehavior === "block") {
     message = "The image confidence is too low. Please upload a clearer image of the plant to receive advice.";
   } else if (shouldGenerateAnswer) {
-    const ragQuery = extractRagQuery(question || (cnnResult?.prediction ? `${cnnResult.prediction} plant disease treatment` : "plant disease diagnosis"));
-
+    // ── RAG Stage: Pure Knowledge Retrieval ──────────────────────────────────
     let ragRetrievedContext: string | undefined;
-    if (settings.rag.enabled && settings.rag.endpointUrl) {
+    if (settings.rag.enabled && settings.rag.endpointUrl && cnnResult?.prediction) {
       try {
-        const ragResult = await askRag(settings, ragQuery, [], args.topK);
-        ragRetrievedContext = ragResult.message;
+        const ragResult = await retrieveRagChunks(
+          settings,
+          cnnResult.prediction,
+          question,
+          args.topK,
+        );
+        ragRetrievedContext = ragResult.contextText;
         ragContext = ragRetrievedContext;
-        console.log("[RAG_SUCCESS]");
+        console.log(`[RAG_SUCCESS] ${ragResult.chunks.length} chunks for "${cnnResult.prediction}"`);
       } catch (ragError) {
-        console.warn("[RAG_FAILED] RAG retrieval failed for image chat, proceeding without context:", sanitizeErrorMessage(ragError));
+        console.warn(
+          "[RAG_FAILED] RAG /retrieve failed, proceeding without context:",
+          sanitizeErrorMessage(ragError)
+        );
       }
     }
+    // ─────────────────────────────────────────────────────────────────────────
 
     if (cnnResult?.prediction) {
        try {
@@ -464,3 +472,4 @@ export const orchestrateAssistantRequest = async (args: {
 
   return responsePayload;
 };
+

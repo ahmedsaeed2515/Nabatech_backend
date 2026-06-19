@@ -79,7 +79,7 @@ export const chatWithAI = async (req: Request, res: Response) => {
     const trimmedText = text.trim();
     const userId = (req as any).user.id;
     const requestId = crypto.randomUUID();
-    const conversationId = `conv-${userId}`;
+    const conversationId = req.body?.conversationId || `conv-${crypto.randomUUID()}`;
 
     if (clientOperationId) {
       const existing = await Message.findOne({ user: userId, clientOperationId, role: "assistant" });
@@ -176,8 +176,12 @@ export const getChatHistory = async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
     const cursor = req.query.cursor as string;
     const limit = Math.min(Number(req.query.limit) || 50, 50);
+    const conversationId = req.query.conversationId as string;
 
     const query: any = { user: userId };
+    if (conversationId) {
+      query.conversationId = conversationId;
+    }
     if (cursor) {
       const cursorMsg = await Message.findById(cursor);
       if (!cursorMsg) {
@@ -224,6 +228,42 @@ export const getChatHistory = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Failed to fetch chat history:", error);
     return res.status(500).json({ success: false, message: "Failed to fetch chat history", error });
+  }
+};
+
+export const getChatSessions = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const limit = Math.min(Number(req.query.limit) || 20, 20);
+
+    // Group messages by conversationId, get the most recent message for each session
+    const sessions = await Message.aggregate([
+      { $match: { user: require("mongoose").Types.ObjectId(userId) } },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: "$conversationId",
+          lastMessage: { $first: "$text" },
+          updatedAt: { $first: "$createdAt" },
+        }
+      },
+      { $sort: { updatedAt: -1 } },
+      { $limit: limit }
+    ]);
+
+    const payload = sessions.map(s => ({
+      conversationId: s._id,
+      title: s.lastMessage,
+      updatedAt: s.updatedAt,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: payload
+    });
+  } catch (error) {
+    console.error("Failed to fetch chat sessions:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch chat sessions", error });
   }
 };
 
