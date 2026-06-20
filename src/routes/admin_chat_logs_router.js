@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var express_1 = require("express");
+var admin_chat_logs_controller_1 = require("../controllers/admin_chat_logs_controller");
+var auth_middleware_1 = require("../middlewares/auth_middleware");
+var router = (0, express_1.Router)();
+// Protect all routes
+router.use((0, auth_middleware_1.authorizeRoles)("admin", "staff"));
+router.get("/analytics", admin_chat_logs_controller_1.getChatAnalytics);
+router.get("/sessions", admin_chat_logs_controller_1.getChatSessions);
+router.get("/tool-calls", admin_chat_logs_controller_1.getChatToolCalls);
+router.get("/diagnoses", admin_chat_logs_controller_1.getChatDiagnoses);
+router.get("/:id", admin_chat_logs_controller_1.getChatLogById);
+router.get("/", admin_chat_logs_controller_1.getChatLogs);
+exports.default = router;

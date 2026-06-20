@@ -1,0 +1,25 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var express_1 = require("express");
+var my_plants_controller_1 = require("../controllers/my_plants_controller");
+var auth_middleware_1 = require("../middlewares/auth_middleware");
+var upload_middleware_1 = __importDefault(require("../middlewares/upload_middleware"));
+var router = (0, express_1.Router)();
+router.get("/", auth_middleware_1.protect, my_plants_controller_1.getMyPlants);
+router.get("/:id", auth_middleware_1.protect, my_plants_controller_1.getPlantById);
+router.post("/", auth_middleware_1.protect, my_plants_controller_1.addPlant);
+router.put("/:id", auth_middleware_1.protect, my_plants_controller_1.updatePlant);
+router.delete("/:id", auth_middleware_1.protect, my_plants_controller_1.deletePlant);
+router.post("/:id/water", auth_middleware_1.protect, my_plants_controller_1.waterPlant);
+router.get("/:id/water-logs", auth_middleware_1.protect, my_plants_controller_1.getWateringLogs);
+router.post("/:id/image", auth_middleware_1.protect, upload_middleware_1.default.single("file"), my_plants_controller_1.uploadPlantImage);
+router.get("/:id/dashboard", auth_middleware_1.protect, my_plants_controller_1.getPlantDashboard);
+router.get("/:id/diaries", auth_middleware_1.protect, my_plants_controller_1.getPlantDiaries);
+router.get("/:id/reminders", auth_middleware_1.protect, my_plants_controller_1.getPlantReminders);
+router.get("/:id/diagnoses", auth_middleware_1.protect, my_plants_controller_1.getPlantDiagnoses);
+router.post("/:id/fertilize", auth_middleware_1.protect, my_plants_controller_1.fertilizePlant);
+router.get("/:id/fertilizer-logs", auth_middleware_1.protect, my_plants_controller_1.getFertilizerLogs);
+exports.default = router;

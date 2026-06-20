@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var express_1 = require("express");
+var admin_gardens_controller_1 = require("../controllers/admin_gardens_controller");
+var auth_middleware_1 = require("../middlewares/auth_middleware");
+var router = (0, express_1.Router)();
+var adminOrMod = (0, auth_middleware_1.authorizeRoles)('moderator', 'admin', 'super_admin');
+router.get("/", auth_middleware_1.protect, adminOrMod, admin_gardens_controller_1.getAdminGardens);
+router.get("/:id", auth_middleware_1.protect, adminOrMod, admin_gardens_controller_1.getAdminGardenById);
+exports.default = router;
