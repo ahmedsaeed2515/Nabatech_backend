@@ -1,6 +1,13 @@
 import { Request, Response } from "express";
 import LightMeterSession from "../models/light_meter_session_model";
 import WateringCalculation from "../models/watering_calculation_model";
+import HomeWidget from "../models/home_widget_model";
+import HomeBanner from "../models/home_banner_model";
+import HomeQuickAction from "../models/home_quick_action_model";
+import HomeSection from "../models/home_section_model";
+import HomeAnalytics from "../models/home_analytics_model";
+import { getAiSettings } from "../services/ai/ai_config_service";
+import { askLlm } from "../services/ai/llm_provider";
 
 const toLightPayload = (item: any) => ({
   id: item._id,
@@ -192,5 +199,75 @@ export const getHomeToolsAnalytics = async (req: Request, res: Response) => {
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Failed to fetch admin analytics" });
+  }
+};
+
+// ---------- Feed Orchestrator ----------
+export const getHomeFeed = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id || "anonymous";
+    const now = new Date();
+
+    const [widgets, banners, actions, sections] = await Promise.all([
+      HomeWidget.find({ isActive: true }).sort({ defaultOrder: 1 }),
+      HomeBanner.find({
+        isActive: true,
+        $and: [
+          { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
+          { $or: [{ endDate: null }, { endDate: { $gte: now } }] }
+        ]
+      }).sort({ priority: -1 }),
+      HomeQuickAction.find({ isActive: true }).sort({ order: 1 }),
+      HomeSection.find({ isActive: true }).sort({ order: 1 })
+    ]);
+
+    // AI Daily Tip (Mock integration, actual AI Orchestrator can be called here)
+    let aiTip = null;
+    if (userId !== "anonymous") {
+      try {
+        const settings = await getAiSettings();
+        const prompt = `Generate a single short (max 2 sentences) garden tip or fact.`;
+        const llmResult = await askLlm(settings, prompt, "llm", [], "search");
+        aiTip = { title: "Daily Tip", message: llmResult.message };
+      } catch (e) {
+        // Fallback
+        aiTip = { title: "Daily Tip", message: "Watering early morning prevents evaporation and fungal disease." };
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        banners: banners.map(b => ({ id: b._id, title: b.title, imageUrl: b.imageUrl, targetUrl: b.targetUrl })),
+        quickActions: actions.map(a => ({ id: a._id, label: a.label, iconName: a.iconName, deeplink: a.deeplink })),
+        widgets: widgets.map(w => ({ id: w._id, widgetId: w.widgetId, title: w.title, description: w.description })),
+        sections: sections.map(s => ({ id: s._id, sectionId: s.sectionId, title: s.title, type: s.type })),
+        aiTip
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Failed to load home feed" });
+  }
+};
+
+export const trackHomeEvent = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id;
+    const { eventType, entityType, entityId } = req.body;
+    
+    if (!eventType || !entityType || !entityId) {
+      return res.status(400).json({ success: false, message: "Missing tracking data" });
+    }
+
+    await HomeAnalytics.create({
+      userId: userId ? userId : undefined,
+      eventType,
+      entityType,
+      entityId
+    });
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Failed to track event" });
   }
 };

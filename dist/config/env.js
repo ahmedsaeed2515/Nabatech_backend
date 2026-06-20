@@ -22,7 +22,8 @@ const envSchema = zod_1.z.object({
     GEMINI_API_KEY: zod_1.z.string().optional(),
     OPENWEATHERMAP_API_KEY: zod_1.z.string().optional(),
     EMAIL_USER: zod_1.z.string().optional(),
-    EMAIL_PASS: zod_1.z.string().optional()
+    EMAIL_PASS: zod_1.z.string().optional(),
+    PYTHON_ML_API_URL: zod_1.z.string().url().optional()
 }).refine(data => data.MONGODB_URI || data.MONGO_URI, {
     message: "Either MONGODB_URI or MONGO_URI must be provided",
     path: ["MONGODB_URI"],

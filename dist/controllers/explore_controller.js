@@ -6,6 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateOutbreak = exports.deleteOutbreak = exports.createOutbreak = exports.deleteExpert = exports.createExpert = exports.deleteStoreProduct = exports.createStoreProduct = exports.getOutbreaks = exports.getExperts = exports.getStoreProducts = void 0;
 const store_product_model_1 = __importDefault(require("../models/store_product_model"));
 const expert_model_1 = __importDefault(require("../models/expert_model"));
+const user_model_1 = __importDefault(require("../models/user_model"));
+const expert_profile_model_1 = __importDefault(require("../models/expert_profile_model"));
 const outbreak_spot_model_1 = __importDefault(require("../models/outbreak_spot_model"));
 const api_response_1 = require("../utils/api_response");
 // @desc    Get all store products
@@ -40,22 +42,40 @@ exports.getStoreProducts = getStoreProducts;
 const getExperts = async (req, res) => {
     try {
         const { specialty } = req.query;
-        const query = {};
+        // Find all users with role 'expert'
+        const users = await user_model_1.default.find({ role: 'expert' }).select('name avatarUrl');
+        const userIds = users.map(u => u._id);
+        // Find their profiles
+        let profilesQuery = { userId: { $in: userIds } };
         if (specialty) {
-            query.specialty = specialty;
+            profilesQuery.specialization = specialty;
         }
-        const experts = await expert_model_1.default.find(query);
+        const profiles = await expert_profile_model_1.default.find(profilesQuery);
+        // Map profiles by userId for quick lookup
+        const profileMap = new Map();
+        for (const p of profiles) {
+            profileMap.set(p.userId.toString(), p);
+        }
+        const result = [];
+        for (const u of users) {
+            const p = profileMap.get(u._id.toString());
+            // If filtering by specialty, only include users that have a matching profile
+            if (specialty && !p)
+                continue;
+            result.push({
+                id: u._id,
+                name: u.name,
+                avatarUrl: u.avatarUrl,
+                specialization: p?.specialization || 'General',
+                bio: p?.bio || '',
+                yearsExperience: p?.yearsExperience || 0,
+                postsCount: p?.expertPostsCount || 0,
+                repliesCount: p?.expertRepliesCount || 0,
+            });
+        }
         res.status(200).json({
             success: true,
-            data: experts.map(e => ({
-                id: e._id,
-                name: e.name,
-                specialty: e.specialty,
-                rating: e.rating,
-                sessions: e.sessions,
-                fee: e.fee,
-                online: e.online,
-            }))
+            data: { items: result }
         });
     }
     catch (error) {

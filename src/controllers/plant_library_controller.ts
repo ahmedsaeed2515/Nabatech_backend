@@ -59,6 +59,51 @@ export const getPlants = async (req: Request, res: Response) => {
   }
 };
 
+// @desc    Search plants by wildcard text
+// @route   GET /api/v1/admin/plants/search
+// @access  Admin
+export const adminSearchPlants = async (req: Request, res: Response) => {
+  try {
+    const { q, cursor, limit = "20" } = req.query;
+    const limitNumber = Math.min(parseInt(limit as string, 10) || 20, 100);
+
+    const query: any = { isLibraryItem: true };
+    if (q) {
+      const search = (q as string).trim();
+      query.$or = [
+        { species: { $regex: search, $options: "i" } },
+        { scientificName: { $regex: search, $options: "i" } },
+        { descriptionEn: { $regex: search, $options: "i" } },
+        { nameEn: { $regex: search, $options: "i" } },
+        { nameAr: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    let cursorQuery = {} as any;
+    if (cursor) {
+      cursorQuery._id = { $gt: cursor };
+    }
+
+    const plants = await Plant.find({ ...query, ...cursorQuery })
+      .sort({ _id: 1 })
+      .limit(limitNumber + 1);
+
+    const hasNextPage = plants.length > limitNumber;
+    const items = hasNextPage ? plants.slice(0, -1) : plants;
+    const nextCursor = hasNextPage ? items[items.length - 1]._id : null;
+    const totalCount = await Plant.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      data: { items, pageInfo: { hasNextPage, nextCursor } },
+      count: totalCount,
+      totalPages: Math.ceil(totalCount / limitNumber),
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || "Failed to search plants" });
+  }
+};
+
 // @desc    Add new plant
 // @route   POST /api/plant-library/plants
 // @access  Admin
@@ -177,6 +222,115 @@ export const deletePlant = async (req: Request, res: Response) => {
     res.status(200).json({ success: true, message: "Plant deleted successfully" });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || "Failed to delete plant" });
+  }
+};
+
+// @desc    Get plant by id
+// @route   GET /api/plant-library/plants/:id
+// @access  Public
+export const getPlantById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const plant = await Plant.findById(id).populate('tags diseases seasons');
+    if (!plant) {
+      return res.status(404).json({ success: false, message: "Plant not found" });
+    }
+    res.status(200).json({ success: true, data: plant });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || "Failed to fetch plant" });
+  }
+};
+
+// @desc    Archive plant
+// @route   PATCH /api/plant-library/plants/:id/archive
+// @access  Admin
+export const archivePlant = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const plant = await Plant.findByIdAndUpdate(id, { status: 'ARCHIVED' }, { new: true });
+    if (!plant) {
+      return res.status(404).json({ success: false, message: "Plant not found" });
+    }
+    res.status(200).json({ success: true, data: plant });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || "Failed to archive plant" });
+  }
+};
+
+// @desc    Publish plant
+// @route   PATCH /api/plant-library/plants/:id/publish
+// @access  Admin
+export const publishPlant = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const plant = await Plant.findByIdAndUpdate(id, { status: 'PUBLISHED' }, { new: true });
+    if (!plant) {
+      return res.status(404).json({ success: false, message: "Plant not found" });
+    }
+    res.status(200).json({ success: true, data: plant });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || "Failed to publish plant" });
+  }
+};
+
+// @desc    Search plants (dedicated search endpoint)
+// @route   GET /api/plant-library/plants/search
+// @access  Public
+export const searchPlants = async (req: Request, res: Response) => {
+  try {
+    const { q, limit = "10" } = req.query;
+    if (!q) {
+      return res.status(400).json({ success: false, message: "Search query 'q' is required" });
+    }
+    const limitNumber = Math.min(parseInt(limit as string, 10) || 10, 50);
+    const normalized = (q as string).toLowerCase().trim();
+    
+    const query = {
+      isLibraryItem: true,
+      status: 'PUBLISHED',
+      $or: [
+        { normalizedNameEn: { $regex: `^${normalized}` } },
+        { normalizedNameAr: { $regex: `^${normalized}` } },
+        { nameEn: { $regex: q, $options: "i" } },
+        { nameAr: { $regex: q, $options: "i" } },
+      ]
+    };
+    
+    const plants = await Plant.find(query).limit(limitNumber).select('nameAr nameEn imageUrl category slug');
+    res.status(200).json({ success: true, data: plants });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || "Failed to search plants" });
+  }
+};
+
+// @desc    Get plant stats
+// @route   GET /api/plant-library/plants/stats
+// @access  Admin
+export const getPlantStats = async (req: Request, res: Response) => {
+  try {
+    const totalCount = await Plant.countDocuments({ isLibraryItem: true });
+    const publishedCount = await Plant.countDocuments({ isLibraryItem: true, status: 'PUBLISHED' });
+    const draftCount = await Plant.countDocuments({ isLibraryItem: true, status: 'DRAFT' });
+    const archivedCount = await Plant.countDocuments({ isLibraryItem: true, status: 'ARCHIVED' });
+    
+    res.status(200).json({
+      success: true,
+      data: { totalCount, publishedCount, draftCount, archivedCount }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || "Failed to fetch stats" });
+  }
+};
+
+// @desc    Export plants
+// @route   GET /api/plant-library/plants/export
+// @access  Admin
+export const exportPlants = async (req: Request, res: Response) => {
+  try {
+    const plants = await Plant.find({ isLibraryItem: true }).lean();
+    res.status(200).json({ success: true, data: plants });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || "Failed to export plants" });
   }
 };
 

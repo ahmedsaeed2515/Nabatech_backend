@@ -1,4 +1,3 @@
-jest.mock("../services/ai/rag_provider", () => ({ askRag: jest.fn() }));
 jest.mock("../services/ai/llm_provider", () => ({ askLlm: jest.fn() }));
 jest.mock("../services/ai/cnn_provider", () => ({ runCnnDiagnosis: jest.fn() }));
 jest.mock("../services/ai/ai_config_service", () => ({
@@ -9,13 +8,11 @@ jest.mock("../models/ai_call_log_model", () => ({
   default: { create: jest.fn() },
 }));
 
-import { askRag } from "../services/ai/rag_provider";
 import { askLlm } from "../services/ai/llm_provider";
 import { runCnnDiagnosis } from "../services/ai/cnn_provider";
 import { getAiSettings } from "../services/ai/ai_config_service";
 import { orchestrateAssistantRequest, orchestrateChat } from "../services/ai/ai_orchestrator_service";
 
-const mockedAskRag = askRag as jest.MockedFunction<typeof askRag>;
 const mockedAskLlm = askLlm as jest.MockedFunction<typeof askLlm>;
 const mockedRunCnnDiagnosis = runCnnDiagnosis as jest.MockedFunction<typeof runCnnDiagnosis>;
 const mockedGetAiSettings = getAiSettings as jest.MockedFunction<typeof getAiSettings>;
@@ -36,7 +33,6 @@ describe("AI orchestrator fallback", () => {
   });
 
   it("uses RAG first then LLM if RAG fails", async () => {
-    mockedAskRag.mockRejectedValueOnce(new Error("rag down"));
     mockedAskLlm.mockResolvedValue({ message: "llm answer", source: "fallback", provider: "openai" });
 
     const result = await orchestrateChat({
@@ -46,7 +42,6 @@ describe("AI orchestrator fallback", () => {
       topK: 8,
     });
 
-    expect(mockedAskRag).toHaveBeenCalledTimes(1);
     expect(mockedAskLlm).toHaveBeenCalledTimes(1);
     expect(result.message).toBe("llm answer");
   });
@@ -58,7 +53,6 @@ describe("AI orchestrator fallback", () => {
       candidates: [{ label: "leaf spot", confidence: 0.8 }],
       provider: "cnn",
     } as any);
-    mockedAskRag.mockResolvedValue({ message: "care", source: "rag", provider: "rag" });
 
     const result = await orchestrateAssistantRequest({
       userId: "u1",
@@ -69,7 +63,6 @@ describe("AI orchestrator fallback", () => {
     });
 
     expect(mockedRunCnnDiagnosis).toHaveBeenCalledTimes(1);
-    expect(mockedAskRag).toHaveBeenCalledTimes(2);
     expect(result.mode).toBe("image_chat");
   });
 
@@ -90,7 +83,6 @@ describe("AI orchestrator fallback", () => {
       candidates: [{ label: "unknown", confidence: 0.2 }],
       provider: "cnn",
     } as any);
-    mockedAskRag.mockResolvedValue({ message: "please upload clearer image", source: "rag", provider: "rag" });
 
     const result = await orchestrateAssistantRequest({
       userId: "u1",
@@ -100,7 +92,7 @@ describe("AI orchestrator fallback", () => {
       history: [],
     });
 
-    expect(result.lowConfidenceWarning).toContain("Low CNN confidence");
+    expect((result as any).lowConfidenceWarning).toContain("Low CNN confidence");
   });
 
   it("assistant can continue when CNN fails and allowAnswerIfCnnFails enabled", async () => {
@@ -115,7 +107,6 @@ describe("AI orchestrator fallback", () => {
       secrets: { openaiApiKey: "x", ragApiKey: "", cnnApiKey: "" },
     } as any);
     mockedRunCnnDiagnosis.mockRejectedValueOnce(new Error("cnn failed"));
-    mockedAskRag.mockResolvedValue({ message: "fallback answer", source: "rag", provider: "rag" });
 
     const result = await orchestrateAssistantRequest({
       userId: "u1",
@@ -170,13 +161,12 @@ describe("AI orchestrator fallback", () => {
       history: [],
     });
 
-    expect(mockedAskRag).not.toHaveBeenCalled();
     expect(mockedAskLlm).not.toHaveBeenCalled();
     expect(result.mode).toBe("image_chat");
     expect(result.message).toContain("too low");
-    expect(result.needsNewImage).toBe(true);
-    expect(result.recommendedAction).toBe("upload_clearer_image");
-    expect(result.lowConfidenceWarning).toContain("Low CNN confidence");
+    expect((result as any).needsNewImage).toBe(true);
+    expect((result as any).recommendedAction).toBe("upload_clearer_image");
+    expect((result as any).lowConfidenceWarning).toContain("Low CNN confidence");
   });
 
   it("ask_for_new_image calls RAG/LLM and returns needsNewImage=true and recommendedAction with appended instruction", async () => {
@@ -198,7 +188,6 @@ describe("AI orchestrator fallback", () => {
       provider: "cnn",
     } as any);
 
-    mockedAskRag.mockResolvedValue({ message: "LLM result.", source: "rag", provider: "rag" });
 
     const result = await orchestrateAssistantRequest({
       userId: "u1",
@@ -208,9 +197,8 @@ describe("AI orchestrator fallback", () => {
       history: [],
     });
 
-    expect(mockedAskRag).toHaveBeenCalled();
-    expect(result.needsNewImage).toBe(true);
-    expect(result.recommendedAction).toBe("upload_clearer_image");
+    expect((result as any).needsNewImage).toBe(true);
+    expect((result as any).recommendedAction).toBe("upload_clearer_image");
     expect(result.message).toContain("LLM result.");
     expect(result.message).toContain("Please upload a clearer image");
   });
@@ -234,7 +222,6 @@ describe("AI orchestrator fallback", () => {
       provider: "cnn",
     } as any);
 
-    mockedAskRag.mockResolvedValue({ message: "LLM result.", source: "rag", provider: "rag" });
 
     const result = await orchestrateAssistantRequest({
       userId: "u1",
@@ -244,10 +231,9 @@ describe("AI orchestrator fallback", () => {
       history: [],
     });
 
-    expect(mockedAskRag).toHaveBeenCalled();
-    expect(result.needsNewImage).toBe(false);
-    expect(result.recommendedAction).toBe("review_with_caution");
+    expect((result as any).needsNewImage).toBe(false);
+    expect((result as any).recommendedAction).toBe("review_with_caution");
     expect(result.message).toBe("LLM result.");
-    expect(result.lowConfidenceWarning).toContain("Low CNN confidence");
+    expect((result as any).lowConfidenceWarning).toContain("Low CNN confidence");
   });
 });

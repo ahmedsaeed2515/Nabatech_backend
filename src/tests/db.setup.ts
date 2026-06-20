@@ -1,8 +1,14 @@
+process.env["MONGOMS_MD5_CHECK"] = "0";
+process.env["MONGOMS_DISABLE_POSTINSTALL"] = "1";
+
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 
 dotenv.config();
 
+import { MongoMemoryServer } from 'mongodb-memory-server';
+
+let mongoServer: MongoMemoryServer | null = null;
 let connectPromise: Promise<typeof mongoose> | null = null;
 
 export const connectTestDB = async () => {
@@ -12,7 +18,8 @@ export const connectTestDB = async () => {
 
   if (mongoose.connection.readyState === 1) return;
   if (!connectPromise) {
-    const uri = process.env.MONGODB_URI_TEST || "mongodb://127.0.0.1:27017/nabatech_test";
+    mongoServer = await MongoMemoryServer.create();
+    const uri = mongoServer.getUri();
     process.env.MONGO_URI = uri;
     connectPromise = mongoose.connect(uri, {
       serverSelectionTimeoutMS: 5000
@@ -25,6 +32,10 @@ export const disconnectTestDB = async () => {
   if (mongoose.connection.readyState === 1) {
     await mongoose.connection.db?.dropDatabase();
     await mongoose.connection.close();
+  }
+  if (mongoServer) {
+    await mongoServer.stop();
+    mongoServer = null;
   }
   connectPromise = null;
 };

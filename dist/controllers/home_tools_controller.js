@@ -3,9 +3,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getHomeToolsAnalytics = exports.getWateringRecommendation = exports.createWateringHistory = exports.getWateringHistory = exports.getLightRecommendation = exports.createLightMeterHistory = exports.getLightMeterHistory = void 0;
+exports.trackHomeEvent = exports.getHomeFeed = exports.getHomeToolsAnalytics = exports.getWateringRecommendation = exports.createWateringHistory = exports.getWateringHistory = exports.getLightRecommendation = exports.createLightMeterHistory = exports.getLightMeterHistory = void 0;
 const light_meter_session_model_1 = __importDefault(require("../models/light_meter_session_model"));
 const watering_calculation_model_1 = __importDefault(require("../models/watering_calculation_model"));
+const home_widget_model_1 = __importDefault(require("../models/home_widget_model"));
+const home_banner_model_1 = __importDefault(require("../models/home_banner_model"));
+const home_quick_action_model_1 = __importDefault(require("../models/home_quick_action_model"));
+const home_section_model_1 = __importDefault(require("../models/home_section_model"));
+const home_analytics_model_1 = __importDefault(require("../models/home_analytics_model"));
+const ai_config_service_1 = require("../services/ai/ai_config_service");
+const llm_provider_1 = require("../services/ai/llm_provider");
 const toLightPayload = (item) => ({
     id: item._id,
     plantId: item.plantId || null,
@@ -212,3 +219,68 @@ const getHomeToolsAnalytics = async (req, res) => {
     }
 };
 exports.getHomeToolsAnalytics = getHomeToolsAnalytics;
+// ---------- Feed Orchestrator ----------
+const getHomeFeed = async (req, res) => {
+    try {
+        const userId = req.user?.id || "anonymous";
+        const now = new Date();
+        const [widgets, banners, actions, sections] = await Promise.all([
+            home_widget_model_1.default.find({ isActive: true }).sort({ defaultOrder: 1 }),
+            home_banner_model_1.default.find({
+                isActive: true,
+                $or: [{ startDate: null }, { startDate: { $lte: now } }],
+                $or: [{ endDate: null }, { endDate: { $gte: now } }],
+            }).sort({ priority: -1 }),
+            home_quick_action_model_1.default.find({ isActive: true }).sort({ order: 1 }),
+            home_section_model_1.default.find({ isActive: true }).sort({ order: 1 })
+        ]);
+        // AI Daily Tip (Mock integration, actual AI Orchestrator can be called here)
+        let aiTip = null;
+        if (userId !== "anonymous") {
+            try {
+                const settings = await (0, ai_config_service_1.getAiSettings)();
+                const prompt = `Generate a single short (max 2 sentences) garden tip or fact.`;
+                const llmResult = await (0, llm_provider_1.askLlm)(settings, prompt, "llm", [], "search");
+                aiTip = { title: "Daily Tip", message: llmResult.message };
+            }
+            catch (e) {
+                // Fallback
+                aiTip = { title: "Daily Tip", message: "Watering early morning prevents evaporation and fungal disease." };
+            }
+        }
+        return res.status(200).json({
+            success: true,
+            data: {
+                banners: banners.map(b => ({ id: b._id, title: b.title, imageUrl: b.imageUrl, targetUrl: b.targetUrl })),
+                quickActions: actions.map(a => ({ id: a._id, label: a.label, iconName: a.iconName, deeplink: a.deeplink })),
+                widgets: widgets.map(w => ({ id: w._id, widgetId: w.widgetId, title: w.title, description: w.description })),
+                sections: sections.map(s => ({ id: s._id, sectionId: s.sectionId, title: s.title, type: s.type })),
+                aiTip
+            }
+        });
+    }
+    catch (error) {
+        return res.status(500).json({ success: false, message: "Failed to load home feed" });
+    }
+};
+exports.getHomeFeed = getHomeFeed;
+const trackHomeEvent = async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        const { eventType, entityType, entityId } = req.body;
+        if (!eventType || !entityType || !entityId) {
+            return res.status(400).json({ success: false, message: "Missing tracking data" });
+        }
+        await home_analytics_model_1.default.create({
+            userId: userId ? userId : undefined,
+            eventType,
+            entityType,
+            entityId
+        });
+        return res.status(200).json({ success: true });
+    }
+    catch (error) {
+        return res.status(500).json({ success: false, message: "Failed to track event" });
+    }
+};
+exports.trackHomeEvent = trackHomeEvent;

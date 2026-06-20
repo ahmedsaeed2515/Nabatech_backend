@@ -46,8 +46,8 @@ const testAdminAiSettings = async (req, res) => {
         const results = {};
         if (provider === "all" || provider === "rag") {
             try {
-                const rag = await (0, rag_provider_1.askRag)(settings, String(question), [], settings.rag.topK);
-                results.rag = { success: true, provider: rag.provider, source: rag.source };
+                const ragResult = await (0, rag_provider_1.retrieveRagChunks)(settings, "test disease", String(question), settings.rag.topK);
+                results.rag = { success: true, provider: "rag-retrieve", chunksReturned: ragResult.chunks.length };
             }
             catch (error) {
                 results.rag = { success: false, error: (0, ai_errors_1.sanitizeErrorMessage)(error) || "RAG test failed" };

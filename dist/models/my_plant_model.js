@@ -36,10 +36,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 const myPlantSchema = new mongoose_1.Schema({
     user: { type: mongoose_1.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    garden: { type: mongoose_1.Schema.Types.ObjectId, ref: "Garden", index: true },
     name: { type: String, required: true },
     species: { type: String, required: true },
     imageUrl: { type: String, default: "" },
-    location: { type: String, enum: ['indoor', 'outdoor', '\u062F\u0627\u062E\u0644\u064A', '\u062E\u0627\u0631\u062C\u064A'], required: true },
+    location: { type: String, enum: ['indoor', 'outdoor', '\u062F\u0627\u062E\u0644\u064A', '\u062E\u0627\u0631\u062C\u064a'], required: true },
     waterFrequencyDays: { type: Number, required: true },
     lastWatered: { type: Date, default: Date.now },
     lastFertilized: { type: Date },
@@ -49,6 +50,11 @@ const myPlantSchema = new mongoose_1.Schema({
         type: String,
         enum: ['excellent', 'good', 'needs_care', 'sick', 'critical', 'ممتازة', 'جيدة', 'تحتاج رعاية', 'مريضة', 'حرجة'],
         default: 'excellent'
+    },
+    growthStage: {
+        type: String,
+        enum: ['SEED', 'SPROUT', 'VEGETATIVE', 'FLOWERING', 'FRUITING', 'MATURE', 'DEAD'],
+        default: 'MATURE'
     },
 }, { timestamps: true });
 exports.default = mongoose_1.default.model("MyPlant", myPlantSchema);

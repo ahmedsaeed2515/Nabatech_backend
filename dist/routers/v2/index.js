@@ -16,6 +16,7 @@ const AnalyticsController_1 = require("../../controllers/AnalyticsController");
 const CommunityController_1 = require("../../controllers/CommunityController");
 const ToolingController_1 = require("../../controllers/ToolingController");
 const EdgeController_1 = require("../../controllers/EdgeController");
+const PlantIdentificationController_1 = require("../../controllers/PlantIdentificationController");
 const upload_middleware_1 = __importDefault(require("../../middlewares/upload_middleware"));
 const auth_v2_1 = require("../../middlewares/auth_v2");
 const idempotency_1 = require("../../middlewares/idempotency");
@@ -34,25 +35,37 @@ const analyticsController = new AnalyticsController_1.AnalyticsController();
 const communityController = new CommunityController_1.CommunityController();
 const toolingController = new ToolingController_1.ToolingController();
 const edgeController = new EdgeController_1.EdgeController();
+const plantIdentificationController = new PlantIdentificationController_1.PlantIdentificationController();
 // Auth
 router.post('/auth/register', authController.register);
 router.post('/auth/login', authController.login);
 // Gardens
 router.post('/gardens', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, gardenController.createGarden);
 router.get('/gardens', auth_v2_1.protectV2, gardenController.getGardens);
+router.put('/gardens/:id', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, gardenController.updateGarden);
+router.delete('/gardens/:id', auth_v2_1.protectV2, gardenController.deleteGarden);
 // Zones
 router.post('/zones', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, zoneController.createZone);
 router.get('/zones', auth_v2_1.protectV2, zoneController.getZones);
+router.put('/zones/:id', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, zoneController.updateZone);
+router.delete('/zones/:id', auth_v2_1.protectV2, zoneController.deleteZone);
 // Plants
 router.post('/plants', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, plantController.createPlant);
+router.post('/plants/identify', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, upload_middleware_1.default.single('image'), plantIdentificationController.identifyPlant);
+router.get('/plants/identify/history', auth_v2_1.protectV2, plantIdentificationController.getHistory);
+router.put('/plants/identify/:id/garden', auth_v2_1.protectV2, plantIdentificationController.markAddedToGarden);
 router.get('/plants/:id', auth_v2_1.protectV2, plantController.getPlantDetails); // Maps to GET /plants/:id
 router.get('/plants/:id/details', auth_v2_1.protectV2, plantController.getPlantDetails);
 router.put('/plants/:id', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, plantController.updatePlant);
+router.delete('/plants/:id', auth_v2_1.protectV2, plantController.deletePlant);
 // Care Actions & Fertilizer
 router.post('/plants/:id/care', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, careController.logCareAction);
 router.post('/plants/:id/fertilizer', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, careController.logFertilizer);
 // Tasks
 router.get('/tasks/daily', auth_v2_1.protectV2, taskController.getDailyTasks);
+router.post('/tasks', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, taskController.createTask);
+router.put('/tasks/:id', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, taskController.updateTask);
+router.delete('/tasks/:id', auth_v2_1.protectV2, taskController.deleteTask);
 router.put('/tasks/:id/complete', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, taskController.completeTask);
 // Growth Tracking
 router.post('/plants/:id/growth', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, upload_middleware_1.default.single('image'), growthController.logMeasurement);
@@ -67,10 +80,13 @@ router.get('/analytics/ai-report', auth_v2_1.protectV2, analyticsController.getA
 // Community
 router.post('/posts', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, upload_middleware_1.default.single('image'), communityController.createPost);
 router.get('/posts', auth_v2_1.protectV2, communityController.getPosts);
+router.put('/posts/:id', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, upload_middleware_1.default.single('image'), communityController.updatePost);
 router.delete('/posts/:id', auth_v2_1.protectV2, communityController.deletePost);
 router.post('/posts/:id/like', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, communityController.toggleLike);
 router.post('/posts/:id/comments', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, communityController.addComment);
 router.get('/posts/:id/comments', auth_v2_1.protectV2, communityController.getComments);
+router.put('/posts/:postId/comments/:commentId', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, communityController.updateComment);
+router.delete('/posts/:postId/comments/:commentId', auth_v2_1.protectV2, communityController.deleteComment);
 // Tooling (Wishlist & Inventory)
 router.post('/wishlist', auth_v2_1.protectV2, (0, validate_request_middleware_1.validateRequest)(v2_1.createWishlistItemSchema), idempotency_1.IdempotencyCheck, toolingController.createWishlistItem);
 router.get('/wishlist', auth_v2_1.protectV2, toolingController.getWishlist);

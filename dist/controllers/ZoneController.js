@@ -34,6 +34,33 @@ class ZoneController {
                 res.status(400).json({ status: 'error', message: err.message });
             }
         };
+        this.updateZone = async (req, res) => {
+            try {
+                const id = req.params.id;
+                const data = req.body;
+                const zone = await this.gardenService.updateZone(id, data);
+                if (!zone) {
+                    return res.status(404).json({ status: 'error', message: 'Zone not found' });
+                }
+                res.status(200).json({ status: 'success', data: zone });
+            }
+            catch (err) {
+                res.status(400).json({ status: 'error', message: err.message });
+            }
+        };
+        this.deleteZone = async (req, res) => {
+            try {
+                const id = req.params.id;
+                const success = await this.gardenService.deleteZone(id);
+                if (!success) {
+                    return res.status(404).json({ status: 'error', message: 'Zone not found' });
+                }
+                res.status(200).json({ status: 'success', message: 'Zone deleted successfully' });
+            }
+            catch (err) {
+                res.status(400).json({ status: 'error', message: err.message });
+            }
+        };
         this.gardenService = new GardenService_1.GardenService();
         this.zoneRepo = new ZoneRepository_1.ZoneRepository();
     }

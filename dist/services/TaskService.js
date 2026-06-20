@@ -25,5 +25,27 @@ class TaskService {
         await task.save();
         return task;
     }
+    async createTask(userId, title, dueDate, plantId) {
+        return this.taskRepo.create({
+            user: userId,
+            title,
+            dueDate,
+            plantId: plantId,
+            status: task_model_1.TaskStatus.PENDING
+        });
+    }
+    async updateTask(taskId, userId, data) {
+        const task = await this.taskRepo.findOne({ _id: taskId, user: userId });
+        if (!task)
+            return null;
+        return this.taskRepo.update(taskId, data);
+    }
+    async deleteTask(taskId, userId) {
+        const task = await this.taskRepo.findOne({ _id: taskId, user: userId });
+        if (!task)
+            return false;
+        await this.taskRepo.hardDelete(taskId);
+        return true;
+    }
 }
 exports.TaskService = TaskService;

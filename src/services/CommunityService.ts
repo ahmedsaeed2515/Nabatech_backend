@@ -21,11 +21,20 @@ export class CommunityService {
     this.userRepo = new UserRepository();
   }
 
-  async createPost(userId: string, content: string, imageUrl?: string) {
+  async createPost(userId: string, content: string, imageUrl?: string, plantTag: string = 'General', title?: string) {
+    const user = await this.userRepo.findById(userId);
+    const authorName = user?.name || user?.email || 'Unknown';
     return this.postRepo.create({
-      user: userId as any,
+      author: new mongoose.Types.ObjectId(userId) as any,
+      authorName,
+      plantTag,
+      title: title || 'Community Post',
       content,
-      imageUrl
+      imagePath: imageUrl,
+      likes: 0,
+      commentsCount: 0,
+      likedBy: [],
+      status: 'visible'
     });
   }
 
@@ -44,6 +53,12 @@ export class CommunityService {
         pages: Math.ceil(total / limit)
       }
     };
+  }
+
+  async updatePost(userId: string, postId: string, data: Partial<{content: string, imagePath: string}>) {
+    const post = await this.postRepo.findById(postId);
+    if (!post || post.author.toString() !== userId) return null;
+    return this.postRepo.update(postId, data);
   }
 
   async toggleLike(userId: string, postId: string) {
@@ -81,12 +96,13 @@ export class CommunityService {
 
     try {
       const post = await this.postRepo.findById(postId);
-      if (post && post.user.toString() !== userId) {
-        const postOwner = await this.userRepo.findById(post.user.toString());
+      if (post && post.author.toString() !== userId) {
+        const postOwner = await this.userRepo.findById(post.author.toString());
         const commenter = await this.userRepo.findById(userId);
         
         if (postOwner && postOwner.fcmToken) {
-          const commenterName = commenter?.email || 'Someone';
+          // FIX [TASK-6.1]: Use user's real name instead of email
+          const commenterName = commenter?.name || commenter?.email?.split('@')[0] || 'Someone';
           await this.notificationService.sendPushNotification(
             postOwner.fcmToken,
             {
@@ -108,5 +124,18 @@ export class CommunityService {
 
   async getComments(postId: string) {
     return this.commentRepo.findByPostId(postId);
+  }
+
+  async updateComment(userId: string, commentId: string, content: string) {
+    const comment = await this.commentRepo.findById(commentId);
+    if (!comment || comment.user.toString() !== userId) return null;
+    return this.commentRepo.update(commentId, { content });
+  }
+
+  async deleteComment(userId: string, commentId: string) {
+    const comment = await this.commentRepo.findById(commentId);
+    if (!comment || comment.user.toString() !== userId) return false;
+    await this.commentRepo.hardDelete(commentId);
+    return true;
   }
 }

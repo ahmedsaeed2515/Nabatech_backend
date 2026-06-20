@@ -3,12 +3,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAllChatLogs = exports.getChatHistory = exports.chatWithAI = void 0;
+exports.submitFeedback = exports.getAllChatLogs = exports.getChatSessions = exports.getChatHistory = exports.chatWithAI = void 0;
 const message_model_1 = __importDefault(require("../models/message_model"));
 const ai_orchestrator_service_1 = require("../services/ai/ai_orchestrator_service");
 const ai_errors_1 = require("../services/ai/ai_errors");
 const chat_schemas_1 = require("../validation/chat_schemas");
 const crypto_1 = __importDefault(require("crypto"));
+const message_feedback_model_1 = __importDefault(require("../models/message_feedback_model"));
 /**
  * Loads recent message history from DB for a given user+conversationId.
  * Returns up to `limit` messages in chronological order (oldest first).
@@ -59,6 +60,7 @@ const chatWithAI = async (req, res) => {
         const clientHistory = Array.isArray(req.body?.history) ? req.body.history : [];
         const topK = Number(req.body?.top_k) || undefined;
         const clientOperationId = req.body?.clientOperationId;
+        const language = (req.headers["accept-language"] || req.headers["x-app-language"] || "en").toString().split(",")[0].trim().split("-")[0];
         if (!(0, chat_schemas_1.validateChatText)(text)) {
             return res.status(400).json({ success: false, message: "Message is required and must be under 2000 characters" });
         }
@@ -68,7 +70,7 @@ const chatWithAI = async (req, res) => {
         const trimmedText = text.trim();
         const userId = req.user.id;
         const requestId = crypto_1.default.randomUUID();
-        const conversationId = `conv-${userId}`;
+        const conversationId = req.body?.conversationId || `conv-${crypto_1.default.randomUUID()}`;
         if (clientOperationId) {
             const existing = await message_model_1.default.findOne({ user: userId, clientOperationId, role: "assistant" });
             if (existing) {
@@ -105,6 +107,7 @@ const chatWithAI = async (req, res) => {
                 question: trimmedText,
                 history, // ✅ FIX #1: merged DB + client history injected
                 topK,
+                language,
             });
         }
         catch (aiError) {
@@ -159,7 +162,11 @@ const getChatHistory = async (req, res) => {
         const userId = req.user.id;
         const cursor = req.query.cursor;
         const limit = Math.min(Number(req.query.limit) || 50, 50);
+        const conversationId = req.query.conversationId;
         const query = { user: userId };
+        if (conversationId) {
+            query.conversationId = conversationId;
+        }
         if (cursor) {
             const cursorMsg = await message_model_1.default.findById(cursor);
             if (!cursorMsg) {
@@ -205,6 +212,40 @@ const getChatHistory = async (req, res) => {
     }
 };
 exports.getChatHistory = getChatHistory;
+const getChatSessions = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const limit = Math.min(Number(req.query.limit) || 20, 20);
+        // Group messages by conversationId, get the most recent message for each session
+        const sessions = await message_model_1.default.aggregate([
+            { $match: { user: require("mongoose").Types.ObjectId(userId) } },
+            { $sort: { createdAt: -1 } },
+            {
+                $group: {
+                    _id: "$conversationId",
+                    lastMessage: { $first: "$text" },
+                    updatedAt: { $first: "$createdAt" },
+                }
+            },
+            { $sort: { updatedAt: -1 } },
+            { $limit: limit }
+        ]);
+        const payload = sessions.map(s => ({
+            conversationId: s._id,
+            title: s.lastMessage,
+            updatedAt: s.updatedAt,
+        }));
+        return res.status(200).json({
+            success: true,
+            data: payload
+        });
+    }
+    catch (error) {
+        console.error("Failed to fetch chat sessions:", error);
+        return res.status(500).json({ success: false, message: "Failed to fetch chat sessions", error });
+    }
+};
+exports.getChatSessions = getChatSessions;
 const getAllChatLogs = async (req, res) => {
     try {
         const limit = Math.min(Number(req.query.limit) || 50, 50);
@@ -285,3 +326,24 @@ const getAllChatLogs = async (req, res) => {
     }
 };
 exports.getAllChatLogs = getAllChatLogs;
+const submitFeedback = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { messageId, rating, textFeedback, isHallucination, category } = req.body;
+        if (!messageId || !rating) {
+            return res.status(400).json({ success: false, message: "messageId and rating are required" });
+        }
+        const message = await message_model_1.default.findById(messageId);
+        if (!message) {
+            return res.status(404).json({ success: false, message: "Message not found" });
+        }
+        // Upsert feedback
+        const feedback = await message_feedback_model_1.default.findOneAndUpdate({ message: messageId, user: userId }, { rating, textFeedback, isHallucination: Boolean(isHallucination), category }, { upsert: true, new: true });
+        return res.status(200).json({ success: true, feedback });
+    }
+    catch (error) {
+        console.error("Failed to submit feedback:", error);
+        return res.status(500).json({ success: false, message: "Failed to submit feedback", error });
+    }
+};
+exports.submitFeedback = submitFeedback;

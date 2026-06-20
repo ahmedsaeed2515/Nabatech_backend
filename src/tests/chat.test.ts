@@ -34,7 +34,9 @@ describe("Chat API with orchestrator", () => {
       message: "answer from rag",
       source: "rag",
       provider: "rag",
-    });
+      ragContext: undefined,
+      communityContext: undefined,
+    } as any);
 
     const res = await request(app)
       .post("/api/chat")

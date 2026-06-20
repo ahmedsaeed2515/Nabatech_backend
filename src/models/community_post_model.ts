@@ -11,8 +11,9 @@ export interface ICommunityPost extends Document {
   imagePath?: string;
   imagePublicId?: string;
   likedBy: mongoose.Types.ObjectId[];
-  status: "visible" | "hidden" | "removed";
+  status: "visible" | "hidden" | "removed" | "resolved";
   moderationReason?: string;
+  moderationNotes?: string;
   moderatedBy?: mongoose.Types.ObjectId;
   moderatedAt?: Date;
   clientOperationId?: string;
@@ -34,8 +35,9 @@ const communityPostSchema = new Schema<ICommunityPost>(
     imagePath: { type: String, default: "" },
     imagePublicId: { type: String },
     likedBy: [{ type: Schema.Types.ObjectId, ref: "User" }],
-    status: { type: String, enum: ["visible", "hidden", "removed"], default: "visible" },
+    status: { type: String, enum: ["visible", "hidden", "removed", "resolved"], default: "visible" },
     moderationReason: { type: String },
+    moderationNotes: { type: String },
     moderatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     moderatedAt: { type: Date },
     clientOperationId: { type: String, index: true },

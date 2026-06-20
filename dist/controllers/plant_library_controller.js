@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bulkImport = exports.deleteDisease = exports.updateDisease = exports.addDisease = exports.getDiseases = exports.deletePlant = exports.updatePlant = exports.addPlant = exports.getPlants = void 0;
+exports.bulkImport = exports.deleteDisease = exports.updateDisease = exports.addDisease = exports.getDiseases = exports.exportPlants = exports.getPlantStats = exports.publishPlant = exports.archivePlant = exports.getPlantById = exports.deletePlant = exports.updatePlant = exports.addPlant = exports.searchPlants = exports.getPlants = void 0;
 const plant_model_1 = __importDefault(require("../models/plant_model"));
 const disease_model_1 = __importDefault(require("../models/disease_model"));
 const logger_1 = __importDefault(require("../logger"));
@@ -92,6 +92,47 @@ const getPlants = async (req, res) => {
     }
 };
 exports.getPlants = getPlants;
+// @desc    Search plants by wildcard text
+// @route   GET /api/v1/admin/plants/search
+// @access  Admin
+const searchPlants = async (req, res) => {
+    try {
+        const { q, cursor, limit = "20" } = req.query;
+        const limitNumber = Math.min(parseInt(limit, 10) || 20, 100);
+        const query = { isLibraryItem: true };
+        if (q) {
+            const search = q.trim();
+            query.$or = [
+                { species: { $regex: search, $options: "i" } },
+                { scientificName: { $regex: search, $options: "i" } },
+                { descriptionEn: { $regex: search, $options: "i" } },
+                { nameEn: { $regex: search, $options: "i" } },
+                { nameAr: { $regex: search, $options: "i" } }
+            ];
+        }
+        let cursorQuery = {};
+        if (cursor) {
+            cursorQuery._id = { $gt: cursor };
+        }
+        const plants = await plant_model_1.default.find({ ...query, ...cursorQuery })
+            .sort({ _id: 1 })
+            .limit(limitNumber + 1);
+        const hasNextPage = plants.length > limitNumber;
+        const items = hasNextPage ? plants.slice(0, -1) : plants;
+        const nextCursor = hasNextPage ? items[items.length - 1]._id : null;
+        const totalCount = await plant_model_1.default.countDocuments(query);
+        res.status(200).json({
+            success: true,
+            data: { items, pageInfo: { hasNextPage, nextCursor } },
+            count: totalCount,
+            totalPages: Math.ceil(totalCount / limitNumber),
+        });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message || "Failed to search plants" });
+    }
+};
+exports.searchPlants = searchPlants;
 // @desc    Add new plant
 // @route   POST /api/plant-library/plants
 // @access  Admin
@@ -229,6 +270,118 @@ const deletePlant = async (req, res) => {
     }
 };
 exports.deletePlant = deletePlant;
+// @desc    Get plant by id
+// @route   GET /api/plant-library/plants/:id
+// @access  Public
+const getPlantById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const plant = await plant_model_1.default.findById(id).populate('tags diseases seasons');
+        if (!plant) {
+            return res.status(404).json({ success: false, message: "Plant not found" });
+        }
+        res.status(200).json({ success: true, data: plant });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message || "Failed to fetch plant" });
+    }
+};
+exports.getPlantById = getPlantById;
+// @desc    Archive plant
+// @route   PATCH /api/plant-library/plants/:id/archive
+// @access  Admin
+const archivePlant = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const plant = await plant_model_1.default.findByIdAndUpdate(id, { status: 'ARCHIVED' }, { new: true });
+        if (!plant) {
+            return res.status(404).json({ success: false, message: "Plant not found" });
+        }
+        res.status(200).json({ success: true, data: plant });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message || "Failed to archive plant" });
+    }
+};
+exports.archivePlant = archivePlant;
+// @desc    Publish plant
+// @route   PATCH /api/plant-library/plants/:id/publish
+// @access  Admin
+const publishPlant = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const plant = await plant_model_1.default.findByIdAndUpdate(id, { status: 'PUBLISHED' }, { new: true });
+        if (!plant) {
+            return res.status(404).json({ success: false, message: "Plant not found" });
+        }
+        res.status(200).json({ success: true, data: plant });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message || "Failed to publish plant" });
+    }
+};
+exports.publishPlant = publishPlant;
+// @desc    Search plants (dedicated search endpoint)
+// @route   GET /api/plant-library/plants/search
+// @access  Public
+const searchPlants = async (req, res) => {
+    try {
+        const { q, limit = "10" } = req.query;
+        if (!q) {
+            return res.status(400).json({ success: false, message: "Search query 'q' is required" });
+        }
+        const limitNumber = Math.min(parseInt(limit, 10) || 10, 50);
+        const normalized = q.toLowerCase().trim();
+        const query = {
+            isLibraryItem: true,
+            status: 'PUBLISHED',
+            $or: [
+                { normalizedNameEn: { $regex: `^${normalized}` } },
+                { normalizedNameAr: { $regex: `^${normalized}` } },
+                { nameEn: { $regex: q, $options: "i" } },
+                { nameAr: { $regex: q, $options: "i" } },
+            ]
+        };
+        const plants = await plant_model_1.default.find(query).limit(limitNumber).select('nameAr nameEn imageUrl category slug');
+        res.status(200).json({ success: true, data: plants });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message || "Failed to search plants" });
+    }
+};
+exports.searchPlants = searchPlants;
+// @desc    Get plant stats
+// @route   GET /api/plant-library/plants/stats
+// @access  Admin
+const getPlantStats = async (req, res) => {
+    try {
+        const totalCount = await plant_model_1.default.countDocuments({ isLibraryItem: true });
+        const publishedCount = await plant_model_1.default.countDocuments({ isLibraryItem: true, status: 'PUBLISHED' });
+        const draftCount = await plant_model_1.default.countDocuments({ isLibraryItem: true, status: 'DRAFT' });
+        const archivedCount = await plant_model_1.default.countDocuments({ isLibraryItem: true, status: 'ARCHIVED' });
+        res.status(200).json({
+            success: true,
+            data: { totalCount, publishedCount, draftCount, archivedCount }
+        });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message || "Failed to fetch stats" });
+    }
+};
+exports.getPlantStats = getPlantStats;
+// @desc    Export plants
+// @route   GET /api/plant-library/plants/export
+// @access  Admin
+const exportPlants = async (req, res) => {
+    try {
+        const plants = await plant_model_1.default.find({ isLibraryItem: true }).lean();
+        res.status(200).json({ success: true, data: plants });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message || "Failed to export plants" });
+    }
+};
+exports.exportPlants = exportPlants;
 // ==========================================
 // Diseases Controllers
 // ==========================================

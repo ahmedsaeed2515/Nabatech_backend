@@ -27,30 +27,37 @@ export class VoiceService {
 
   async processAudio(userId: string, audioFilePath: string) {
     try {
-      // Initialize SpeechClient lazily (requires Google credentials)
-      if (!this.speechClient) {
-        try {
-          this.speechClient = new v1.SpeechClient();
-        } catch (e) {
-          logger.error('Google Speech client unavailable:', e);
-          return await this.voiceRepo.create({
-            user: userId as any,
-            transcript: '',
-            status: VoiceCommandStatus.FAILED,
-            response: 'Voice service unavailable in this environment'
-          });
-        }
-      }
-      // 1. Transcribe audio
       const file = fs.readFileSync(audioFilePath);
       const audioBytes = file.toString('base64');
+      return this.processCommand(audioBytes, userId, 'en-US');
+    } catch (err) {
+      logger.error('Error processing audio file:', err);
+      throw err;
+    }
+  }
+
+  async processCommand(audioBytes: string, userId: string, languageCode: string = 'ar') {
+      try {
+        if (!this.speechClient) {
+          try {
+            this.speechClient = new v1.SpeechClient();
+          } catch (e) {
+            logger.error('Google Speech client unavailable:', e);
+            return await this.voiceRepo.create({
+              user: userId as any,
+              transcript: '',
+              status: VoiceCommandStatus.FAILED,
+              response: 'Voice service unavailable in this environment'
+            });
+          }
+        }
 
       const request = {
         audio: { content: audioBytes },
         config: {
           encoding: 'LINEAR16' as const, // Or adjust based on client
           sampleRateHertz: 16000,
-          languageCode: 'en-US',
+          languageCode: languageCode,
         },
       };
 

@@ -19,5 +19,8 @@ class PlantRepository extends BaseRepository_1.BaseRepository {
     async findAllWithDna() {
         return this.model.find().populate('dna').exec();
     }
+    async searchPlants(query, limit) {
+        return this.model.find({ name: { $regex: query, $options: 'i' } }).limit(limit).exec();
+    }
 }
 exports.PlantRepository = PlantRepository;

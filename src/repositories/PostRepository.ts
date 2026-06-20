@@ -1,29 +1,29 @@
 import { BaseRepository } from './BaseRepository';
-import PostModel, { Post } from '../models/post_model';
+import CommunityPostModel, { ICommunityPost } from '../models/community_post_model';
 
-export class PostRepository extends BaseRepository<Post> {
+export class PostRepository extends BaseRepository<ICommunityPost> {
   constructor() {
-    super(PostModel);
+    super(CommunityPostModel);
   }
 
-  async findPaginated(skip: number, limit: number): Promise<Post[]> {
-    return this.model.find()
+  async findPaginated(skip: number, limit: number): Promise<ICommunityPost[]> {
+    return this.model.find({ status: 'visible' })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate('user', 'email level')
+      .populate('author', 'name email level')
       .exec();
   }
 
   async countAll(): Promise<number> {
-    return this.model.countDocuments().exec();
+    return this.model.countDocuments({ status: 'visible' }).exec();
   }
 
   async incrementLikes(postId: string): Promise<void> {
-    await this.model.findByIdAndUpdate(postId, { $inc: { likesCount: 1 } }).exec();
+    await this.model.findByIdAndUpdate(postId, { $inc: { likes: 1 } }).exec();
   }
 
   async decrementLikes(postId: string): Promise<void> {
-    await this.model.findByIdAndUpdate(postId, { $inc: { likesCount: -1 } }).exec();
+    await this.model.findByIdAndUpdate(postId, { $inc: { likes: -1 } }).exec();
   }
 }

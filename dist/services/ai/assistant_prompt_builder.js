@@ -48,6 +48,7 @@ const buildAssistantPrompt = (ctx) => {
         ctx.lowConfidenceWarning ? `Warning: ${ctx.lowConfidenceWarning}` : "",
         ctx.ragContext ? `\nRetrieved Knowledge Context:\n${ctx.ragContext}` : "",
         ctx.communityContext ? `\nRetrieved Community Context:\n${ctx.communityContext}` : "",
+        ctx.language ? `\n[CRITICAL INSTRUCTION]: You MUST respond entirely in the following language code: ${ctx.language.toUpperCase()}` : "",
     ]
         .filter(Boolean)
         .join("\n");

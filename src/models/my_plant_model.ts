@@ -2,6 +2,7 @@ import mongoose, { Document, Schema } from "mongoose";
 
 export interface IMyPlant extends Document {
   user: mongoose.Types.ObjectId;
+  garden?: mongoose.Types.ObjectId;
   name: string;
   species: string;
   imageUrl: string;
@@ -12,6 +13,7 @@ export interface IMyPlant extends Document {
   plantLibraryId?: mongoose.Types.ObjectId;
   enableNotifications: boolean;
   healthStatus: string;
+  growthStage: 'SEED' | 'SPROUT' | 'VEGETATIVE' | 'FLOWERING' | 'FRUITING' | 'MATURE' | 'DEAD';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,10 +21,11 @@ export interface IMyPlant extends Document {
 const myPlantSchema = new Schema<IMyPlant>(
   {
     user: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    garden: { type: Schema.Types.ObjectId, ref: "Garden", index: true },
     name: { type: String, required: true },
     species: { type: String, required: true },
     imageUrl: { type: String, default: "" },
-    location: { type: String, enum: ['indoor', 'outdoor', '\u062F\u0627\u062E\u0644\u064A', '\u062E\u0627\u0631\u062C\u064A'], required: true },
+    location: { type: String, enum: ['indoor', 'outdoor', '\u062F\u0627\u062E\u0644\u064A', '\u062E\u0627\u0631\u062C\u064a'], required: true },
     waterFrequencyDays: { type: Number, required: true },
     lastWatered: { type: Date, default: Date.now },
     lastFertilized: { type: Date },
@@ -32,6 +35,11 @@ const myPlantSchema = new Schema<IMyPlant>(
       type: String, 
       enum: ['excellent', 'good', 'needs_care', 'sick', 'critical', 'ممتازة', 'جيدة', 'تحتاج رعاية', 'مريضة', 'حرجة'], 
       default: 'excellent' 
+    },
+    growthStage: {
+      type: String,
+      enum: ['SEED', 'SPROUT', 'VEGETATIVE', 'FLOWERING', 'FRUITING', 'MATURE', 'DEAD'],
+      default: 'MATURE'
     },
   },
   { timestamps: true }

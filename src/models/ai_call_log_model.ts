@@ -9,9 +9,20 @@ export interface IAiCallLog extends Document {
   sourceIds?: string[];
   status: "success" | "failure";
   latencyMs: number;
+  cost?: number;
+  tokensUsed?: number;
+  routedFrom?: string[];
   inputMeta?: Record<string, unknown>;
   outputMeta?: Record<string, unknown>;
   errorMessage?: string;
+  toolCalls?: Array<{
+    toolName: string;
+    argsSummary: string;
+    status: "success" | "failure";
+    errorMessage?: string;
+    durationMs: number;
+    timestamp: Date;
+  }>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,9 +37,22 @@ const aiCallLogSchema = new Schema<IAiCallLog>(
     sourceIds: { type: [String], default: [] },
     status: { type: String, enum: ["success", "failure"], required: true },
     latencyMs: { type: Number, required: true, min: 0 },
+    cost: { type: Number, default: 0 },
+    tokensUsed: { type: Number, default: 0 },
+    routedFrom: { type: [String], default: [] },
     inputMeta: { type: Schema.Types.Mixed, default: {} },
     outputMeta: { type: Schema.Types.Mixed, default: {} },
     errorMessage: { type: String, default: "" },
+    toolCalls: [
+      {
+        toolName: { type: String, required: true },
+        argsSummary: { type: String, required: true },
+        status: { type: String, enum: ["success", "failure"], required: true },
+        errorMessage: { type: String },
+        durationMs: { type: Number, required: true },
+        timestamp: { type: Date, default: Date.now }
+      }
+    ]
   },
   { timestamps: true }
 );

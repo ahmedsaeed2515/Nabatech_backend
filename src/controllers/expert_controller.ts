@@ -81,3 +81,130 @@ export const updateMyExpertProfile = async (req: Request, res: Response, next: N
     next(error);
   }
 };
+
+// @desc    Get all escalations
+// @route   GET /api/experts/admin/escalations
+// @access  Private (Admin/Expert)
+export const getEscalations = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { status } = req.query;
+    const query: any = {};
+    if (status) query.status = status;
+
+    const ExpertEscalation = (await import("../models/expert_escalation_model")).default;
+    const escalations = await ExpertEscalation.find(query).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      data: { escalations }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Claim an escalation
+// @route   POST /api/experts/admin/escalations/:id/claim
+// @access  Private (Admin/Expert)
+export const claimEscalation = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const adminId = (req as any).user.id;
+    const escalationId = req.params.id;
+
+    const ExpertEscalation = (await import("../models/expert_escalation_model")).default;
+    const escalation = await ExpertEscalation.findById(escalationId);
+
+    if (!escalation) {
+      return next(new AppError({ code: 'RESOURCE_NOT_FOUND', statusCode: 404, message: 'Escalation not found' }));
+    }
+
+    if (escalation.status !== "pending") {
+      return next(new AppError({ code: 'INVALID_STATE', statusCode: 400, message: 'Escalation is already claimed or resolved' }));
+    }
+
+    escalation.status = "claimed";
+    escalation.assignedAdminId = adminId;
+    await escalation.save();
+
+    // Broadcast update via SSE
+    broadcastEscalationEvent('claimed', escalation);
+
+    res.status(200).json({
+      success: true,
+      data: { escalation }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Resolve an escalation
+// @route   POST /api/experts/admin/escalations/:id/resolve
+// @access  Private (Admin/Expert)
+export const resolveEscalation = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const adminId = (req as any).user.id;
+    const escalationId = req.params.id;
+    const { response } = req.body;
+
+    if (!response) {
+      return next(new AppError({ code: 'VALIDATION_ERROR', statusCode: 400, message: 'Response is required' }));
+    }
+
+    const ExpertEscalation = (await import("../models/expert_escalation_model")).default;
+    const escalation = await ExpertEscalation.findById(escalationId);
+
+    if (!escalation) {
+      return next(new AppError({ code: 'RESOURCE_NOT_FOUND', statusCode: 404, message: 'Escalation not found' }));
+    }
+
+    if (escalation.status !== "claimed" || escalation.assignedAdminId !== adminId) {
+      return next(new AppError({ code: 'FORBIDDEN', statusCode: 403, message: 'You must claim this escalation before resolving it' }));
+    }
+
+    escalation.status = "resolved";
+    escalation.expertResponse = response;
+    escalation.expertId = adminId;
+    await escalation.save();
+
+    // Broadcast update via SSE
+    broadcastEscalationEvent('resolved', escalation);
+
+    res.status(200).json({
+      success: true,
+      data: { escalation }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// --- SSE Implementation for Real-Time Updates ---
+let sseClients: Response[] = [];
+
+export const streamEscalations = (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders(); // flush the headers to establish SSE
+
+  // Tell the client we connected successfully
+  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+  sseClients.push(res);
+
+  req.on('close', () => {
+    sseClients = sseClients.filter(client => client !== res);
+  });
+};
+
+const broadcastEscalationEvent = (type: string, data: any) => {
+  const payload = `data: ${JSON.stringify({ type, data })}\n\n`;
+  sseClients.forEach(client => {
+    try {
+      client.write(payload);
+    } catch (e) {
+      console.warn("Error sending SSE to client", e);
+    }
+  });
+};

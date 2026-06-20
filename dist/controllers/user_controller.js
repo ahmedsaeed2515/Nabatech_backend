@@ -10,9 +10,6 @@ const community_post_model_1 = __importDefault(require("../models/community_post
 const diagnosis_history_model_1 = __importDefault(require("../models/diagnosis_history_model"));
 const my_plant_model_1 = __importDefault(require("../models/my_plant_model"));
 const reminder_model_1 = __importDefault(require("../models/reminder_model"));
-const store_product_model_1 = __importDefault(require("../models/store_product_model"));
-const message_model_1 = __importDefault(require("../models/message_model"));
-const expert_model_1 = __importDefault(require("../models/expert_model"));
 const comment_model_1 = __importDefault(require("../models/comment_model"));
 const diary_entry_model_1 = __importDefault(require("../models/diary_entry_model"));
 // @desc    Get all users (Admin/Management only)
@@ -254,23 +251,15 @@ const getDashboardStats = async (req, res) => {
     try {
         const totalUsers = await user_model_1.default.countDocuments();
         const totalDiagnoses = await diagnosis_history_model_1.default.countDocuments();
-        const totalPlants = await my_plant_model_1.default.countDocuments();
-        const totalReminders = await reminder_model_1.default.countDocuments();
         const totalPosts = await community_post_model_1.default.countDocuments();
-        const totalProducts = await store_product_model_1.default.countDocuments();
-        const totalMessages = await message_model_1.default.countDocuments();
-        const totalExperts = await expert_model_1.default.countDocuments();
-        // Diagnoses breakdown by severity
-        const diagnosesBySeverity = await diagnosis_history_model_1.default.aggregate([
-            { $group: { _id: "$severity", count: { $sum: 1 } } }
-        ]);
+        const activeReminders = await reminder_model_1.default.countDocuments({ enabled: true });
         // Top diagnosed diseases
         const topDiseases = await diagnosis_history_model_1.default.aggregate([
             { $group: { _id: "$diseaseNameEn", count: { $sum: 1 } } },
             { $sort: { count: -1 } },
             { $limit: 5 }
         ]);
-        // FIXED: Aggregate daily diagnoses for the last 7 days
+        // Aggregate daily diagnoses for the last 7 days
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6); // standard 7-day range including today
         sevenDaysAgo.setHours(0, 0, 0, 0);
@@ -288,10 +277,9 @@ const getDashboardStats = async (req, res) => {
             },
             { $sort: { _id: 1 } }
         ]);
-        // FIXED: Calculate offline vs remote scan counts for the pie chart
+        // Calculate offline vs remote scan counts for the pie chart
         const totalOfflineScans = await diagnosis_history_model_1.default.countDocuments({ isOffline: true });
         const totalRemoteScans = await diagnosis_history_model_1.default.countDocuments({ isOffline: false });
-        const activeReminders = await reminder_model_1.default.countDocuments({ enabled: true });
         res.status(200).json({
             success: true,
             totalUsers,
@@ -309,24 +297,6 @@ const getDashboardStats = async (req, res) => {
             offlineVsRemote: {
                 offline: totalOfflineScans,
                 remote: totalRemoteScans,
-            },
-            // Dual-compatibility layer to keep dashboard graphs working perfectly
-            stats: {
-                totalUsers,
-                totalDiagnoses,
-                totalPlants,
-                totalReminders,
-                totalPosts,
-                totalProducts,
-                totalMessages,
-                totalExperts,
-                diagnosesBySeverity,
-                topDiseases,
-                dailyDiagnoses,
-                scanDistribution: [
-                    { name: "Remote Scans", value: totalRemoteScans },
-                    { name: "Offline Scans", value: totalOfflineScans },
-                ],
             },
         });
     }

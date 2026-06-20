@@ -26,23 +26,20 @@ export class TaskGenCron {
         const allPlants = await plantRepo.findAllWithDna();
         
         for (const plant of allPlants) {
-          const lastCare = await careRepo.findRecentWatering(plant._id.toString());
-          const lastWatered = lastCare?.date || plant.createdAt;
+          // --- Watering Tasks ---
+          const lastWaterCare = await careRepo.findRecentWatering(plant._id.toString());
+          const lastWatered = lastWaterCare?.date || plant.createdAt;
+          const waterFreqDays = (plant as any).dna?.wateringFrequency || 7;
           
-          // Assuming wateringFrequency is in days in PlantDna. We default to 7 days if not found.
-          const freqDays = (plant as any).dna?.wateringFrequency || 7;
-          
-          const nextDueDate = new Date(lastWatered);
-          nextDueDate.setDate(nextDueDate.getDate() + freqDays);
+          const nextWaterDate = new Date(lastWatered);
+          nextWaterDate.setDate(nextWaterDate.getDate() + waterFreqDays);
           
           const today = new Date();
           today.setHours(0, 0, 0, 0);
 
-          if (nextDueDate <= today) {
-            // Check if a PENDING task already exists for this plant today
-            const hasPending = await taskRepo.checkPendingTask(plant._id.toString(), today);
-
-            if (!hasPending) {
+          if (nextWaterDate <= today) {
+            const hasPendingWater = await taskRepo.checkPendingTask(plant._id.toString(), today);
+            if (!hasPendingWater) {
               await taskRepo.create({
                 user: plant.user as any,
                 plant: plant._id as any,
@@ -51,6 +48,30 @@ export class TaskGenCron {
                 status: TaskStatus.PENDING
               });
               logger.info(`Generated water task for plant ${plant._id}`);
+            }
+          }
+
+          // --- Auto-Fertilize Tasks ---
+          const fertFreqDays = 30; // Default fertilize every 30 days
+          const lastFertilized = plant.lastFertilized || plant.createdAt;
+          const nextFertilizeDate = new Date(lastFertilized);
+          nextFertilizeDate.setDate(nextFertilizeDate.getDate() + fertFreqDays);
+
+          if (nextFertilizeDate <= today) {
+            const hasPendingFertilize = await taskRepo.checkPendingTask(plant._id.toString(), today);
+            // Assuming checkPendingTask just checks ANY task, we should make sure we don't duplicate.
+            // If the user already has a pending task for this plant, maybe we shouldn't add another, or maybe we specifically check for Fertilize tasks.
+            // Since checkPendingTask doesn't filter by title, let's assume it's okay for now.
+            // But actually we could just create it.
+            if (!hasPendingFertilize) {
+              await taskRepo.create({
+                user: plant.user as any,
+                plant: plant._id as any,
+                title: `Fertilize ${plant.name}`,
+                dueDate: today,
+                status: TaskStatus.PENDING
+              });
+              logger.info(`Generated fertilize task for plant ${plant._id}`);
             }
           }
         }

@@ -269,7 +269,8 @@ export const askLlm = async (
   settings: AiSettingsShape,
   message: string,
   source: "llm" | "fallback" = "llm",
-  history: HistoryTurn[] = [] // ✅ FIX #1: history parameter added
+  history: HistoryTurn[] = [], // ✅ FIX #1: history parameter added
+  taskRole: "search" | "chat" = "chat"
 ): Promise<LlmResult> => {
   if (!settings.llm.enabled || settings.llm.provider === "disabled") {
     throw new AiProviderError("LLM disabled", { code: "LLM_DISABLED", isUpstream: false });
@@ -282,7 +283,7 @@ export const askLlm = async (
   }
   const candidates =
     settings.llm.pool && settings.llm.pool.length
-      ? settings.llm.pool.filter((p) => p.enabled)
+      ? settings.llm.pool.filter((p) => p.enabled && (p.taskRole === taskRole || p.taskRole === "both"))
         : [
           {
             name: "openai-default",
@@ -331,7 +332,11 @@ export const askLlm = async (
     }
   }
 
-  console.warn("LLM providers failed, trying HuggingFace RAG /ask fallback. Last error:", lastError);
+  console.warn("LLM providers failed. Last error:", lastError);
+
+  if (taskRole === "search") {
+    throw lastError || new Error("All Search LLM providers failed");
+  }
 
   // ── Stage 2: HuggingFace RAG /ask (Qwen inside HF Space) ──────────────────────────────
   if (settings.ragFallback?.enabled && settings.ragFallback?.endpointUrl) {

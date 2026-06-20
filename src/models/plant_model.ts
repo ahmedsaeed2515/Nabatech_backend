@@ -10,8 +10,15 @@ export enum PlantStage {
   DEAD = 'DEAD'
 }
 
+export enum PlantStatus {
+  DRAFT = 'DRAFT',
+  PUBLISHED = 'PUBLISHED',
+  ARCHIVED = 'ARCHIVED'
+}
+
 export interface Plant extends Document {
   isLibraryItem?: boolean;
+  status?: PlantStatus;
   zone?: Types.ObjectId;
   dna?: Types.ObjectId;
   user?: Types.ObjectId;
@@ -45,6 +52,16 @@ export interface Plant extends Document {
   propagationMethod?: string;
   nativeRegion?: string;
   plantBenefits?: string;
+  tags?: Types.ObjectId[];
+  diseases?: Types.ObjectId[];
+  seasons?: Types.ObjectId[];
+  slug?: string;
+  normalizedNameEn?: string;
+  normalizedNameAr?: string;
+  active?: boolean;
+  createdBy?: string;
+  updatedBy?: string;
+  embedding?: number[];
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date | null;
@@ -52,6 +69,7 @@ export interface Plant extends Document {
 
 const plantSchema = new mongoose.Schema<Plant>({
   isLibraryItem: { type: Boolean, default: false },
+  status: { type: String, enum: Object.values(PlantStatus), default: PlantStatus.DRAFT },
   zone: { type: mongoose.Schema.Types.ObjectId, ref: 'Zone', index: true },
   dna: { type: mongoose.Schema.Types.ObjectId, ref: 'PlantDna' },
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
@@ -76,6 +94,16 @@ const plantSchema = new mongoose.Schema<Plant>({
   healthScore: { type: Number, default: 100 },
   lastWatered: { type: Date },
   lastFertilized: { type: Date },
+  tags: [{ type: mongoose.Schema.Types.ObjectId, ref: 'PlantTag' }],
+  diseases: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Disease' }],
+  seasons: [{ type: mongoose.Schema.Types.ObjectId, ref: 'SeasonalRule' }],
+  slug: { type: String, index: true },
+  normalizedNameEn: { type: String, index: true },
+  normalizedNameAr: { type: String, index: true },
+  active: { type: Boolean, default: true },
+  createdBy: { type: String },
+  updatedBy: { type: String },
+  embedding: { type: [Number], index: '2dsphere' },
   deletedAt: { type: Date, default: null }
 }, {
   timestamps: true

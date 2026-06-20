@@ -31,6 +31,7 @@ const userSchema = new mongoose_1.default.Schema({
     selectedCountry: { type: String, trim: true },
     avatarUrl: { type: String, trim: true },
     preferences: { type: mongoose_1.default.Schema.Types.Mixed, default: {} },
+    interests: [{ type: String }],
     // ── Role / Level / Settings ───────────────────────────────────────────────
     role: { type: String, enum: Object.values(UserRole), default: UserRole.USER },
     level: { type: String, enum: Object.values(UserLevel), default: UserLevel.SPROUT },

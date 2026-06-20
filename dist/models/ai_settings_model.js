@@ -81,6 +81,11 @@ const aiSettingsSchema = new mongoose_1.Schema({
                     },
                     endpointUrl: { type: String, default: "", trim: true },
                     model: { type: String, default: "", trim: true },
+                    taskRole: {
+                        type: String,
+                        enum: ["search", "chat", "both"],
+                        default: "both",
+                    },
                     apiKeyEnc: { type: String, default: "" },
                     timeoutMs: { type: Number, min: 1000, max: 120000 },
                 },

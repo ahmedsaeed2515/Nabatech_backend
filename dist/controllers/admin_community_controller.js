@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminModerateComment = exports.adminGetComments = exports.adminModeratePost = exports.adminGetPosts = void 0;
+exports.adminModerateComment = exports.adminGetComments = exports.adminResolvePost = exports.adminModeratePost = exports.adminGetPosts = void 0;
 const community_post_model_1 = __importDefault(require("../models/community_post_model"));
 const comment_model_1 = __importDefault(require("../models/comment_model"));
 const logger_1 = require("../utils/logger");
@@ -76,6 +76,34 @@ const adminModeratePost = async (req, res) => {
     }
 };
 exports.adminModeratePost = adminModeratePost;
+const adminResolvePost = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const adminId = req.user.id;
+        const post = await community_post_model_1.default.findById(id);
+        if (!post) {
+            return res.status(404).json({ success: false, message: 'Post not found', code: 'RESOURCE_NOT_FOUND' });
+        }
+        post.status = 'resolved';
+        post.moderationNotes = 'Admin intervened';
+        post.moderatedBy = adminId;
+        post.moderatedAt = new Date();
+        post.version += 1;
+        await post.save();
+        logger_1.logger.info(`Admin resolved post ${id}`, {
+            event: 'community_feed_and_moderation.admin_resolve_post',
+            requestId: req.id,
+            actorId: adminId,
+            targetId: id
+        });
+        return res.status(200).json({ success: true, data: { post } });
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to resolve post', { event: 'community_feed_and_moderation.admin_resolve_post.error', error });
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+};
+exports.adminResolvePost = adminResolvePost;
 const adminGetComments = async (req, res) => {
     try {
         const { cursor, limit, status, authorId, postId } = req.query;

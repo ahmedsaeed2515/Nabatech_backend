@@ -80,6 +80,38 @@ export const adminModeratePost = async (req: Request, res: Response) => {
   }
 };
 
+export const adminResolvePost = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const adminId = (req as any).user.id;
+
+    const post = await CommunityPost.findById(id);
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'Post not found', code: 'RESOURCE_NOT_FOUND' });
+    }
+
+    post.status = 'resolved';
+    post.moderationNotes = 'Admin intervened';
+    post.moderatedBy = adminId;
+    post.moderatedAt = new Date();
+    post.version += 1;
+
+    await post.save();
+
+    logger.info(`Admin resolved post ${id}`, {
+      event: 'community_feed_and_moderation.admin_resolve_post',
+      requestId: (req as any).id,
+      actorId: adminId,
+      targetId: id
+    });
+
+    return res.status(200).json({ success: true, data: { post } });
+  } catch (error) {
+    logger.error('Failed to resolve post', { event: 'community_feed_and_moderation.admin_resolve_post.error', error });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 export const adminGetComments = async (req: Request, res: Response) => {
   try {
     const { cursor, limit, status, authorId, postId } = req.query;

@@ -29,6 +29,7 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
     const topK = Number(req.body?.top_k || req.body?.topK) || undefined;
     const clientOperationId = req.body?.clientOperationId;
     const file = req.file;
+    const language = (req.headers["accept-language"] || "en").toString().split(",")[0].trim().split("-")[0];
 
     if (!file && !text) {
       return res.status(400).json({ success: false, message: "Either file or text/question is required" });
@@ -65,6 +66,14 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
       }
     }
 
+    const isSSE = req.headers.accept === "text/event-stream";
+    if (isSSE) {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.flushHeaders();
+    }
+
     // 1. Run inference
     const result = await orchestrateAssistantRequest({
       userId,
@@ -73,6 +82,12 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
       question: text,
       history,
       topK,
+      language,
+      onProgress: (phase: string) => {
+        if (isSSE) {
+          res.write(`data: ${JSON.stringify({ type: "progress", phase })}\n\n`);
+        }
+      }
     });
 
     let imageUrl = "";
@@ -189,7 +204,12 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
       }
     }
 
-    return res.status(200).json({ success: true, ...result, imageUrl: imageUrl || undefined, uncertain: Boolean((result as any).lowConfidenceWarning) });
+    const finalResponse = { success: true, ...result, imageUrl: imageUrl || undefined, uncertain: Boolean((result as any).lowConfidenceWarning) };
+    if (isSSE) {
+      res.write(`data: ${JSON.stringify({ type: "result", data: finalResponse })}\n\n`);
+      return res.end();
+    }
+    return res.status(200).json(finalResponse);
   } catch (error) {
     console.error("Assistant pipeline failed:", sanitizeErrorMessage(error));
     if (uploadedImagePublicId) {
@@ -198,6 +218,10 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
       } catch (delErr) {
         console.error("Failed to cleanup Cloudinary on assistant request error:", sanitizeErrorMessage(delErr));
       }
+    }
+    if (req.headers.accept === "text/event-stream") {
+      res.write(`data: ${JSON.stringify({ type: "error", message: "Assistant request failed" })}\n\n`);
+      return res.end();
     }
     return res.status(502).json({ success: false, message: "Assistant request failed" });
   }
@@ -224,5 +248,22 @@ export const postGenerateDraft = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Draft generation failed:", sanitizeErrorMessage(error));
     return res.status(500).json({ success: false, message: "Draft generation failed" });
+  }
+};
+
+export const postQueryLibrary = async (req: Request, res: Response) => {
+  try {
+    const query = (req.body?.query || req.query?.query || "").toString().trim();
+    if (!query) {
+      return res.status(400).json({ success: false, message: "Query is required" });
+    }
+    
+    const { PlantEmbeddingsService } = await import("../services/plant_embeddings_service");
+    const plants = await PlantEmbeddingsService.searchSimilarPlants(query, 5);
+    
+    return res.status(200).json({ success: true, data: plants });
+  } catch (error) {
+    console.error("Library query failed:", sanitizeErrorMessage(error));
+    return res.status(500).json({ success: false, message: "Library query failed" });
   }
 };

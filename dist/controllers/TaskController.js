@@ -27,6 +27,46 @@ class TaskController {
                 res.status(400).json({ status: 'error', message: err.message });
             }
         };
+        this.createTask = async (req, res) => {
+            try {
+                const userId = req.user._id || req.user.userId;
+                const { title, dueDate, plantId } = req.body;
+                const task = await this.taskService.createTask(userId, title, new Date(dueDate), plantId);
+                res.status(201).json({ status: 'success', data: task });
+            }
+            catch (err) {
+                res.status(400).json({ status: 'error', message: err.message });
+            }
+        };
+        this.updateTask = async (req, res) => {
+            try {
+                const { id } = req.params;
+                const userId = req.user._id || req.user.userId;
+                const data = req.body;
+                const task = await this.taskService.updateTask(id, userId, data);
+                if (!task) {
+                    return res.status(404).json({ status: 'error', message: 'Task not found' });
+                }
+                res.status(200).json({ status: 'success', data: task });
+            }
+            catch (err) {
+                res.status(400).json({ status: 'error', message: err.message });
+            }
+        };
+        this.deleteTask = async (req, res) => {
+            try {
+                const { id } = req.params;
+                const userId = req.user._id || req.user.userId;
+                const success = await this.taskService.deleteTask(id, userId);
+                if (!success) {
+                    return res.status(404).json({ status: 'error', message: 'Task not found' });
+                }
+                res.status(200).json({ status: 'success', message: 'Task deleted' });
+            }
+            catch (err) {
+                res.status(400).json({ status: 'error', message: err.message });
+            }
+        };
         this.taskService = new TaskService_1.TaskService();
     }
 }

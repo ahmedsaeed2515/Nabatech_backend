@@ -118,6 +118,60 @@ export const syncOfflineDiagnosis = async (req: Request, res: Response) => {
   }
 };
 
+// @desc    Predict disease from an image using the ML API
+// @route   POST /api/diagnosis/predict
+// @access  Private
+export const predictOnline = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "Image file is required" });
+    }
+
+    const mlService = new (require("../services/ai/disease_detection_service").DiseaseDetectionService)();
+    const prediction = await mlService.predictFromImage(req.file.buffer, req.file.originalname);
+
+    // After getting prediction, save it to DiagnosisHistory
+    const cloudinaryUpload = (fileBuffer: Buffer) => {
+      return new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: "diagnoses" },
+          (error, result) => {
+            if (error) return reject(error);
+            resolve({ secure_url: result!.secure_url, public_id: result!.public_id });
+          }
+        );
+        stream.end(fileBuffer);
+      });
+    };
+    
+    const uploadResult = await cloudinaryUpload(req.file.buffer);
+
+    const historyRecord = await DiagnosisHistory.create({
+      user: userId,
+      imageUrl: uploadResult.secure_url,
+      imagePublicId: uploadResult.public_id,
+      diseaseNameEn: prediction.diseaseNameEn,
+      confidence: prediction.confidence,
+      candidates: prediction.candidates,
+      isOffline: false,
+      diagnosisSource: "online",
+      provider: "python_ml",
+      needsNewImage: false,
+      diagnosedAt: new Date(),
+    });
+
+    return res.status(200).json({
+      success: true,
+      prediction,
+      historyId: historyRecord._id
+    });
+  } catch (error: any) {
+    console.error("ML Prediction Error:", error.message);
+    return res.status(500).json({ success: false, message: "Failed to predict disease from image" });
+  }
+};
+
 // @desc    Generate AI advice asynchronously for an existing diagnosis
 // @route   GET /api/diagnosis/:historyId/advice
 // @access  Private

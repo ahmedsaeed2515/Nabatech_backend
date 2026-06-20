@@ -31,4 +31,15 @@ export class PlantService {
   async getPlantsByZone(zoneId: string, userId: string): Promise<Plant[]> {
     return this.plantRepo.findByZoneId(zoneId, userId);
   }
+
+  async searchPlants(query: string, options: { limit: number }): Promise<Plant[]> {
+    return this.plantRepo.searchPlants(query, options.limit);
+  }
+
+  async deletePlant(plantId: string, userId: string): Promise<boolean> {
+    const plant = await this.plantRepo.findOne({ _id: plantId, user: userId });
+    if (!plant) return false;
+    await this.plantRepo.hardDelete(plantId);
+    return true;
+  }
 }

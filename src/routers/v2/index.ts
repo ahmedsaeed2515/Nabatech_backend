@@ -11,6 +11,7 @@ import { AnalyticsController } from '../../controllers/AnalyticsController';
 import { CommunityController } from '../../controllers/CommunityController';
 import { ToolingController } from '../../controllers/ToolingController';
 import { EdgeController } from '../../controllers/EdgeController';
+import { PlantIdentificationController } from '../../controllers/PlantIdentificationController';
 import upload from '../../middlewares/upload_middleware';
 import { protectV2 } from '../../middlewares/auth_v2';
 import { IdempotencyCheck } from '../../middlewares/idempotency';
@@ -36,6 +37,7 @@ const analyticsController = new AnalyticsController();
 const communityController = new CommunityController();
 const toolingController = new ToolingController();
 const edgeController = new EdgeController();
+const plantIdentificationController = new PlantIdentificationController();
 
 // Auth
 router.post('/auth/register', authController.register);
@@ -44,16 +46,24 @@ router.post('/auth/login', authController.login);
 // Gardens
 router.post('/gardens', protectV2, IdempotencyCheck, gardenController.createGarden);
 router.get('/gardens', protectV2, gardenController.getGardens);
+router.put('/gardens/:id', protectV2, IdempotencyCheck, gardenController.updateGarden);
+router.delete('/gardens/:id', protectV2, gardenController.deleteGarden);
 
 // Zones
 router.post('/zones', protectV2, IdempotencyCheck, zoneController.createZone);
 router.get('/zones', protectV2, zoneController.getZones);
+router.put('/zones/:id', protectV2, IdempotencyCheck, zoneController.updateZone);
+router.delete('/zones/:id', protectV2, zoneController.deleteZone);
 
 // Plants
 router.post('/plants', protectV2, IdempotencyCheck, plantController.createPlant);
+router.post('/plants/identify', protectV2, IdempotencyCheck, upload.single('image'), plantIdentificationController.identifyPlant);
+router.get('/plants/identify/history', protectV2, plantIdentificationController.getHistory);
+router.put('/plants/identify/:id/garden', protectV2, plantIdentificationController.markAddedToGarden);
 router.get('/plants/:id', protectV2, plantController.getPlantDetails); // Maps to GET /plants/:id
 router.get('/plants/:id/details', protectV2, plantController.getPlantDetails);
 router.put('/plants/:id', protectV2, IdempotencyCheck, plantController.updatePlant);
+router.delete('/plants/:id', protectV2, plantController.deletePlant);
 
 // Care Actions & Fertilizer
 router.post('/plants/:id/care', protectV2, IdempotencyCheck, careController.logCareAction);
@@ -61,6 +71,9 @@ router.post('/plants/:id/fertilizer', protectV2, IdempotencyCheck, careControlle
 
 // Tasks
 router.get('/tasks/daily', protectV2, taskController.getDailyTasks);
+router.post('/tasks', protectV2, IdempotencyCheck, taskController.createTask);
+router.put('/tasks/:id', protectV2, IdempotencyCheck, taskController.updateTask);
+router.delete('/tasks/:id', protectV2, taskController.deleteTask);
 router.put('/tasks/:id/complete', protectV2, IdempotencyCheck, taskController.completeTask);
 
 // Growth Tracking
@@ -79,10 +92,13 @@ router.get('/analytics/ai-report', protectV2, analyticsController.getAiReports);
 // Community
 router.post('/posts', protectV2, IdempotencyCheck, upload.single('image'), communityController.createPost);
 router.get('/posts', protectV2, communityController.getPosts);
+router.put('/posts/:id', protectV2, IdempotencyCheck, upload.single('image'), communityController.updatePost);
 router.delete('/posts/:id', protectV2, communityController.deletePost);
 router.post('/posts/:id/like', protectV2, IdempotencyCheck, communityController.toggleLike);
 router.post('/posts/:id/comments', protectV2, IdempotencyCheck, communityController.addComment);
 router.get('/posts/:id/comments', protectV2, communityController.getComments);
+router.put('/posts/:postId/comments/:commentId', protectV2, IdempotencyCheck, communityController.updateComment);
+router.delete('/posts/:postId/comments/:commentId', protectV2, communityController.deleteComment);
 
 // Tooling (Wishlist & Inventory)
 router.post('/wishlist', protectV2, validateRequest(createWishlistItemSchema), IdempotencyCheck, toolingController.createWishlistItem);

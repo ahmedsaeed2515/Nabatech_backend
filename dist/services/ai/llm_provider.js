@@ -156,8 +156,33 @@ const callProvider = async (args) => {
         .join(" ")
         .trim();
 };
-const askLlm = async (settings, message, source = "llm", history = [] // ✅ FIX #1: history parameter added
-) => {
+// ───────────────────────────────────────────────────────────────────────────
+// HuggingFace RAG /ask — used as FINAL FALLBACK after all LLM pool providers fail
+// This reuses the Qwen LLM running inside the HF Space (the RAG's own LLM).
+// ───────────────────────────────────────────────────────────────────────────
+const askRagFallback = async (endpointUrl, question, history, timeoutMs) => {
+    // Build history in RAG's expected format
+    const ragHistory = boundHistory(history).map((h) => ({
+        role: h.role === "user" ? "user" : "assistant",
+        content: h.content,
+    }));
+    const response = await axios_1.default.post(endpointUrl, {
+        question: question.substring(0, 2000),
+        history: ragHistory,
+        top_k: 5,
+    }, {
+        timeout: timeoutMs,
+        headers: { "Content-Type": "application/json" },
+    });
+    const data = (response.data || {});
+    const answer = (data.answer || data.response || data.result || data.message || "").toString().trim();
+    if (!answer || answer.length < 5) {
+        throw new Error("Empty response from HF RAG /ask fallback");
+    }
+    return answer;
+};
+const askLlm = async (settings, message, source = "llm", history = [], // ✅ FIX #1: history parameter added
+taskRole = "chat") => {
     if (!settings.llm.enabled || settings.llm.provider === "disabled") {
         throw new ai_errors_1.AiProviderError("LLM disabled", { code: "LLM_DISABLED", isUpstream: false });
     }
@@ -168,7 +193,7 @@ const askLlm = async (settings, message, source = "llm", history = [] // ✅ FIX
         });
     }
     const candidates = settings.llm.pool && settings.llm.pool.length
-        ? settings.llm.pool.filter((p) => p.enabled)
+        ? settings.llm.pool.filter((p) => p.enabled && (p.taskRole === taskRole || p.taskRole === "both"))
         : [
             {
                 name: "openai-default",
@@ -215,7 +240,24 @@ const askLlm = async (settings, message, source = "llm", history = [] // ✅ FIX
             lastError = (0, ai_errors_1.toProviderError)(error, `LLM provider request failed (${candidate.name})`, "LLM_UPSTREAM_FAILED");
         }
     }
-    console.warn("LLM providers failed, using safe fallback. Last error:", lastError);
+    console.warn("LLM providers failed. Last error:", lastError);
+    if (taskRole === "search") {
+        throw lastError || new Error("All Search LLM providers failed");
+    }
+    // ── Stage 2: HuggingFace RAG /ask (Qwen inside HF Space) ──────────────────────────────
+    if (settings.ragFallback?.enabled && settings.ragFallback?.endpointUrl) {
+        try {
+            const ragAnswer = await askRagFallback(settings.ragFallback.endpointUrl, message, history, settings.ragFallback.timeoutMs);
+            console.log("[LLM_HF_FALLBACK_SUCCESS] HuggingFace RAG /ask responded.");
+            return { message: ragAnswer, source: "hf-rag-fallback", provider: "hf-rag-fallback" };
+        }
+        catch (ragFallbackErr) {
+            console.warn("[LLM_HF_FALLBACK_FAILED] HuggingFace RAG /ask also failed:", ragFallbackErr);
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────────────────────
+    // ── Stage 3: Static text fallback (last resort) ──────────────────────────────────────
+    console.warn("[LLM_ALL_FAILED] All LLM providers + HF RAG fallback failed. Using local text.");
     const lowerMsg = message.toLowerCase();
     let fallbackText = "I am currently experiencing high traffic and unable to generate a detailed AI response. Please rely on the standard offline advice provided for your plant's care.";
     if (lowerMsg.includes("basil"))

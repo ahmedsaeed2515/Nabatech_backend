@@ -36,6 +36,7 @@ export interface IAiSettings extends Document {
       providerType: "generic_llm" | "openai_compatible" | "anthropic" | "gemini" | "cohere" | "huggingface_inference" | "ollama";
       endpointUrl: string;
       model: string;
+      taskRole: "search" | "chat" | "both";
       apiKeyEnc: string;
       timeoutMs?: number;
     }>;
@@ -112,6 +113,11 @@ const aiSettingsSchema = new Schema<IAiSettings>(
             },
             endpointUrl: { type: String, default: "", trim: true },
             model: { type: String, default: "", trim: true },
+            taskRole: {
+              type: String,
+              enum: ["search", "chat", "both"],
+              default: "both",
+            },
             apiKeyEnc: { type: String, default: "" },
             timeoutMs: { type: Number, min: 1000, max: 120000 },
           },

@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -6,6 +39,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.redactAiSettings = exports.updateAiSettings = exports.getAiSettings = void 0;
 const ai_settings_model_1 = __importDefault(require("../../models/ai_settings_model"));
 const secret_crypto_1 = require("./secret_crypto");
+// ─── Settings Cache ───────────────────────────────────────────
+let _settingsCache = null;
+let _settingsCacheTs = 0;
+const SETTINGS_CACHE_TTL_MS = 60000; // 1 minute
 const toNum = (value, fallback) => {
     const n = Number(value);
     return Number.isFinite(n) ? n : fallback;
@@ -72,7 +109,7 @@ const envDefaults = () => ({
     },
     rag: {
         enabled: true,
-        endpointUrl: process.env.CHAT_API_URL || process.env.RAG_ENDPOINT_URL || "",
+        endpointUrl: process.env.NEW_RAG_URL || process.env.CHAT_API_URL || process.env.RAG_ENDPOINT_URL || "",
         timeoutMs: toNum(process.env.AI_RAG_TIMEOUT_MS, 20000),
         topK: toNum(process.env.AI_CHAT_TOP_K, 8),
     },
@@ -83,6 +120,11 @@ const envDefaults = () => ({
         timeoutMs: toNum(process.env.AI_LLM_TIMEOUT_MS, 25000),
         systemPrompt: process.env.AI_SYSTEM_PROMPT || "You are a helpful agriculture assistant.",
         pool: [],
+    },
+    ragFallback: {
+        enabled: (process.env.RAG_FALLBACK_ENABLED || "true").toLowerCase() === "true",
+        endpointUrl: (process.env.NEW_RAG_URL || process.env.CHAT_API_URL || process.env.RAG_ENDPOINT_URL || "").replace(/\/retrieve$/, "").replace(/\/$/, "") + "/ask",
+        timeoutMs: toNum(process.env.RAG_FALLBACK_TIMEOUT_MS, 60000),
     },
     fallback: {
         chatOrder: dedupe((process.env.AI_CHAT_FALLBACK_ORDER || "rag,llm").split(",").map((s) => s.trim()).filter((s) => s === "rag" || s === "llm")),
@@ -127,6 +169,7 @@ const mergeSettings = (defaults, db) => {
                 : defaults.cnn.pool,
         },
         rag: { ...defaults.rag, ...(plain.rag || {}) },
+        ragFallback: { ...defaults.ragFallback, ...(plain.ragFallback || {}) },
         llm: {
             ...defaults.llm,
             ...(plain.llm || {}),
@@ -139,6 +182,7 @@ const mergeSettings = (defaults, db) => {
                         : "generic_llm"),
                     endpointUrl: String(p?.endpointUrl || "").trim(),
                     model: String(p?.model || "").trim(),
+                    taskRole: (["search", "chat", "both"].includes(String(p?.taskRole || "").toLowerCase()) ? String(p?.taskRole || "").toLowerCase() : "both"),
                     apiKey: (0, secret_crypto_1.decryptSecret)(String(p?.apiKeyEnc || "")),
                     timeoutMs: Number.isFinite(Number(p?.timeoutMs)) ? Number(p.timeoutMs) : undefined,
                 }))
@@ -155,13 +199,79 @@ const mergeSettings = (defaults, db) => {
     };
 };
 const getAiSettings = async () => {
+    const now = Date.now();
+    if (_settingsCache && now - _settingsCacheTs < SETTINGS_CACHE_TTL_MS) {
+        return _settingsCache;
+    }
     const defaults = envDefaults();
     const stored = await ai_settings_model_1.default.findOne({ key: "default" });
-    return mergeSettings(defaults, stored);
+    let settings = mergeSettings(defaults, stored);
+    try {
+        const AiRoutingRule = (await Promise.resolve().then(() => __importStar(require("../../models/ai_routing_rule_model")))).default;
+        // Fetch routing rules populated with model and provider
+        const rules = await AiRoutingRule.find({ active: true })
+            .populate({
+            path: "primaryModel",
+            populate: { path: "provider" }
+        })
+            .populate({
+            path: "fallbackModels",
+            populate: { path: "provider" }
+        });
+        const llmPool = [];
+        const cnnPool = [];
+        for (const rule of rules) {
+            if (!rule.primaryModel)
+                continue;
+            const primary = rule.primaryModel;
+            const provider = primary.provider;
+            if (!provider)
+                continue;
+            if (rule.useCase === "diagnosis") {
+                cnnPool.push({
+                    name: primary.displayName,
+                    enabled: true,
+                    endpointUrl: provider.baseUrl || "",
+                    apiKey: provider.apiKeyEnc ? (0, secret_crypto_1.decryptSecret)(provider.apiKeyEnc) : "",
+                    timeoutMs: 60000
+                });
+            }
+            else {
+                llmPool.push({
+                    name: primary.displayName,
+                    enabled: true,
+                    providerType: provider.name === "openai" ? "openai_compatible" : "generic_llm",
+                    endpointUrl: provider.baseUrl || "",
+                    model: primary.modelId,
+                    taskRole: rule.useCase === "assistant" ? "chat" : "both",
+                    apiKey: provider.apiKeyEnc ? (0, secret_crypto_1.decryptSecret)(provider.apiKeyEnc) : "",
+                    timeoutMs: 25000
+                });
+            }
+        }
+        if (cnnPool.length > 0) {
+            settings.cnn.pool = cnnPool;
+            settings.cnn.provider = cnnPool[0].name;
+            settings.cnn.endpointUrl = cnnPool[0].endpointUrl;
+            settings.secrets.cnnApiKey = cnnPool[0].apiKey;
+        }
+        if (llmPool.length > 0) {
+            settings.llm.pool = llmPool;
+            settings.llm.provider = "openai"; // or map correctly
+            settings.llm.model = llmPool[0].model;
+            settings.secrets.openaiApiKey = llmPool[0].apiKey;
+        }
+    }
+    catch (error) {
+        console.warn("Failed to fetch dynamic AI routing rules, falling back to static config:", error);
+    }
+    _settingsCache = settings;
+    _settingsCacheTs = now;
+    return _settingsCache;
 };
 exports.getAiSettings = getAiSettings;
 const assertAllowedTopKeys = (payload) => {
-    const allowed = new Set(["cnn", "rag", "llm", "fallback", "features", "pipeline", "secrets"]);
+    const allowed = new Set(["cnn", "rag", "ragFallback", "llm", "fallback", "features", "pipeline", "secrets"]);
     const disallowed = Object.keys(payload).filter((k) => !allowed.has(k));
     if (disallowed.length) {
         throw new Error(`Unknown fields are not allowed: ${disallowed.join(", ")}`);
@@ -290,7 +400,7 @@ const sanitizePayload = (payload, current) => {
                 if (!item || typeof item !== "object" || Array.isArray(item))
                     throw new Error(`llm.pool[${idx}] must be an object`);
                 const raw = item;
-                const allowed = new Set(["name", "enabled", "providerType", "endpointUrl", "model", "apiKey", "timeoutMs"]);
+                const allowed = new Set(["name", "enabled", "providerType", "endpointUrl", "model", "taskRole", "apiKey", "timeoutMs"]);
                 const unknown = Object.keys(raw).filter((k) => !allowed.has(k));
                 if (unknown.length)
                     throw new Error(`Unknown llm.pool fields at index ${idx}: ${unknown.join(", ")}`);
@@ -317,12 +427,17 @@ const sanitizePayload = (payload, current) => {
                 const name = trimString(raw.name ?? `llm-${idx + 1}`, `llm.pool[${idx}].name`) || `llm-${idx + 1}`;
                 const apiKey = trimString(raw.apiKey ?? "", `llm.pool[${idx}].apiKey`);
                 const timeoutMs = raw.timeoutMs === undefined ? undefined : toValidNumber(raw.timeoutMs, 1000, 120000, `llm.pool[${idx}].timeoutMs`);
+                const taskRoleRaw = trimString(raw.taskRole ?? "both", `llm.pool[${idx}].taskRole`).toLowerCase();
+                if (taskRoleRaw !== "search" && taskRoleRaw !== "chat" && taskRoleRaw !== "both") {
+                    throw new Error(`llm.pool[${idx}].taskRole must be search, chat, or both`);
+                }
                 return {
                     name,
                     enabled,
                     providerType: providerTypeRaw,
                     endpointUrl,
                     model,
+                    taskRole: taskRoleRaw,
                     apiKey,
                     timeoutMs,
                 };
@@ -491,6 +606,7 @@ const updateAiSettings = async (payload, updatedBy) => {
                     providerType: p.providerType,
                     endpointUrl: p.endpointUrl,
                     model: p.model,
+                    taskRole: p.taskRole,
                     timeoutMs: p.timeoutMs,
                     apiKeyEnc: (0, secret_crypto_1.encryptSecret)(p.apiKey || ""),
                 })),
@@ -507,6 +623,9 @@ const updateAiSettings = async (payload, updatedBy) => {
             },
         },
     }, { upsert: true, new: true, runValidators: true });
+    // Invalidate cache so next request picks up the new settings
+    _settingsCache = null;
+    _settingsCacheTs = 0;
     return (0, exports.getAiSettings)();
 };
 exports.updateAiSettings = updateAiSettings;
@@ -522,6 +641,7 @@ const redactAiSettings = (settings) => ({
             providerType: p.providerType,
             endpointUrl: p.endpointUrl,
             model: p.model,
+            taskRole: p.taskRole,
             timeoutMs: p.timeoutMs,
             hasApiKey: Boolean(p.apiKey),
         })),

@@ -47,6 +47,9 @@ export const retrieveRagChunks = async (
 
   const ragApiKey = (settings.secrets.ragApiKey || "").trim();
 
+  // FIX [TASK-0.1]: Append ragApiKey to Bearer token — was always empty before
+  if (ragApiKey) console.log(`[RAG] Auth configured: Bearer ***${ragApiKey.slice(-4)}`);
+
   const rawEndpoint = process.env.NEW_RAG_URL || settings.rag.endpointUrl;
   const baseUrl = rawEndpoint
     .replace(/\/ask(\/stream)?$/, "")
@@ -73,7 +76,7 @@ export const retrieveRagChunks = async (
       },
       {
         timeout: settings.rag.timeoutMs,
-        headers: ragApiKey ? { Authorization: "Bearer " } : undefined,
+        headers: ragApiKey ? { Authorization: `Bearer ${ragApiKey}` } : undefined,
       }
     );
   } catch (error) {

@@ -8,6 +8,8 @@ import {
   getLightRecommendation,
   getWateringHistory,
   getWateringRecommendation,
+  getHomeFeed,
+  trackHomeEvent,
 } from "../controllers/home_tools_controller";
 import {
   lightMeterHistorySchema,
@@ -18,6 +20,10 @@ import {
 } from "../validation/home_tools_schemas";
 
 const router = Router();
+
+// Feed
+router.get("/feed", protect, getHomeFeed);
+router.post("/track", protect, trackHomeEvent);
 
 router.get("/light-meter/history", protect, validateRequest(paginationQuerySchema), getLightMeterHistory);
 router.post("/light-meter/history", protect, validateRequest(lightMeterHistorySchema), createLightMeterHistory);

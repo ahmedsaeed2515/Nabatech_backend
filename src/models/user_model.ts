@@ -29,6 +29,7 @@ export interface User extends Document {
   selectedCountry?: string;
   avatarUrl?: string;
   preferences?: any;
+  interests?: string[];
   password?: string;
   status: string;
   tokenVersion: number;
@@ -55,6 +56,7 @@ const userSchema = new mongoose.Schema<User>({
   selectedCountry: { type: String, trim: true },
   avatarUrl:       { type: String, trim: true },
   preferences:     { type: mongoose.Schema.Types.Mixed, default: {} },
+  interests:       [{ type: String }],
 
   // ── Role / Level / Settings ───────────────────────────────────────────────
   role:          { type: String, enum: Object.values(UserRole),  default: UserRole.USER },

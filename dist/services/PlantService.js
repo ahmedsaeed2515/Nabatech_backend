@@ -30,5 +30,15 @@ class PlantService {
     async getPlantsByZone(zoneId, userId) {
         return this.plantRepo.findByZoneId(zoneId, userId);
     }
+    async searchPlants(query, options) {
+        return this.plantRepo.searchPlants(query, options.limit);
+    }
+    async deletePlant(plantId, userId) {
+        const plant = await this.plantRepo.findOne({ _id: plantId, user: userId });
+        if (!plant)
+            return false;
+        await this.plantRepo.hardDelete(plantId);
+        return true;
+    }
 }
 exports.PlantService = PlantService;

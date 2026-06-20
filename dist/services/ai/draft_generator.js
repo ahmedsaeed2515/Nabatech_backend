@@ -30,7 +30,7 @@ Part 2: The Content, which MUST include the following sections (use markdown hea
 Draft:
 `;
     try {
-        const response = await (0, llm_provider_1.askLlm)(settings, prompt, "chat", []);
+        const response = await (0, llm_provider_1.askLlm)(settings, prompt, "llm", []);
         const parts = response.message.split("|||");
         if (parts.length >= 2) {
             return {

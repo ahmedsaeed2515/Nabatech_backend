@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PlantStage = void 0;
+exports.PlantStatus = exports.PlantStage = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 var PlantStage;
 (function (PlantStage) {
@@ -15,8 +15,15 @@ var PlantStage;
     PlantStage["MATURE"] = "MATURE";
     PlantStage["DEAD"] = "DEAD";
 })(PlantStage || (exports.PlantStage = PlantStage = {}));
+var PlantStatus;
+(function (PlantStatus) {
+    PlantStatus["DRAFT"] = "DRAFT";
+    PlantStatus["PUBLISHED"] = "PUBLISHED";
+    PlantStatus["ARCHIVED"] = "ARCHIVED";
+})(PlantStatus || (exports.PlantStatus = PlantStatus = {}));
 const plantSchema = new mongoose_1.default.Schema({
     isLibraryItem: { type: Boolean, default: false },
+    status: { type: String, enum: Object.values(PlantStatus), default: PlantStatus.DRAFT },
     zone: { type: mongoose_1.default.Schema.Types.ObjectId, ref: 'Zone', index: true },
     dna: { type: mongoose_1.default.Schema.Types.ObjectId, ref: 'PlantDna' },
     user: { type: mongoose_1.default.Schema.Types.ObjectId, ref: 'User', index: true },
@@ -41,6 +48,16 @@ const plantSchema = new mongoose_1.default.Schema({
     healthScore: { type: Number, default: 100 },
     lastWatered: { type: Date },
     lastFertilized: { type: Date },
+    tags: [{ type: mongoose_1.default.Schema.Types.ObjectId, ref: 'PlantTag' }],
+    diseases: [{ type: mongoose_1.default.Schema.Types.ObjectId, ref: 'Disease' }],
+    seasons: [{ type: mongoose_1.default.Schema.Types.ObjectId, ref: 'SeasonalRule' }],
+    slug: { type: String, index: true },
+    normalizedNameEn: { type: String, index: true },
+    normalizedNameAr: { type: String, index: true },
+    active: { type: Boolean, default: true },
+    createdBy: { type: String },
+    updatedBy: { type: String },
+    embedding: { type: [Number], index: '2dsphere' },
     deletedAt: { type: Date, default: null }
 }, {
     timestamps: true

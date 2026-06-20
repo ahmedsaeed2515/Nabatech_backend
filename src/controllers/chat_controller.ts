@@ -4,6 +4,7 @@ import { orchestrateChat } from "../services/ai/ai_orchestrator_service";
 import { sanitizeErrorMessage, isProviderError } from "../services/ai/ai_errors";
 import { validateChatText, validateChatHistory } from "../validation/chat_schemas";
 import crypto from "crypto";
+import MessageFeedback from "../models/message_feedback_model";
 
 /**
  * Loads recent message history from DB for a given user+conversationId.
@@ -68,6 +69,7 @@ export const chatWithAI = async (req: Request, res: Response) => {
     const clientHistory = Array.isArray(req.body?.history) ? req.body.history : [];
     const topK = Number(req.body?.top_k) || undefined;
     const clientOperationId = req.body?.clientOperationId;
+    const language = (req.headers["accept-language"] || req.headers["x-app-language"] || "en").toString().split(",")[0].trim().split("-")[0];
 
     if (!validateChatText(text)) {
       return res.status(400).json({ success: false, message: "Message is required and must be under 2000 characters" });
@@ -120,6 +122,7 @@ export const chatWithAI = async (req: Request, res: Response) => {
         question: trimmedText,
         history, // ✅ FIX #1: merged DB + client history injected
         topK,
+        language,
       });
     } catch (aiError) {
       // Record failed assistant response
@@ -352,5 +355,33 @@ export const getAllChatLogs = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Failed to fetch chat logs:", error);
     return res.status(500).json({ success: false, message: "Failed to fetch chat logs", error });
+  }
+};
+
+export const submitFeedback = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const { messageId, rating, textFeedback, isHallucination, category } = req.body;
+
+    if (!messageId || !rating) {
+      return res.status(400).json({ success: false, message: "messageId and rating are required" });
+    }
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ success: false, message: "Message not found" });
+    }
+
+    // Upsert feedback
+    const feedback = await MessageFeedback.findOneAndUpdate(
+      { message: messageId, user: userId },
+      { rating, textFeedback, isHallucination: Boolean(isHallucination), category },
+      { upsert: true, new: true }
+    );
+
+    return res.status(200).json({ success: true, feedback });
+  } catch (error) {
+    console.error("Failed to submit feedback:", error);
+    return res.status(500).json({ success: false, message: "Failed to submit feedback", error });
   }
 };

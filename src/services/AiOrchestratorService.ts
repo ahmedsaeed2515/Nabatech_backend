@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { PlantRepository } from '../repositories/PlantRepository';
+import MyPlant from '../models/my_plant_model';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
 
@@ -12,8 +13,21 @@ export class AiOrchestratorService {
     this.plantRepo = new PlantRepository();
   }
 
-  async processChat(userId: string, message: string) {
+  private async getMergedUserPlants(userId: string) {
+    // Fetch only V2 plants from PlantRepository
     const plants = await this.plantRepo.findByUserId(userId);
+    return plants.map(p => ({
+      id: p._id.toString(),
+      name: p.name,
+      species: p.scientificName || 'Unknown',
+      stage: p.stage,
+      healthScore: p.healthScore,
+      lastWatered: p.lastWatered,
+    }));
+  }
+
+  async processChat(userId: string, message: string) {
+    const plants = await this.getMergedUserPlants(userId);
     const minifiedPlants = plants.map(p => ({
       name: p.name,
       stage: p.stage,
@@ -60,7 +74,7 @@ export class AiOrchestratorService {
   }
 
   async analyzeGarden(userId: string) {
-    const plants = await this.plantRepo.findByUserId(userId);
+    const plants = await this.getMergedUserPlants(userId);
     const minifiedPlants = plants.map(p => ({
       name: p.name,
       stage: p.stage,

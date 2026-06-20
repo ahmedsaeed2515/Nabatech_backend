@@ -15,6 +15,10 @@ const care_sync_worker_1 = require("./workers/care_sync_worker");
 const ai_queue_1 = require("./queues/ai_queue");
 const timelapse_worker_1 = require("./workers/timelapse_worker");
 const TaskGenCron_1 = require("./crons/TaskGenCron");
+const HealthScoreCron_1 = require("./crons/HealthScoreCron");
+const outbreak_monitor_1 = require("./crons/outbreak_monitor");
+const FollowUpCron_1 = require("./crons/FollowUpCron");
+const WeatherRemindersCron_1 = require("./crons/WeatherRemindersCron");
 const ReminderCron_1 = require("./crons/ReminderCron");
 const WeatherCron_1 = require("./crons/WeatherCron");
 const StreakCron_1 = require("./crons/StreakCron");
@@ -32,6 +36,10 @@ const startServer = async () => {
             logger_1.logger.info('Started outbox polling');
             // Start node-cron schedules
             TaskGenCron_1.TaskGenCron.start();
+            (0, HealthScoreCron_1.startHealthScoreCron)();
+            (0, outbreak_monitor_1.startOutbreakMonitor)();
+            (0, FollowUpCron_1.startFollowUpCron)();
+            (0, WeatherRemindersCron_1.startWeatherReminders)();
             ReminderCron_1.ReminderCron.start();
             WeatherCron_1.WeatherCron.start();
             StreakCron_1.StreakCron.start();

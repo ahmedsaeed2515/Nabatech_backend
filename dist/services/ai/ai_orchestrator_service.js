@@ -47,6 +47,10 @@ const ai_errors_1 = require("./ai_errors");
 const assistant_prompt_builder_1 = require("./assistant_prompt_builder");
 const community_knowledge_retriever_1 = require("./community_knowledge_retriever");
 const crypto_1 = __importDefault(require("crypto"));
+const agent_llm_provider_1 = require("./agent_llm_provider");
+const agent_tool_registry_1 = require("./agent_tool_registry");
+const memory_manager_1 = require("./memory_manager");
+const expert_escalation_service_1 = require("../expert_escalation_service");
 const logAiCall = async (payload) => {
     try {
         await ai_call_log_model_1.default.create(payload);
@@ -118,13 +122,26 @@ const orchestrateChat = async (args) => {
     const sanitizedHistory = args.history.filter(msg => msg.role !== "system");
     let ragContext;
     if (settings.rag.enabled && settings.rag.endpointUrl) {
+        let optimizedQuery = args.question;
         try {
-            const ragQuery = (0, assistant_prompt_builder_1.extractRagQuery)(args.question);
-            const rag = await (0, rag_provider_1.askRag)(settings, ragQuery, sanitizedHistory, args.topK);
-            ragContext = rag.message;
+            const sanitizedQuestion = args.question.replace(/"/g, '\\"');
+            const searchPrompt = `Generate a precise agricultural search query to find the best treatment or information in a database for the following question. Output ONLY the search query text, without quotes or extra explanation.\n\nUser Question: ${sanitizedQuestion}`;
+            const searchRes = await Promise.race([
+                (0, llm_provider_1.askLlm)(settings, searchPrompt, "llm", [], "search"),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 5000))
+            ]);
+            optimizedQuery = searchRes.message;
+        }
+        catch (searchErr) {
+            console.warn("[SEARCH_LLM_FAILED] Search LLM failed or not configured, using raw question.");
+        }
+        try {
+            const ragResult = await (0, rag_provider_1.retrieveRagChunks)(settings, "", optimizedQuery, args.topK);
+            ragContext = ragResult.contextText;
+            console.log(`[RAG_SUCCESS] ${ragResult.chunks.length} chunks retrieved for text chat`);
         }
         catch (error) {
-            console.warn("RAG retrieval failed for text chat:", (0, ai_errors_1.sanitizeErrorMessage)(error));
+            console.warn("[RAG_FAILED] RAG retrieval failed for text chat:", (0, ai_errors_1.sanitizeErrorMessage)(error));
         }
     }
     let communityContext;
@@ -137,60 +154,92 @@ const orchestrateChat = async (args) => {
     catch (error) {
         console.warn("Community context retrieval failed for text chat:", (0, ai_errors_1.sanitizeErrorMessage)(error));
     }
+    // Load memory context
+    const memoryContext = await memory_manager_1.MemoryManager.getAllContext(args.userId || "anonymous");
+    const systemPromptAddition = `\n\nUser Profile & Memory Context: ${JSON.stringify(memoryContext)}`;
     const prompt = (0, assistant_prompt_builder_1.buildAssistantPrompt)({
         userQuestion: args.question,
         history: sanitizedHistory,
         ragContext,
         communityContext,
-    });
-    let lastError;
-    try {
-        const llm = await (0, llm_provider_1.askLlm)(settings, prompt, "llm", sanitizedHistory);
-        await logAiCall({
-            userId: args.userId,
-            requestId: reqId,
-            feature: "chat",
-            provider: llm.provider,
-            status: "success",
-            latencyMs: Date.now() - started,
-            inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
-            outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
-        });
-        return { ...llm, ragContext, communityContext };
-    }
-    catch (error) {
-        lastError = error;
-    }
-    if (settings.features.allowBackendFallbackToLLM) {
+        language: args.language,
+    }) + systemPromptAddition;
+    // Use the Agent LLM loop if user provided ID (meaning they're logged in and we want full agent capabilities)
+    let chatResult;
+    if (args.userId && settings.llm.enabled) {
+        console.log("[AGENT] Starting Tool Calling Loop");
         try {
-            const llm = await (0, llm_provider_1.askLlm)(settings, prompt, "fallback", sanitizedHistory);
-            await logAiCall({
-                userId: args.userId,
-                requestId: reqId,
-                feature: "chat",
-                provider: llm.provider,
-                status: "success",
-                latencyMs: Date.now() - started,
-                inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
-                outputMeta: { responseLength: llm.message?.length || 0, source: llm.source },
-            });
-            return { ...llm, ragContext, communityContext };
+            const agentProvider = new agent_llm_provider_1.AgentLlmProvider();
+            const agentResult = await agentProvider.runAgentLoop(settings, args.userId, prompt, // Here we pass the full built prompt with RAG and Memory
+            sanitizedHistory, agent_tool_registry_1.AGENT_TOOLS, 15, // ✅ FIX: Raised from 5 to support multi-step tasks
+            args.onProgress);
+            // Save short-term memory of this interaction
+            await memory_manager_1.MemoryManager.saveShortTermMemory(args.userId, `last_chat_${reqId}`, args.question);
+            // ✅ NEW: Extract and save long-term user profile facts from conversation
+            try {
+                const factExtractionPrompt = `Analyze this user message and extract any permanent facts about the user (location, preferred language, farming experience, plant preferences, treatment preferences like organic/chemical). Return JSON: {"facts": [{"key": "string", "value": "string"}]}. If no new facts, return {"facts": []}.
+
+User message: "${args.question.substring(0, 300)}"`;
+                const factRes = await (0, llm_provider_1.askLlm)(settings, factExtractionPrompt, "llm", [], "search");
+                const parsed = JSON.parse(factRes.message.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+                for (const fact of (parsed.facts || [])) {
+                    if (fact.key && fact.value) {
+                        await memory_manager_1.MemoryManager.saveLongTermMemory(args.userId, fact.key, fact.value);
+                        console.log(`[MEMORY] Saved long-term fact: ${fact.key} = ${fact.value}`);
+                    }
+                }
+            }
+            catch (memErr) {
+                console.warn("[MEMORY] Long-term fact extraction failed (non-critical):", memErr.message);
+            }
+            chatResult = { message: agentResult.message, source: "llm", provider: "agent_llm", toolCalls: agentResult.toolCalls };
         }
-        catch (error) {
-            lastError = error;
+        catch (agentErr) {
+            console.warn("[AGENT_FAILED] Falling back to standard LLM flow. Error:", agentErr.message);
+            // FIX [TASK-6.2]: Add SSE phase for simple LLM path
+            if (args.onProgress)
+                args.onProgress("SIMPLE_LLM_GENERATING");
+            chatResult = await (0, llm_provider_1.askLlm)(settings, prompt, "llm", sanitizedHistory);
         }
+    }
+    else {
+        // FIX [TASK-6.2]: Add SSE phase for simple LLM path
+        if (args.onProgress)
+            args.onProgress("SIMPLE_LLM_GENERATING");
+        chatResult = await (0, llm_provider_1.askLlm)(settings, prompt, "llm", sanitizedHistory);
+    }
+    if (chatResult.source === "fallback") {
+        console.warn("[LLM] All providers failed, using static fallback.");
+    }
+    else {
+        console.log(`[LLM] Response from: ${chatResult.provider}`);
+    }
+    // Cascade logic
+    if (chatResult.source === "fallback") {
+        if (ragContext) {
+            console.log("[FINAL_RESPONSE_SOURCE] rag");
+            chatResult = { message: ragContext, source: "rag", provider: "rag" };
+        }
+        else {
+            console.log("[FINAL_RESPONSE_SOURCE] fallback");
+        }
+    }
+    else {
+        console.log("[FINAL_RESPONSE_SOURCE] llm");
     }
     await logAiCall({
         userId: args.userId,
         requestId: reqId,
         feature: "chat",
-        provider: "none",
-        status: "failure",
+        provider: chatResult.provider,
+        status: chatResult.source === "fallback" ? "failure" : "success",
         latencyMs: Date.now() - started,
         inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
-        errorMessage: (0, ai_errors_1.sanitizeErrorMessage)(lastError),
+        outputMeta: { responseLength: chatResult.message.length, source: chatResult.source },
+        errorMessage: chatResult.source === "fallback" ? "No AI provider succeeded" : undefined,
+        toolCalls: chatResult.toolCalls,
     });
-    throw lastError instanceof Error ? lastError : new Error("No AI provider succeeded");
+    return { message: chatResult.message, source: chatResult.source, provider: chatResult.provider, ragContext, communityContext };
 };
 exports.orchestrateChat = orchestrateChat;
 const orchestrateAssistantRequest = async (args) => {
@@ -204,7 +253,7 @@ const orchestrateAssistantRequest = async (args) => {
         throw new Error("Either file or question is required");
     }
     if (!hasFile && question) {
-        const chat = await (0, exports.orchestrateChat)({ userId: args.userId, requestId: reqId, question, history: sanitizedHistory, topK: args.topK });
+        const chat = await (0, exports.orchestrateChat)({ userId: args.userId, requestId: reqId, question, history: sanitizedHistory, topK: args.topK, language: args.language, onProgress: args.onProgress });
         return { mode: "chat", message: chat.message, source: chat.source, provider: chat.provider, providerChain: [chat.provider], ragContext: chat.ragContext, communityContext: chat.communityContext };
     }
     const providerChain = [];
@@ -217,8 +266,10 @@ const orchestrateAssistantRequest = async (args) => {
             const rawCnn = await (0, cnn_provider_1.runCnnDiagnosis)(settings, formData, formData.getHeaders());
             cnnResult = validateProviderOutput(rawCnn);
             providerChain.push("cnn");
+            console.log("[CNN_SUCCESS]");
         }
         catch (error) {
+            console.warn("[CNN_FAILED] CNN diagnosis failed:", (0, ai_errors_1.sanitizeErrorMessage)(error));
             if (!settings.pipeline.allowAnswerIfCnnFails) {
                 await logAiCall({
                     userId: args.userId,
@@ -240,6 +291,22 @@ const orchestrateAssistantRequest = async (args) => {
     if (isLowConfidence && cnnResult) {
         const conf = typeof cnnResult.confidence === "number" ? cnnResult.confidence : 0;
         lowConfidenceWarning = `Low CNN confidence (${conf.toFixed(3)}) below threshold (${settings.cnn.confidenceThreshold.toFixed(3)}).`;
+        // Automatically trigger Expert Escalation Workflow if user is logged in
+        if (args.userId && args.originalName) {
+            try {
+                await expert_escalation_service_1.ExpertEscalationService.requestExpertReview({
+                    userId: args.userId,
+                    aiPrediction: cnnResult.prediction,
+                    aiConfidence: cnnResult.confidence,
+                    userContext: args.question || "Uploaded for diagnosis.",
+                    imagePath: args.originalName // In reality, this would be an S3 URI or local stored path
+                });
+                lowConfidenceWarning += " An expert has been notified to review your plant.";
+            }
+            catch (escErr) {
+                console.error("Failed to request expert review:", escErr);
+            }
+        }
     }
     const shouldGenerateAnswer = !args.skipAdvice &&
         (Boolean(question) || settings.pipeline.answerAfterDiagnosis) &&
@@ -255,18 +322,34 @@ const orchestrateAssistantRequest = async (args) => {
         message = "The image confidence is too low. Please upload a clearer image of the plant to receive advice.";
     }
     else if (shouldGenerateAnswer) {
-        const ragQuery = (0, assistant_prompt_builder_1.extractRagQuery)(question || (cnnResult?.prediction ? `${cnnResult.prediction} plant disease treatment` : "plant disease diagnosis"));
+        // ── RAG Stage: Pure Knowledge Retrieval ──────────────────────────────────
         let ragRetrievedContext;
-        if (settings.rag.enabled && settings.rag.endpointUrl) {
+        if (settings.rag.enabled && settings.rag.endpointUrl && cnnResult?.prediction) {
+            let optimizedQuery = question;
             try {
-                const ragResult = await (0, rag_provider_1.askRag)(settings, ragQuery, [], args.topK);
-                ragRetrievedContext = ragResult.message;
+                const escapedQuestion = question.replace(/"/g, '\\"');
+                const escapedPrediction = (cnnResult.prediction || "unknown").replace(/"/g, '\\"');
+                const searchPrompt = `Generate a precise agricultural search query to find the best treatment or information in a database for the following question and detected disease. Output ONLY the search query text, without quotes or extra explanation.\n\nDetected Disease: ${escapedPrediction}\nUser Question: ${escapedQuestion}`;
+                const searchRes = await Promise.race([
+                    (0, llm_provider_1.askLlm)(settings, searchPrompt, "llm", [], "search"),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 5000))
+                ]);
+                optimizedQuery = searchRes.message;
+            }
+            catch (searchErr) {
+                console.warn("[SEARCH_LLM_FAILED] Search LLM failed or not configured, using raw question.");
+            }
+            try {
+                const ragResult = await (0, rag_provider_1.retrieveRagChunks)(settings, cnnResult.prediction, optimizedQuery, args.topK);
+                ragRetrievedContext = ragResult.contextText;
                 ragContext = ragRetrievedContext;
+                console.log(`[RAG_SUCCESS] ${ragResult.chunks.length} chunks for "${cnnResult.prediction}"`);
             }
             catch (ragError) {
-                console.warn("RAG retrieval failed for image chat, proceeding without context:", (0, ai_errors_1.sanitizeErrorMessage)(ragError));
+                console.warn("[RAG_FAILED] RAG /retrieve failed, proceeding without context:", (0, ai_errors_1.sanitizeErrorMessage)(ragError));
             }
         }
+        // ─────────────────────────────────────────────────────────────────────────
         if (cnnResult?.prediction) {
             try {
                 const { DiseaseKnowledgeRecord } = await Promise.resolve().then(() => __importStar(require("../../models/disease_knowledge_record_model")));
@@ -309,23 +392,44 @@ const orchestrateAssistantRequest = async (args) => {
                 : "",
             ragContext: ragRetrievedContext,
             communityContext,
+            language: args.language,
         });
         let chatResult;
-        try {
-            chatResult = await (0, llm_provider_1.askLlm)(settings, prompt, "llm", sanitizedHistory);
+        // askLlm handles all internal failures and returns a safe fallback
+        // object for taskRole "chat" — it never throws. No try/catch needed.
+        chatResult = await (0, llm_provider_1.askLlm)(settings, prompt, "llm", sanitizedHistory);
+        if (chatResult.source === "fallback") {
+            console.warn("[LLM] All providers failed, using static fallback.");
         }
-        catch (llmError) {
-            if (settings.features.allowBackendFallbackToLLM) {
-                try {
-                    chatResult = await (0, llm_provider_1.askLlm)(settings, prompt, "fallback", sanitizedHistory);
+        else {
+            console.log(`[LLM] Response from: ${chatResult.provider}`);
+        }
+        // Cascade logic
+        if (chatResult.source === "fallback") {
+            if (ragContext) {
+                console.log("[FINAL_RESPONSE_SOURCE] rag");
+                chatResult = { message: ragContext, source: "rag", provider: "rag" };
+            }
+            else if (cnnResult) {
+                console.log("[FINAL_RESPONSE_SOURCE] cnn");
+                const confStr = typeof cnnResult.confidence === "number" ? (cnnResult.confidence * 100).toFixed(2) + "%" : "Unknown";
+                let cnnMessage = `Disease Detected: **${cnnResult.prediction.replace(/_/g, " ")}**\n\nConfidence: ${confStr}\n`;
+                if (kbSeverity)
+                    cnnMessage += `Severity: ${kbSeverity}\n`;
+                if (kbAdvice) {
+                    cnnMessage += `\nRecommended Actions:\n${kbAdvice}`;
                 }
-                catch (fallbackError) {
-                    throw fallbackError;
+                else {
+                    cnnMessage += `\nPlease monitor your plant carefully and ensure proper watering and light conditions.`;
                 }
+                chatResult = { message: cnnMessage, source: "cnn", provider: cnnResult.provider || "cnn" };
             }
             else {
-                throw llmError;
+                console.log("[FINAL_RESPONSE_SOURCE] fallback");
             }
+        }
+        else {
+            console.log(`[FINAL_RESPONSE_SOURCE] ${chatResult.source}`);
         }
         providerChain.push(chatResult.provider);
         message = chatResult.message;
@@ -392,13 +496,17 @@ const orchestrateAssistantRequest = async (args) => {
     };
     try {
         const { evaluateRecommendation } = await Promise.resolve().then(() => __importStar(require("./decision_engine")));
+        // ✅ FIX: Check real expert availability from DB instead of hardcoding true
+        const expertCount = await (await Promise.resolve().then(() => __importStar(require("../../models/user_model")))).default
+            .countDocuments({ role: "expert" })
+            .catch(() => 0);
         const decisionResult = evaluateRecommendation({
             confidence: cnnResult?.confidence,
             diseaseName: cnnResult?.prediction,
             isAmbiguous: responsePayload.lowConfidenceWarning !== "",
             historyLength: args.history.length,
             userQuestion: question,
-            expertAvailable: true, // simplified for now
+            expertAvailable: expertCount > 0,
         });
         // Only recommend if not a simple fallback and we have an actual recommendation
         if (decisionResult.recommendation !== "none" && args.history.length <= 5) {

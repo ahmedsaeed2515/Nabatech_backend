@@ -265,17 +265,8 @@ export const getDashboardStats = async (req: Request, res: Response) => {
   try {
     const totalUsers = await User.countDocuments();
     const totalDiagnoses = await DiagnosisHistory.countDocuments();
-    const totalPlants = await MyPlant.countDocuments();
-    const totalReminders = await Reminder.countDocuments();
     const totalPosts = await CommunityPost.countDocuments();
-    const totalProducts = await StoreProduct.countDocuments();
-    const totalMessages = await Message.countDocuments();
-    const totalExperts = await Expert.countDocuments();
-
-    // Diagnoses breakdown by severity
-    const diagnosesBySeverity = await DiagnosisHistory.aggregate([
-      { $group: { _id: "$severity", count: { $sum: 1 } } }
-    ]);
+    const activeReminders = await Reminder.countDocuments({ enabled: true });
 
     // Top diagnosed diseases
     const topDiseases = await DiagnosisHistory.aggregate([
@@ -284,7 +275,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
       { $limit: 5 }
     ]);
 
-    // FIXED: Aggregate daily diagnoses for the last 7 days
+    // Aggregate daily diagnoses for the last 7 days
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6); // standard 7-day range including today
     sevenDaysAgo.setHours(0, 0, 0, 0);
@@ -304,10 +295,9 @@ export const getDashboardStats = async (req: Request, res: Response) => {
       { $sort: { _id: 1 } }
     ]);
 
-    // FIXED: Calculate offline vs remote scan counts for the pie chart
+    // Calculate offline vs remote scan counts for the pie chart
     const totalOfflineScans = await DiagnosisHistory.countDocuments({ isOffline: true });
     const totalRemoteScans = await DiagnosisHistory.countDocuments({ isOffline: false });
-    const activeReminders = await Reminder.countDocuments({ enabled: true });
 
     res.status(200).json({
       success: true,
@@ -326,24 +316,6 @@ export const getDashboardStats = async (req: Request, res: Response) => {
       offlineVsRemote: {
         offline: totalOfflineScans,
         remote: totalRemoteScans,
-      },
-      // Dual-compatibility layer to keep dashboard graphs working perfectly
-      stats: {
-        totalUsers,
-        totalDiagnoses,
-        totalPlants,
-        totalReminders,
-        totalPosts,
-        totalProducts,
-        totalMessages,
-        totalExperts,
-        diagnosesBySeverity,
-        topDiseases,
-        dailyDiagnoses,
-        scanDistribution: [
-          { name: "Remote Scans", value: totalRemoteScans },
-          { name: "Offline Scans", value: totalOfflineScans },
-        ],
       },
     });
   } catch (error) {

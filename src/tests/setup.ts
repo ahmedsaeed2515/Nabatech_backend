@@ -1,3 +1,6 @@
+process.env["MONGOMS_MD5_CHECK"] = "0";
+process.env["MONGOMS_DISABLE_POSTINSTALL"] = "1";
+
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import jwt from 'jsonwebtoken';
@@ -12,7 +15,7 @@ export const setupTestDB = () => {
     mongoServer = await MongoMemoryServer.create();
     const uri = mongoServer.getUri();
     await mongoose.connect(uri);
-  });
+  }, 60000);
 
   afterEach(async () => {
     const collections = mongoose.connection.collections;
@@ -24,7 +27,9 @@ export const setupTestDB = () => {
 
   afterAll(async () => {
     await mongoose.disconnect();
-    await mongoServer.stop();
+    if (mongoServer) {
+      await mongoServer.stop();
+    }
   });
 };
 

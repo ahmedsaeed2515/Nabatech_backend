@@ -8,6 +8,10 @@ import { sanitizeErrorMessage } from "./ai_errors";
 import { buildAssistantPrompt, extractRagQuery } from "./assistant_prompt_builder";
 import { retrieveCommunityContext } from "./community_knowledge_retriever";
 import crypto from "crypto";
+import { AgentLlmProvider } from "./agent_llm_provider";
+import { AGENT_TOOLS } from "./agent_tool_registry";
+import { MemoryManager } from "./memory_manager";
+import { ExpertEscalationService } from "../expert_escalation_service";
 
 const logAiCall = async (payload: {
   userId?: string;
@@ -18,9 +22,13 @@ const logAiCall = async (payload: {
   sourceIds?: string[];
   status: "success" | "failure";
   latencyMs: number;
+  cost?: number;
+  tokensUsed?: number;
+  routedFrom?: string[];
   inputMeta?: Record<string, unknown>;
   outputMeta?: Record<string, unknown>;
   errorMessage?: string;
+  toolCalls?: any[];
 }) => {
   try {
     await AiCallLog.create(payload);
@@ -97,6 +105,8 @@ export const orchestrateChat = async (args: {
   question: string;
   history: Array<{ role: string; content: string }>;
   topK?: number;
+  language?: string;
+  onProgress?: (phase: string) => void;
 }) => {
   const settings = await getAiSettings();
   const started = Date.now();
@@ -105,11 +115,24 @@ export const orchestrateChat = async (args: {
   
   let ragContext: string | undefined;
   if (settings.rag.enabled && settings.rag.endpointUrl) {
+    let optimizedQuery = args.question;
+    try {
+      const sanitizedQuestion = args.question.replace(/"/g, '\\"');
+      const searchPrompt = `Generate a precise agricultural search query to find the best treatment or information in a database for the following question. Output ONLY the search query text, without quotes or extra explanation.\n\nUser Question: ${sanitizedQuestion}`;
+      const searchRes = await Promise.race([
+        askLlm(settings, searchPrompt, "llm", [], "search"),
+        new Promise<any>((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 5000))
+      ]);
+      optimizedQuery = searchRes.message;
+    } catch (searchErr) {
+      console.warn("[SEARCH_LLM_FAILED] Search LLM failed or not configured, using raw question.");
+    }
+
     try {
       const ragResult = await retrieveRagChunks(
         settings,
         "",
-        args.question,
+        optimizedQuery,
         args.topK
       );
       ragContext = ragResult.contextText;
@@ -129,37 +152,72 @@ export const orchestrateChat = async (args: {
     console.warn("Community context retrieval failed for text chat:", sanitizeErrorMessage(error));
   }
 
+  // Load memory context
+  const memoryContext = await MemoryManager.getAllContext(args.userId || "anonymous");
+  const systemPromptAddition = `\n\nUser Profile & Memory Context: ${JSON.stringify(memoryContext)}`;
+  
   const prompt = buildAssistantPrompt({
     userQuestion: args.question,
     history: sanitizedHistory,
     ragContext,
     communityContext,
-  });
+    language: args.language,
+  }) + systemPromptAddition;
 
-  let chatResult: { message: string, source: "llm"|"fallback"|"rag"|"hf-rag-fallback", provider: string };
-  try {
-    chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
-    if (chatResult.source !== "fallback") {
-      console.log("[LLM_SUCCESS]");
-    } else {
-      console.warn("[LLM_FAILED] Primary LLM returned safe fallback");
-    }
-  } catch (llmError) {
-    console.warn("[LLM_FAILED] Primary LLM threw an error:", sanitizeErrorMessage(llmError));
-    chatResult = { message: "I am currently experiencing high traffic and unable to generate a detailed AI response. Please rely on the standard offline advice provided for your plant's care.", source: "fallback", provider: "local_fallback" };
-    if (settings.features.allowBackendFallbackToLLM) {
+  // Use the Agent LLM loop if user provided ID (meaning they're logged in and we want full agent capabilities)
+  let chatResult: { message: string, source: "llm"|"fallback"|"rag"|"hf-rag-fallback", provider: string, toolCalls?: any[] };
+  
+  if (args.userId && settings.llm.enabled) {
+    console.log("[AGENT] Starting Tool Calling Loop");
+    try {
+      const agentProvider = new AgentLlmProvider();
+      const agentResult = await agentProvider.runAgentLoop(
+        settings,
+        args.userId,
+        prompt, // Here we pass the full built prompt with RAG and Memory
+        sanitizedHistory,
+        AGENT_TOOLS,
+        15, // ✅ FIX: Raised from 5 to support multi-step tasks
+        args.onProgress
+      );
+      
+      // Save short-term memory of this interaction
+      await MemoryManager.saveShortTermMemory(args.userId, `last_chat_${reqId}`, args.question);
+
+      // ✅ NEW: Extract and save long-term user profile facts from conversation
       try {
-        const fallbackLlm = await askLlm(settings, prompt, "fallback", sanitizedHistory);
-        if (fallbackLlm.source !== "fallback") {
-          console.log("[LLM_SUCCESS] Backend fallback LLM succeeded");
-          chatResult = fallbackLlm;
-        } else {
-          console.warn("[LLM_FAILED] Backend fallback LLM returned safe fallback");
+        const factExtractionPrompt = `Analyze this user message and extract any permanent facts about the user (location, preferred language, farming experience, plant preferences, treatment preferences like organic/chemical). Return JSON: {"facts": [{"key": "string", "value": "string"}]}. If no new facts, return {"facts": []}.
+
+User message: "${args.question.substring(0, 300)}"`;
+        const factRes = await askLlm(settings, factExtractionPrompt, "llm", [], "search");
+        const parsed = JSON.parse(factRes.message.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+        for (const fact of (parsed.facts || [])) {
+          if (fact.key && fact.value) {
+            await MemoryManager.saveLongTermMemory(args.userId, fact.key, fact.value);
+            console.log(`[MEMORY] Saved long-term fact: ${fact.key} = ${fact.value}`);
+          }
         }
-      } catch (fallbackError) {
-        console.warn("[LLM_FAILED] Backend fallback LLM threw an error");
+      } catch (memErr) {
+        console.warn("[MEMORY] Long-term fact extraction failed (non-critical):", (memErr as any).message);
       }
+
+      chatResult = { message: agentResult.message, source: "llm", provider: "agent_llm", toolCalls: agentResult.toolCalls };
+    } catch (agentErr: any) {
+      console.warn("[AGENT_FAILED] Falling back to standard LLM flow. Error:", agentErr.message);
+      // FIX [TASK-6.2]: Add SSE phase for simple LLM path
+      if (args.onProgress) args.onProgress("SIMPLE_LLM_GENERATING");
+      chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
     }
+  } else {
+    // FIX [TASK-6.2]: Add SSE phase for simple LLM path
+    if (args.onProgress) args.onProgress("SIMPLE_LLM_GENERATING");
+    chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
+  }
+
+  if (chatResult.source === "fallback") {
+    console.warn("[LLM] All providers failed, using static fallback.");
+  } else {
+    console.log(`[LLM] Response from: ${chatResult.provider}`);
   }
 
   // Cascade logic
@@ -184,9 +242,10 @@ export const orchestrateChat = async (args: {
     inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
     outputMeta: { responseLength: chatResult.message.length, source: chatResult.source },
     errorMessage: chatResult.source === "fallback" ? "No AI provider succeeded" : undefined,
+    toolCalls: chatResult.toolCalls,
   });
 
-  return { ...chatResult, ragContext, communityContext };
+  return { message: chatResult.message, source: chatResult.source, provider: chatResult.provider, ragContext, communityContext };
 };
 
 export const orchestrateAssistantRequest = async (args: {
@@ -198,6 +257,8 @@ export const orchestrateAssistantRequest = async (args: {
   history: Array<{ role: string; content: string }>;
   topK?: number;
   skipAdvice?: boolean;
+  language?: string;
+  onProgress?: (phase: string) => void;
 }) => {
   const settings = await getAiSettings();
   const started = Date.now();
@@ -211,7 +272,7 @@ export const orchestrateAssistantRequest = async (args: {
   }
 
   if (!hasFile && question) {
-    const chat = await orchestrateChat({ userId: args.userId, requestId: reqId, question, history: sanitizedHistory, topK: args.topK });
+    const chat = await orchestrateChat({ userId: args.userId, requestId: reqId, question, history: sanitizedHistory, topK: args.topK, language: args.language, onProgress: args.onProgress });
     return { mode: "chat" as const, message: chat.message, source: chat.source, provider: chat.provider, providerChain: [chat.provider], ragContext: chat.ragContext, communityContext: chat.communityContext };
   }
 
@@ -254,6 +315,22 @@ export const orchestrateAssistantRequest = async (args: {
   if (isLowConfidence && cnnResult) {
     const conf = typeof cnnResult.confidence === "number" ? cnnResult.confidence : 0;
     lowConfidenceWarning = `Low CNN confidence (${conf.toFixed(3)}) below threshold (${settings.cnn.confidenceThreshold.toFixed(3)}).`;
+    
+    // Automatically trigger Expert Escalation Workflow if user is logged in
+    if (args.userId && args.originalName) {
+      try {
+        await ExpertEscalationService.requestExpertReview({
+          userId: args.userId,
+          aiPrediction: cnnResult.prediction,
+          aiConfidence: cnnResult.confidence,
+          userContext: args.question || "Uploaded for diagnosis.",
+          imagePath: args.originalName // In reality, this would be an S3 URI or local stored path
+        });
+        lowConfidenceWarning += " An expert has been notified to review your plant.";
+      } catch (escErr) {
+        console.error("Failed to request expert review:", escErr);
+      }
+    }
   }
 
   const shouldGenerateAnswer =
@@ -275,11 +352,25 @@ export const orchestrateAssistantRequest = async (args: {
     // ── RAG Stage: Pure Knowledge Retrieval ──────────────────────────────────
     let ragRetrievedContext: string | undefined;
     if (settings.rag.enabled && settings.rag.endpointUrl && cnnResult?.prediction) {
+      let optimizedQuery = question;
+      try {
+        const escapedQuestion = question.replace(/"/g, '\\"');
+        const escapedPrediction = (cnnResult.prediction || "unknown").replace(/"/g, '\\"');
+        const searchPrompt = `Generate a precise agricultural search query to find the best treatment or information in a database for the following question and detected disease. Output ONLY the search query text, without quotes or extra explanation.\n\nDetected Disease: ${escapedPrediction}\nUser Question: ${escapedQuestion}`;
+        const searchRes = await Promise.race([
+          askLlm(settings, searchPrompt, "llm", [], "search"),
+          new Promise<any>((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 5000))
+        ]);
+        optimizedQuery = searchRes.message;
+      } catch (searchErr) {
+        console.warn("[SEARCH_LLM_FAILED] Search LLM failed or not configured, using raw question.");
+      }
+
       try {
         const ragResult = await retrieveRagChunks(
           settings,
           cnnResult.prediction,
-          question,
+          optimizedQuery,
           args.topK,
         );
         ragRetrievedContext = ragResult.contextText;
@@ -337,32 +428,18 @@ export const orchestrateAssistantRequest = async (args: {
           : "",
       ragContext: ragRetrievedContext,
       communityContext,
+      language: args.language,
     });
 
     let chatResult: { message: string, source: "llm"|"fallback"|"rag"|"cnn"|"hf-rag-fallback", provider: string };
-    try {
-      chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
-      if (chatResult.source !== "fallback") {
-        console.log("[LLM_SUCCESS]");
-      } else {
-        console.warn("[LLM_FAILED] Primary LLM returned safe fallback");
-      }
-    } catch (llmError) {
-       console.warn("[LLM_FAILED] Primary LLM threw an error:", sanitizeErrorMessage(llmError));
-       chatResult = { message: "I am currently experiencing high traffic and unable to generate a detailed AI response. Please rely on the standard offline advice provided for your plant's care.", source: "fallback", provider: "local_fallback" };
-       if (settings.features.allowBackendFallbackToLLM) {
-          try {
-             const fallbackLlm = await askLlm(settings, prompt, "fallback", sanitizedHistory);
-             if (fallbackLlm.source !== "fallback") {
-                 console.log(`[LLM_SUCCESS] Backend fallback LLM succeeded with source: ${fallbackLlm.source}`);
-                 chatResult = fallbackLlm;
-             } else {
-                 console.warn("[LLM_FAILED] Backend fallback LLM returned safe fallback");
-             }
-          } catch (fallbackError) {
-             console.warn("[LLM_FAILED] Backend fallback LLM threw an error");
-          }
-       }
+    // askLlm handles all internal failures and returns a safe fallback
+    // object for taskRole "chat" — it never throws. No try/catch needed.
+    chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
+
+    if (chatResult.source === "fallback") {
+      console.warn("[LLM] All providers failed, using static fallback.");
+    } else {
+      console.log(`[LLM] Response from: ${chatResult.provider}`);
     }
     
     // Cascade logic
@@ -456,13 +533,17 @@ export const orchestrateAssistantRequest = async (args: {
 
   try {
     const { evaluateRecommendation } = await import("./decision_engine");
+    // ✅ FIX: Check real expert availability from DB instead of hardcoding true
+    const expertCount = await (await import("../../models/user_model")).default
+      .countDocuments({ role: "expert" })
+      .catch(() => 0);
     const decisionResult = evaluateRecommendation({
       confidence: cnnResult?.confidence,
       diseaseName: cnnResult?.prediction,
       isAmbiguous: responsePayload.lowConfidenceWarning !== "",
       historyLength: args.history.length,
       userQuestion: question,
-      expertAvailable: true, // simplified for now
+      expertAvailable: expertCount > 0,
     });
     
     // Only recommend if not a simple fallback and we have an actual recommendation

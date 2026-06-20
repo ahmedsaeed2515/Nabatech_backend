@@ -1,6 +1,12 @@
 import AiSettings, { IAiSettings } from "../../models/ai_settings_model";
 import { decryptSecret, encryptSecret } from "./secret_crypto";
 
+// ─── Settings Cache ───────────────────────────────────────────
+let _settingsCache: AiSettingsShape | null = null;
+let _settingsCacheTs = 0;
+const SETTINGS_CACHE_TTL_MS = 60_000; // 1 minute
+// ─────────────────────────────────────────────────────────────
+
 export type AiSettingsShape = {
   key: string;
   cnn: {
@@ -37,6 +43,7 @@ export type AiSettingsShape = {
       providerType: "generic_llm" | "openai_compatible" | "anthropic" | "gemini" | "cohere" | "huggingface_inference" | "ollama";
       endpointUrl: string;
       model: string;
+      taskRole: "search" | "chat" | "both";
       apiKey: string;
       timeoutMs?: number;
     }>;
@@ -228,6 +235,7 @@ const mergeSettings = (defaults: AiSettingsShape, db: Partial<IAiSettings> | nul
               : "generic_llm") as "generic_llm" | "openai_compatible" | "anthropic" | "gemini" | "cohere" | "huggingface_inference" | "ollama",
             endpointUrl: String(p?.endpointUrl || "").trim(),
             model: String(p?.model || "").trim(),
+            taskRole: (["search", "chat", "both"].includes(String(p?.taskRole || "").toLowerCase()) ? String(p?.taskRole || "").toLowerCase() : "both") as "search" | "chat" | "both",
             apiKey: decryptSecret(String(p?.apiKeyEnc || "")),
             timeoutMs: Number.isFinite(Number(p?.timeoutMs)) ? Number(p.timeoutMs) : undefined,
           }))
@@ -245,9 +253,81 @@ const mergeSettings = (defaults: AiSettingsShape, db: Partial<IAiSettings> | nul
 };
 
 export const getAiSettings = async (): Promise<AiSettingsShape> => {
+  const now = Date.now();
+  if (_settingsCache && now - _settingsCacheTs < SETTINGS_CACHE_TTL_MS) {
+    return _settingsCache;
+  }
   const defaults = envDefaults();
   const stored = await AiSettings.findOne({ key: "default" });
-  return mergeSettings(defaults, stored);
+  let settings = mergeSettings(defaults, stored);
+
+  try {
+    const AiRoutingRule = (await import("../../models/ai_routing_rule_model")).default;
+
+    // Fetch routing rules populated with model and provider
+    const rules = await AiRoutingRule.find({ active: true })
+      .populate({
+        path: "primaryModel",
+        populate: { path: "provider" }
+      })
+      .populate({
+        path: "fallbackModels",
+        populate: { path: "provider" }
+      });
+
+    const llmPool: any[] = [];
+    const cnnPool: any[] = [];
+
+    for (const rule of rules) {
+      if (!rule.primaryModel) continue;
+      const primary: any = rule.primaryModel;
+      const provider: any = primary.provider;
+
+      if (!provider) continue;
+
+      if (rule.useCase === "diagnosis") {
+        cnnPool.push({
+          name: primary.displayName,
+          enabled: true,
+          endpointUrl: provider.baseUrl || "",
+          apiKey: provider.apiKeyEnc ? decryptSecret(provider.apiKeyEnc) : "",
+          timeoutMs: 60000
+        });
+      } else {
+        llmPool.push({
+          name: primary.displayName,
+          enabled: true,
+          providerType: provider.name === "openai" ? "openai_compatible" : "generic_llm",
+          endpointUrl: provider.baseUrl || "",
+          model: primary.modelId,
+          taskRole: rule.useCase === "assistant" ? "chat" : "both",
+          apiKey: provider.apiKeyEnc ? decryptSecret(provider.apiKeyEnc) : "",
+          timeoutMs: 25000
+        });
+      }
+    }
+
+    if (cnnPool.length > 0) {
+      settings.cnn.pool = cnnPool;
+      settings.cnn.provider = cnnPool[0].name;
+      settings.cnn.endpointUrl = cnnPool[0].endpointUrl;
+      settings.secrets.cnnApiKey = cnnPool[0].apiKey;
+    }
+    
+    if (llmPool.length > 0) {
+      settings.llm.pool = llmPool;
+      settings.llm.provider = "openai"; // or map correctly
+      settings.llm.model = llmPool[0].model;
+      settings.secrets.openaiApiKey = llmPool[0].apiKey;
+    }
+
+  } catch (error) {
+    console.warn("Failed to fetch dynamic AI routing rules, falling back to static config:", error);
+  }
+
+  _settingsCache = settings;
+  _settingsCacheTs = now;
+  return _settingsCache;
 };
 
 const assertAllowedTopKeys = (payload: Record<string, unknown>) => {
@@ -361,7 +441,7 @@ const sanitizePayload = (payload: Record<string, unknown>, current: AiSettingsSh
       llm.pool = llmRaw.pool.map((item, idx) => {
         if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(`llm.pool[${idx}] must be an object`);
         const raw = item as Record<string, unknown>;
-        const allowed = new Set(["name", "enabled", "providerType", "endpointUrl", "model", "apiKey", "timeoutMs"]);
+        const allowed = new Set(["name", "enabled", "providerType", "endpointUrl", "model", "taskRole", "apiKey", "timeoutMs"]);
         const unknown = Object.keys(raw).filter((k) => !allowed.has(k));
         if (unknown.length) throw new Error(`Unknown llm.pool fields at index ${idx}: ${unknown.join(", ")}`);
         const enabled = raw.enabled === undefined ? true : toBool(raw.enabled);
@@ -386,12 +466,17 @@ const sanitizePayload = (payload: Record<string, unknown>, current: AiSettingsSh
         const name = trimString(raw.name ?? `llm-${idx + 1}`, `llm.pool[${idx}].name`) || `llm-${idx + 1}`;
         const apiKey = trimString(raw.apiKey ?? "", `llm.pool[${idx}].apiKey`);
         const timeoutMs = raw.timeoutMs === undefined ? undefined : toValidNumber(raw.timeoutMs, 1000, 120000, `llm.pool[${idx}].timeoutMs`);
+        const taskRoleRaw = trimString(raw.taskRole ?? "both", `llm.pool[${idx}].taskRole`).toLowerCase();
+        if (taskRoleRaw !== "search" && taskRoleRaw !== "chat" && taskRoleRaw !== "both") {
+          throw new Error(`llm.pool[${idx}].taskRole must be search, chat, or both`);
+        }
         return {
           name,
           enabled,
           providerType: providerTypeRaw as "generic_llm" | "openai_compatible" | "anthropic" | "gemini" | "cohere" | "huggingface_inference" | "ollama",
           endpointUrl,
           model,
+          taskRole: taskRoleRaw as "search" | "chat" | "both",
           apiKey,
           timeoutMs,
         };
@@ -556,6 +641,7 @@ export const updateAiSettings = async (payload: Record<string, unknown>, updated
             providerType: p.providerType,
             endpointUrl: p.endpointUrl,
             model: p.model,
+            taskRole: p.taskRole,
             timeoutMs: p.timeoutMs,
             apiKeyEnc: encryptSecret(p.apiKey || ""),
           })),
@@ -575,6 +661,10 @@ export const updateAiSettings = async (payload: Record<string, unknown>, updated
     { upsert: true, new: true, runValidators: true }
   );
 
+  // Invalidate cache so next request picks up the new settings
+  _settingsCache = null;
+  _settingsCacheTs = 0;
+
   return getAiSettings();
 };
 
@@ -590,6 +680,7 @@ export const redactAiSettings = (settings: AiSettingsShape) => ({
       providerType: p.providerType,
       endpointUrl: p.endpointUrl,
       model: p.model,
+      taskRole: p.taskRole,
       timeoutMs: p.timeoutMs,
       hasApiKey: Boolean(p.apiKey),
     })),

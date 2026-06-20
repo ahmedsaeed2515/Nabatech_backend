@@ -12,6 +12,10 @@ import { careSyncWorker } from './workers/care_sync_worker';
 import { aiAnalysisWorker } from './queues/ai_queue';
 import { timelapseWorker } from './workers/timelapse_worker';
 import { TaskGenCron } from './crons/TaskGenCron';
+import { startHealthScoreCron } from './crons/HealthScoreCron';
+import { startOutbreakMonitor } from './crons/outbreak_monitor';
+import { startFollowUpCron } from './crons/FollowUpCron';
+import { startWeatherReminders } from './crons/WeatherRemindersCron';
 import { ReminderCron } from "./crons/ReminderCron";
 import { WeatherCron } from "./crons/WeatherCron";
 import { StreakCron } from "./crons/StreakCron";
@@ -35,6 +39,10 @@ const startServer = async () => {
       
       // Start node-cron schedules
       TaskGenCron.start();
+      startHealthScoreCron();
+      startOutbreakMonitor();
+      startFollowUpCron();
+      startWeatherReminders();
       ReminderCron.start();
       WeatherCron.start();
       StreakCron.start();

@@ -8,6 +8,7 @@ const admin_community_controller_1 = require("../controllers/admin_community_con
 const router = (0, express_1.Router)();
 router.get('/posts', auth_middleware_1.protect, auth_middleware_1.admin, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.adminCommunityQuerySchema), admin_community_controller_1.adminGetPosts);
 router.patch('/posts/:id/moderation', auth_middleware_1.protect, auth_middleware_1.admin, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.adminModerationSchema), admin_community_controller_1.adminModeratePost);
+router.patch('/posts/:id/resolve', auth_middleware_1.protect, auth_middleware_1.admin, admin_community_controller_1.adminResolvePost);
 router.get('/comments', auth_middleware_1.protect, auth_middleware_1.admin, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.adminCommunityQuerySchema), admin_community_controller_1.adminGetComments);
 router.patch('/comments/:id/moderation', auth_middleware_1.protect, auth_middleware_1.admin, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.adminModerationSchema), admin_community_controller_1.adminModerateComment);
 exports.default = router;

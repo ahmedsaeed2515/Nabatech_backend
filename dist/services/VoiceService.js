@@ -25,7 +25,17 @@ class VoiceService {
     }
     async processAudio(userId, audioFilePath) {
         try {
-            // Initialize SpeechClient lazily (requires Google credentials)
+            const file = fs_1.default.readFileSync(audioFilePath);
+            const audioBytes = file.toString('base64');
+            return this.processCommand(audioBytes, userId, 'en-US');
+        }
+        catch (err) {
+            logger_1.logger.error('Error processing audio file:', err);
+            throw err;
+        }
+    }
+    async processCommand(audioBytes, userId, languageCode = 'ar') {
+        try {
             if (!this.speechClient) {
                 try {
                     this.speechClient = new speech_1.v1.SpeechClient();
@@ -40,15 +50,12 @@ class VoiceService {
                     });
                 }
             }
-            // 1. Transcribe audio
-            const file = fs_1.default.readFileSync(audioFilePath);
-            const audioBytes = file.toString('base64');
             const request = {
                 audio: { content: audioBytes },
                 config: {
                     encoding: 'LINEAR16', // Or adjust based on client
                     sampleRateHertz: 16000,
-                    languageCode: 'en-US',
+                    languageCode: languageCode,
                 },
             };
             const [response] = await this.speechClient.recognize(request);

@@ -10,8 +10,20 @@ class AiOrchestratorService {
         this.ai = new genai_1.GoogleGenAI({ apiKey: env_1.env.GEMINI_API_KEY });
         this.plantRepo = new PlantRepository_1.PlantRepository();
     }
-    async processChat(userId, message) {
+    async getMergedUserPlants(userId) {
+        // Fetch only V2 plants from PlantRepository
         const plants = await this.plantRepo.findByUserId(userId);
+        return plants.map(p => ({
+            id: p._id.toString(),
+            name: p.name,
+            species: p.scientificName || 'Unknown',
+            stage: p.stage,
+            healthScore: p.healthScore,
+            lastWatered: p.lastWatered,
+        }));
+    }
+    async processChat(userId, message) {
+        const plants = await this.getMergedUserPlants(userId);
         const minifiedPlants = plants.map(p => ({
             name: p.name,
             stage: p.stage,
@@ -54,7 +66,7 @@ class AiOrchestratorService {
         }
     }
     async analyzeGarden(userId) {
-        const plants = await this.plantRepo.findByUserId(userId);
+        const plants = await this.getMergedUserPlants(userId);
         const minifiedPlants = plants.map(p => ({
             name: p.name,
             stage: p.stage,

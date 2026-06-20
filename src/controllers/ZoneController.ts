@@ -43,4 +43,31 @@ export class ZoneController {
       res.status(400).json({ status: 'error', message: err.message });
     }
   };
+
+  updateZone = async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const data = req.body;
+      const zone = await this.gardenService.updateZone(id, data);
+      if (!zone) {
+        return res.status(404).json({ status: 'error', message: 'Zone not found' });
+      }
+      res.status(200).json({ status: 'success', data: zone });
+    } catch (err: any) {
+      res.status(400).json({ status: 'error', message: err.message });
+    }
+  };
+
+  deleteZone = async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const success = await this.gardenService.deleteZone(id);
+      if (!success) {
+        return res.status(404).json({ status: 'error', message: 'Zone not found' });
+      }
+      res.status(200).json({ status: 'success', message: 'Zone deleted successfully' });
+    } catch (err: any) {
+      res.status(400).json({ status: 'error', message: err.message });
+    }
+  };
 }

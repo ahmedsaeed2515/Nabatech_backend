@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.postGenerateDraft = exports.postAssistantRequest = void 0;
+exports.postQueryLibrary = exports.postGenerateDraft = exports.postAssistantRequest = void 0;
 const ai_orchestrator_service_1 = require("../services/ai/ai_orchestrator_service");
 const ai_errors_1 = require("../services/ai/ai_errors");
 const cloudinary_1 = __importDefault(require("../config/cloudinary"));
@@ -67,6 +67,7 @@ const postAssistantRequest = async (req, res) => {
         const topK = Number(req.body?.top_k || req.body?.topK) || undefined;
         const clientOperationId = req.body?.clientOperationId;
         const file = req.file;
+        const language = (req.headers["accept-language"] || "en").toString().split(",")[0].trim().split("-")[0];
         if (!file && !text) {
             return res.status(400).json({ success: false, message: "Either file or text/question is required" });
         }
@@ -98,6 +99,13 @@ const postAssistantRequest = async (req, res) => {
                 });
             }
         }
+        const isSSE = req.headers.accept === "text/event-stream";
+        if (isSSE) {
+            res.setHeader("Content-Type", "text/event-stream");
+            res.setHeader("Cache-Control", "no-cache");
+            res.setHeader("Connection", "keep-alive");
+            res.flushHeaders();
+        }
         // 1. Run inference
         const result = await (0, ai_orchestrator_service_1.orchestrateAssistantRequest)({
             userId,
@@ -106,6 +114,12 @@ const postAssistantRequest = async (req, res) => {
             question: text,
             history,
             topK,
+            language,
+            onProgress: (phase) => {
+                if (isSSE) {
+                    res.write(`data: ${JSON.stringify({ type: "progress", phase })}\n\n`);
+                }
+            }
         });
         let imageUrl = "";
         if (file) {
@@ -220,7 +234,12 @@ const postAssistantRequest = async (req, res) => {
                 }
             }
         }
-        return res.status(200).json({ success: true, ...result, imageUrl: imageUrl || undefined, uncertain: Boolean(result.lowConfidenceWarning) });
+        const finalResponse = { success: true, ...result, imageUrl: imageUrl || undefined, uncertain: Boolean(result.lowConfidenceWarning) };
+        if (isSSE) {
+            res.write(`data: ${JSON.stringify({ type: "result", data: finalResponse })}\n\n`);
+            return res.end();
+        }
+        return res.status(200).json(finalResponse);
     }
     catch (error) {
         console.error("Assistant pipeline failed:", (0, ai_errors_1.sanitizeErrorMessage)(error));
@@ -231,6 +250,10 @@ const postAssistantRequest = async (req, res) => {
             catch (delErr) {
                 console.error("Failed to cleanup Cloudinary on assistant request error:", (0, ai_errors_1.sanitizeErrorMessage)(delErr));
             }
+        }
+        if (req.headers.accept === "text/event-stream") {
+            res.write(`data: ${JSON.stringify({ type: "error", message: "Assistant request failed" })}\n\n`);
+            return res.end();
         }
         return res.status(502).json({ success: false, message: "Assistant request failed" });
     }
@@ -258,3 +281,19 @@ const postGenerateDraft = async (req, res) => {
     }
 };
 exports.postGenerateDraft = postGenerateDraft;
+const postQueryLibrary = async (req, res) => {
+    try {
+        const query = (req.body?.query || req.query?.query || "").toString().trim();
+        if (!query) {
+            return res.status(400).json({ success: false, message: "Query is required" });
+        }
+        const { PlantEmbeddingsService } = await Promise.resolve().then(() => __importStar(require("../services/plant_embeddings_service")));
+        const plants = await PlantEmbeddingsService.searchSimilarPlants(query, 5);
+        return res.status(200).json({ success: true, data: plants });
+    }
+    catch (error) {
+        console.error("Library query failed:", (0, ai_errors_1.sanitizeErrorMessage)(error));
+        return res.status(500).json({ success: false, message: "Library query failed" });
+    }
+};
+exports.postQueryLibrary = postQueryLibrary;

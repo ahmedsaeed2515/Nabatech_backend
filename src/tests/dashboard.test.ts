@@ -150,13 +150,10 @@ describe("Dashboard Stats API Endpoints", () => {
       expect(res.body.offlineVsRemote.offline).toBe(1);
       expect(res.body.offlineVsRemote.remote).toBe(1);
 
-      // Verify nested dual-compatibility 'stats' object exists
-      expect(res.body.stats).toBeDefined();
-      expect(res.body.stats.totalUsers).toBe(2);
-      expect(res.body.stats.totalPlants).toBe(1);
-      expect(res.body.stats.scanDistribution).toHaveLength(2);
-      expect(res.body.stats.scanDistribution[0].value).toBe(1); // Remote
-      expect(res.body.stats.scanDistribution[1].value).toBe(1); // Offline
+      // Redundant nested 'stats' object removed (TASK-005):
+      // top-level fields duplicate the same data; verify top-level totals instead.
+      expect(res.body.totalUsers).toBe(2);
+      expect(res.body.totalPosts).toBeDefined();
     });
   });
 

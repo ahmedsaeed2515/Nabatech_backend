@@ -1,74 +1,66 @@
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-// @ts-ignore
-import MongoStore from 'rate-limit-mongo';
-import { env } from '../config/env';
+import rateLimit from "express-rate-limit";
+import RedisStore from "rate-limit-redis";
+import { Request } from "express";
+import redisClient from "../config/redis";
 
-// Determine the store based on deployment mode
-const createStore = () => {
-  if (env.DEPLOYMENT_MODE === 'multi-instance' || env.DEPLOYMENT_MODE === 'serverless') {
-    const uri = env.MONGODB_URI || env.MONGO_URI;
-    if (uri) {
-      return new MongoStore({
-        uri: uri,
-        collectionName: 'rateLimitCounters',
-        expireTimeMs: 15 * 60 * 1000,
-        errorHandler: console.error.bind(null, 'rate-limit-mongo')
-      });
-    }
-  }
-  // Default to memory store for single-instance
-  return undefined; 
-};
+const store = redisClient
+  ? new RedisStore({
+      sendCommand: (...args: string[]) => (redisClient as any).call(...args),
+    })
+  : undefined; // fallback to default MemoryStore if Redis isn't configured
 
-const store = createStore();
-
-const message = { 
-  success: false, 
-  error: {
-    code: 'RATE_LIMITED',
-    status: 429,
-    message: "Too many attempts. Try again later."
+export const aiRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // Limit each IP/User to 10 requests per minute
+  message: {
+    success: false,
+    message: "Too many AI requests, please try again after a minute",
   },
-  // legacy alias
-  message: "Too many attempts. Try again later."
-};
+  standardHeaders: true,
+  legacyHeaders: false,
+  store,
+  keyGenerator: (req: Request) => {
+    // Rate limit by User ID if authenticated, otherwise by IP
+    return (req as any)?.user?.id || req.ip;
+  },
+});
 
-// Default rate limit builder
-const createLimiter = (options: { windowMs: number, max: number, keyGenerator?: any }) => {
-  return rateLimit({
-    windowMs: options.windowMs,
-    max: options.max,
-    standardHeaders: true,
-    legacyHeaders: false,
-    store,
-    message,
-    skip: (req) => process.env.NODE_ENV === 'test',
-    keyGenerator: options.keyGenerator
-  });
-};
-
-// Login 5 attempts/15 min per email+IP
-export const loginLimiter = createLimiter({
+// Standard limit for login attempts (5 per 15 minutes)
+export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
-  keyGenerator: (req: any) => `${ipKeyGenerator(req.ip)}_${req.body.email || ''}`
+  message: { success: false, message: "Too many login attempts, please try again after 15 minutes" },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store,
 });
 
-// Register 10/IP/15 min
-export const registerLimiter = createLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 10
+// Stricter limit for registration (3 per hour)
+export const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  message: { success: false, message: "Too many accounts created from this IP, please try again after an hour" },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store,
 });
 
-// Forgot/reset/verify 5/IP/15 min
-export const strictAuthLimiter = createLimiter({
+// Strict auth actions (password reset, email verification etc.) - 3 per 15 mins
+export const strictAuthLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5
+  max: 3,
+  message: { success: false, message: "Too many requests, please try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store,
 });
 
-// Refresh 60/device/15 min (or IP if device ID isn't used)
-export const refreshLimiter = createLimiter({
+// Refresh token limit - 20 per 15 mins
+export const refreshLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 60,
-  keyGenerator: (req: any) => `${ipKeyGenerator(req.ip)}_${req.body.deviceId || 'unknown'}`
+  max: 20,
+  message: { success: false, message: "Too many refresh token requests" },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store,
 });

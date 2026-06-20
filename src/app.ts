@@ -23,7 +23,7 @@ import plantLibraryRouter from "./routers/plant_library_router";
 import remindersRouter from "./routers/reminders_router";
 import adminRemindersRouter from "./routers/admin_reminders_router";
 import adminDiagnosisRouter from "./routers/admin_diagnosis_router";
-import testRouter from "./routers/test_routers";
+// import testRouter from "./routers/test_routers";
 import uploadRouter from "./routers/upload_routes";
 import userRoutes from "./routers/user_router";
 import internalJobsRouter from "./routers/internal_jobs_router";
@@ -32,10 +32,19 @@ import adminSpecialistOffersRouter from "./routers/admin_specialist_offers_route
 import adminCommunityRouter from "./routers/admin_community_router";
 import adminHomeToolsRouter from "./routers/admin_home_tools_router";
 import adminMyPlantsRouter from "./routers/admin_my_plants_router";
+import adminUserPlantsRouter from "./routers/admin_user_plants_router";
+import adminGardensRouter from "./routers/admin_gardens_router";
 import articleRouter from "./routers/article_router";
 import adminArticleRouter from "./routers/admin_article_router";
 import expertRouter from "./routers/expert_router";
+import adminTicketsRouter from "./routers/admin_tickets_router";
+import userTicketsRouter from "./routers/user_tickets_router";
 import v2Router from "./routers/v2";
+import notificationRouter from "./routers/notification_router";
+import adminAiControlRouter from "./routers/admin_ai_control_router";
+import adminAiOsRouter from "./routers/admin_ai_os_router";
+import adminHomeExperienceRouter from "./routers/admin_home_experience_router";
+import adminChatLogsRouter from "./routes/admin_chat_logs_router";
 const app = express();
 
 // CORS Middleware - Strict allowed origins
@@ -113,7 +122,7 @@ app.get("/health/ready", async (req: Request, res: Response) => {
   }
 });
 
-app.use("/api/test", testRouter);
+// app.use("/api/test", testRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/upload", uploadRouter);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
@@ -137,12 +146,21 @@ app.use("/api/admin/specialist-offers", adminSpecialistOffersRouter);
 app.use("/api/admin/community", adminCommunityRouter);
 app.use("/api/admin/home-tools", adminHomeToolsRouter);
 app.use("/api/admin/my-plants", adminMyPlantsRouter);
+app.use("/api/admin/user-plants", adminUserPlantsRouter);
+app.use("/api/admin/gardens", adminGardensRouter);
 app.use("/api/ai", aiAssistantRouter);
 app.use("/api/articles", articleRouter);
 app.use("/api/admin/articles", adminArticleRouter);
 app.use("/api/experts", expertRouter);
 app.use("/api/internal/jobs", internalJobsRouter);
+app.use("/api/admin/tickets", adminTicketsRouter);
+app.use("/api/tickets", userTicketsRouter);
 app.use("/api/v1", v2Router);
+app.use("/api/notifications", notificationRouter);
+app.use("/api/admin/ai", adminAiControlRouter);
+app.use("/api/admin/ai-os", adminAiOsRouter);
+app.use("/api/admin/home", adminHomeExperienceRouter);
+app.use("/api/admin/chat-logs", adminChatLogsRouter);
 
 app.get("/", (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: { message: "Express + TypeScript is working" } });

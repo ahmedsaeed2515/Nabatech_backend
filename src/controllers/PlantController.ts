@@ -60,4 +60,18 @@ export class PlantController {
       res.status(400).json({ status: 'error', message: err.message });
     }
   };
+
+  deletePlant = async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const userId = (req as any).user._id || (req as any).user.userId;
+      const success = await this.plantService.deletePlant(id, userId);
+      if (!success) {
+        return res.status(404).json({ status: 'error', message: 'Plant not found or unauthorized' });
+      }
+      res.status(200).json({ status: 'success', message: 'Plant deleted successfully' });
+    } catch (err: any) {
+      res.status(400).json({ status: 'error', message: err.message });
+    }
+  };
 }
