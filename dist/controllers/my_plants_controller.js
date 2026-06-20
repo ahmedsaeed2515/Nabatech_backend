@@ -110,14 +110,14 @@ exports.getPlantById = getPlantById;
 const addPlant = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const { name, species, imageUrl, location, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications } = req.body;
+        const { name, species, imageUrl, location, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications, clientOperationId } = req.body;
         if (!name || !species || !location || waterFrequencyDays === undefined) {
             throw new app_error_1.AppError({ code: 'VALIDATION_FAILED', statusCode: 400, message: 'Name, species, location and water frequency are required' });
         }
         if (waterFrequencyDays !== undefined && Number(waterFrequencyDays) < 1) {
             throw new app_error_1.AppError({ code: 'VALIDATION_FAILED', statusCode: 400, message: 'waterFrequencyDays must be at least 1' });
         }
-        const idempotencyKey = req.headers['idempotency-key'];
+        const idempotencyKey = req.headers['idempotency-key'] || clientOperationId;
         let idempotencyRecord = null;
         if (idempotencyKey) {
             const requestHash = crypto_1.default.createHash('md5').update(JSON.stringify(req.body)).digest('hex');

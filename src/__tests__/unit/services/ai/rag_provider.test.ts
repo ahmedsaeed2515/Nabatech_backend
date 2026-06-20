@@ -1,4 +1,4 @@
-import { retrieveRagChunks } from '../../../services/ai/rag_provider';
+import { retrieveRagChunks } from '../../../../services/ai/rag_provider';
 import axios from 'axios';
 
 jest.mock('axios');

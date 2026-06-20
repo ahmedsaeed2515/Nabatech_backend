@@ -1,7 +1,7 @@
-import { AiOrchestratorService } from '../../../services/ai/ai_orchestrator_service';
-import MemoryManager from '../../../services/ai/memory_manager';
+import { AiOrchestratorService } from '../../services/ai/ai_orchestrator_service';
+import MemoryManager from '../../services/ai/memory_manager';
 import { createFakeUser } from '../factories';
-import UserModel from '../../../models/user_model';
+import UserModel from '../../models/user_model';
 
 describe('[E2E] Agent Long-Term Memory', () => {
 
@@ -26,8 +26,8 @@ describe('[E2E] Agent Long-Term Memory', () => {
 
     // Memory should have been saved
     expect(saveSpy).toHaveBeenCalled();
-    const savedKeys = saveSpy.mock.calls.map(call => call[1]);
-    expect(savedKeys.some(k => k.includes('location') || k.includes('egypt'))).toBe(true);
+    const savedKeys = saveSpy.mock.calls.map((call: any) => call[1]);
+    expect(savedKeys.some((k: any) => k.includes('location') || k.includes('egypt'))).toBe(true);
   });
 
   it('يجب يحقن الـ long-term memory في الـ context بعدين', async () => {

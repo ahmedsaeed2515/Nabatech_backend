@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const admin_chat_logs_controller_1 = require("../controllers/admin_chat_logs_controller");
-const auth_middleware_1 = require("../middleware/auth_middleware");
+const auth_middleware_1 = require("../middlewares/auth_middleware");
 const router = (0, express_1.Router)();
 // Protect all routes
 router.use((0, auth_middleware_1.authorizeRoles)("admin", "staff"));

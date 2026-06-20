@@ -14,6 +14,10 @@ export interface INotification extends Document {
   user: Types.ObjectId;
   title: string;
   body: string;
+  titleAr?: string;
+  titleEn?: string;
+  bodyAr?: string;
+  bodyEn?: string;
   type: NotificationType;
   data: Record<string, any>;
   read: boolean;
@@ -26,6 +30,10 @@ const notificationSchema = new mongoose.Schema<INotification>(
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     title: { type: String, required: true },
     body: { type: String, required: true },
+    titleAr: { type: String },
+    titleEn: { type: String },
+    bodyAr: { type: String },
+    bodyEn: { type: String },
     type: {
       type: String,
       enum: [

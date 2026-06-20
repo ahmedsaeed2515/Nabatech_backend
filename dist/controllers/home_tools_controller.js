@@ -228,8 +228,10 @@ const getHomeFeed = async (req, res) => {
             home_widget_model_1.default.find({ isActive: true }).sort({ defaultOrder: 1 }),
             home_banner_model_1.default.find({
                 isActive: true,
-                $or: [{ startDate: null }, { startDate: { $lte: now } }],
-                $or: [{ endDate: null }, { endDate: { $gte: now } }],
+                $and: [
+                    { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
+                    { $or: [{ endDate: null }, { endDate: { $gte: now } }] }
+                ]
             }).sort({ priority: -1 }),
             home_quick_action_model_1.default.find({ isActive: true }).sort({ order: 1 }),
             home_section_model_1.default.find({ isActive: true }).sort({ order: 1 })

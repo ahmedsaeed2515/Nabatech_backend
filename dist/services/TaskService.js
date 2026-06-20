@@ -30,7 +30,7 @@ class TaskService {
             user: userId,
             title,
             dueDate,
-            plantId: plantId,
+            plant: plantId,
             status: task_model_1.TaskStatus.PENDING
         });
     }

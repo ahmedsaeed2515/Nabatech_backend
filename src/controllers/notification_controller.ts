@@ -24,9 +24,30 @@ export const getNotifications = async (req: Request, res: Response) => {
       NotificationModel.countDocuments({ user: userId })
     ]);
 
+    const formattedNotifications = notifications.map((n: any) => {
+      let mappedType = 'system';
+      const t = (n.type || '').toUpperCase();
+      if (t.includes('REMINDER')) mappedType = 'reminder';
+      else if (t.includes('ALERT')) mappedType = 'alert';
+      else if (t.includes('COMMUNITY')) mappedType = 'community';
+
+      return {
+        id: n._id,
+        titleAr: n.titleAr || n.title,
+        titleEn: n.titleEn || n.title,
+        bodyAr: n.bodyAr || n.body,
+        bodyEn: n.bodyEn || n.body,
+        type: mappedType,
+        isRead: n.read,
+        createdAt: n.createdAt,
+        updatedAt: n.updatedAt,
+        data: n.data
+      };
+    });
+
     return res.json({
       success: true,
-      data: notifications,
+      data: formattedNotifications,
       pagination: { page, limit, total, pages: Math.ceil(total / limit) }
     });
   } catch (err: any) {

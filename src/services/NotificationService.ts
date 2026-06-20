@@ -32,7 +32,7 @@ export class NotificationService {
    */
   async sendPushNotification(
     fcmToken: string,
-    payload: { notification: { title: string; body: string }; data?: Record<string, string> },
+    payload: { notification: { title: string; body: string; titleAr?: string; titleEn?: string; bodyAr?: string; bodyEn?: string }; data?: Record<string, string> },
     options?: { userId?: string; type?: NotificationType }
   ) {
     // ✅ Always persist to DB for in-app notification center
@@ -42,6 +42,10 @@ export class NotificationService {
           user: options.userId,
           title: payload.notification.title,
           body: payload.notification.body,
+          titleAr: payload.notification.titleAr,
+          titleEn: payload.notification.titleEn,
+          bodyAr: payload.notification.bodyAr,
+          bodyEn: payload.notification.bodyEn,
           type: options.type || 'GENERAL',
           data: payload.data || {},
           read: false

@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bulkImport = exports.deleteDisease = exports.updateDisease = exports.addDisease = exports.getDiseases = exports.exportPlants = exports.getPlantStats = exports.publishPlant = exports.archivePlant = exports.getPlantById = exports.deletePlant = exports.updatePlant = exports.addPlant = exports.searchPlants = exports.getPlants = void 0;
+exports.bulkImport = exports.deleteDisease = exports.updateDisease = exports.addDisease = exports.getDiseases = exports.exportPlants = exports.getPlantStats = exports.searchPlants = exports.publishPlant = exports.archivePlant = exports.getPlantById = exports.deletePlant = exports.updatePlant = exports.addPlant = exports.adminSearchPlants = exports.getPlants = void 0;
 const plant_model_1 = __importDefault(require("../models/plant_model"));
 const disease_model_1 = __importDefault(require("../models/disease_model"));
 const logger_1 = __importDefault(require("../logger"));
@@ -95,7 +95,7 @@ exports.getPlants = getPlants;
 // @desc    Search plants by wildcard text
 // @route   GET /api/v1/admin/plants/search
 // @access  Admin
-const searchPlants = async (req, res) => {
+const adminSearchPlants = async (req, res) => {
     try {
         const { q, cursor, limit = "20" } = req.query;
         const limitNumber = Math.min(parseInt(limit, 10) || 20, 100);
@@ -132,7 +132,7 @@ const searchPlants = async (req, res) => {
         res.status(500).json({ success: false, message: error.message || "Failed to search plants" });
     }
 };
-exports.searchPlants = searchPlants;
+exports.adminSearchPlants = adminSearchPlants;
 // @desc    Add new plant
 // @route   POST /api/plant-library/plants
 // @access  Admin

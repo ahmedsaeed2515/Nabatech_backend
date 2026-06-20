@@ -41,7 +41,7 @@ describe('[INTEGRATION] AgentTool — add_plant_to_garden', () => {
     // Check Plant was created with REAL zone ID
     const plant = await PlantModel.findOne({ user: userId });
     expect(plant).not.toBeNull();
-    expect(plant!.zone.toString()).toBe(zone!._id.toString());
+    expect(plant!.zone!.toString()).toBe(zone!._id.toString());
     // Must NOT be a random non-existent ObjectId
     const zoneExists = await ZoneModel.findById(plant!.zone);
     expect(zoneExists).not.toBeNull();

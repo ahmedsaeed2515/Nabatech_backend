@@ -105,7 +105,7 @@ export const getPlantById = async (req: Request, res: Response, next: NextFuncti
 export const addPlant = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = (req as any).user.id;
-    const { name, species, imageUrl, location, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications } = req.body;
+    const { name, species, imageUrl, location, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications, clientOperationId } = req.body;
 
     if (!name || !species || !location || waterFrequencyDays === undefined) {
       throw new AppError({ code: 'VALIDATION_FAILED', statusCode: 400, message: 'Name, species, location and water frequency are required' });
@@ -115,7 +115,7 @@ export const addPlant = async (req: Request, res: Response, next: NextFunction) 
       throw new AppError({ code: 'VALIDATION_FAILED', statusCode: 400, message: 'waterFrequencyDays must be at least 1' });
     }
 
-    const idempotencyKey = req.headers['idempotency-key'] as string;
+    const idempotencyKey = (req.headers['idempotency-key'] as string) || clientOperationId;
     let idempotencyRecord: any = null;
 
     if (idempotencyKey) {

@@ -42,6 +42,10 @@ class NotificationService {
                     user: options.userId,
                     title: payload.notification.title,
                     body: payload.notification.body,
+                    titleAr: payload.notification.titleAr,
+                    titleEn: payload.notification.titleEn,
+                    bodyAr: payload.notification.bodyAr,
+                    bodyEn: payload.notification.bodyEn,
                     type: options.type || 'GENERAL',
                     data: payload.data || {},
                     read: false

@@ -8,6 +8,10 @@ const notificationSchema = new mongoose_1.default.Schema({
     user: { type: mongoose_1.default.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     title: { type: String, required: true },
     body: { type: String, required: true },
+    titleAr: { type: String },
+    titleEn: { type: String },
+    bodyAr: { type: String },
+    bodyEn: { type: String },
     type: {
         type: String,
         enum: [
