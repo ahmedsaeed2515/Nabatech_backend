@@ -1,5 +1,5 @@
-import { AiOrchestratorService } from '../../services/ai/ai_orchestrator_service';
-import MemoryManager from '../../services/ai/memory_manager';
+import { orchestrateChat } from '../../services/ai/ai_orchestrator_service';
+import { MemoryManager } from '../../services/ai/memory_manager';
 import { createFakeUser } from '../factories';
 import UserModel from '../../models/user_model';
 
@@ -16,8 +16,7 @@ describe('[E2E] Agent Long-Term Memory', () => {
     const saveSpy = jest.spyOn(MemoryManager, 'saveLongTermMemory').mockResolvedValue(undefined);
 
     // Simulate a conversation where user reveals their location
-    const orchestrator = new AiOrchestratorService();
-    await orchestrator.processChat({
+    await orchestrateChat({
       userId,
       question: 'I live in Egypt and I prefer organic treatments for my plants',
       history: [],
