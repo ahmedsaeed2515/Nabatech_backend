@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const ai_orchestrator_service_1 = require("../../services/ai/ai_orchestrator_service");
-const memory_manager_1 = __importDefault(require("../../services/ai/memory_manager"));
+const memory_manager_1 = require("../../services/ai/memory_manager");
 const factories_1 = require("../factories");
 const user_model_1 = __importDefault(require("../../models/user_model"));
 describe('[E2E] Agent Long-Term Memory', () => {
@@ -14,10 +14,9 @@ describe('[E2E] Agent Long-Term Memory', () => {
         userId = user._id.toString();
     });
     it('يجب يستخرج ويخزن facts بعد المحادثة — FIX TASK-1.1', async () => {
-        const saveSpy = jest.spyOn(memory_manager_1.default, 'saveLongTermMemory').mockResolvedValue(undefined);
+        const saveSpy = jest.spyOn(memory_manager_1.MemoryManager, 'saveLongTermMemory').mockResolvedValue(undefined);
         // Simulate a conversation where user reveals their location
-        const orchestrator = new ai_orchestrator_service_1.AiOrchestratorService();
-        await orchestrator.processChat({
+        await (0, ai_orchestrator_service_1.orchestrateChat)({
             userId,
             question: 'I live in Egypt and I prefer organic treatments for my plants',
             history: [],
@@ -30,10 +29,11 @@ describe('[E2E] Agent Long-Term Memory', () => {
     });
     it('يجب يحقن الـ long-term memory في الـ context بعدين', async () => {
         // Pre-seed memory
-        await memory_manager_1.default.saveLongTermMemory(userId, 'location', 'Egypt');
-        await memory_manager_1.default.saveLongTermMemory(userId, 'treatment_preference', 'organic');
-        const memory = await memory_manager_1.default.getLongTermMemory(userId);
-        expect(memory).toContain('Egypt');
-        expect(memory).toContain('organic');
+        await memory_manager_1.MemoryManager.saveLongTermMemory(userId, 'location', 'Egypt');
+        await memory_manager_1.MemoryManager.saveLongTermMemory(userId, 'treatment_preference', 'organic');
+        const memory = await memory_manager_1.MemoryManager.getAllContext(userId);
+        const memoryStr = JSON.stringify(memory);
+        expect(memoryStr).toContain('Egypt');
+        expect(memoryStr).toContain('organic');
     });
 });

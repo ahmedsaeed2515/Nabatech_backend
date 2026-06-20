@@ -34,9 +34,10 @@ describe('[E2E] Agent Long-Term Memory', () => {
     await MemoryManager.saveLongTermMemory(userId, 'location', 'Egypt');
     await MemoryManager.saveLongTermMemory(userId, 'treatment_preference', 'organic');
 
-    const memory = await MemoryManager.getLongTermMemory(userId);
+    const memory = await MemoryManager.getAllContext(userId);
+    const memoryStr = JSON.stringify(memory);
 
-    expect(memory).toContain('Egypt');
-    expect(memory).toContain('organic');
+    expect(memoryStr).toContain('Egypt');
+    expect(memoryStr).toContain('organic');
   });
 });
