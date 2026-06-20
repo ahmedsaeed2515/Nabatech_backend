@@ -8,6 +8,7 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const user_model_1 = __importDefault(require("../models/user_model"));
 const app_error_1 = require("../utils/app_error");
 const protect = async (req, res, next) => {
+    console.log("protect called! Auth header:", req.headers.authorization ? 'present' : 'missing');
     let token;
     if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
         try {
@@ -42,6 +43,7 @@ exports.protect = protect;
 const authorizeRoles = (...roles) => {
     return (req, res, next) => {
         const user = req.user;
+        console.log("authorizeRoles User:", user ? Object.keys(user) : 'No user', "Role:", user?.role);
         if (!user || !user.role) {
             return next(new app_error_1.AppError({ code: 'AUTH_FORBIDDEN', statusCode: 403, message: 'Access denied: No role assigned' }));
         }

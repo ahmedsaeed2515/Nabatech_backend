@@ -170,7 +170,7 @@ export const getWateringRecommendation = async (req: Request, res: Response) => 
 export const getHomeToolsAnalytics = async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    if (user.role !== "admin") {
+    if (user.role !== "admin" && user.role !== "super_admin") {
       return res.status(403).json({ success: false, code: "AUTH_FORBIDDEN", message: "Admin access required" });
     }
     const { from, to, timeZone } = req.query as any;

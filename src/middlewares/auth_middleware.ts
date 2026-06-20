@@ -11,6 +11,7 @@ interface JwtPayload {
 }
 
 export const protect = async (req: Request, res: Response, next: NextFunction) => {
+    console.log("protect called! Auth header:", req.headers.authorization ? 'present' : 'missing');
     let token;
 
     if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
@@ -50,6 +51,7 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
 export const authorizeRoles = (...roles: string[]) => {
     return (req: Request, res: Response, next: NextFunction) => {
         const user = (req as any).user;
+        console.log("authorizeRoles User:", user ? Object.keys(user) : 'No user', "Role:", user?.role);
         if (!user || !user.role) {
             return next(new AppError({ code: 'AUTH_FORBIDDEN', statusCode: 403, message: 'Access denied: No role assigned' }));
         }

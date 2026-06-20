@@ -2,7 +2,7 @@ import request from "supertest";
 import mongoose from "mongoose";
 import app from "../../app";
 import User from "../../models/user_model";
-import { generateToken } from "../../utils/generate_token";
+import generateToken from "../../utils/generateToken";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import NotificationModel from "../../models/notification_model";
 import DiagnosisHistory from "../../models/diagnosis_history_model";
@@ -23,7 +23,7 @@ describe("Real API Outputs Verification", () => {
       password: "Password123!",
     });
     userId = user._id.toString();
-    token = generateToken(userId);
+    token = generateToken(userId, "user", 0);
   });
 
   afterAll(async () => {

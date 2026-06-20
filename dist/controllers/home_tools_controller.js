@@ -184,7 +184,7 @@ exports.getWateringRecommendation = getWateringRecommendation;
 const getHomeToolsAnalytics = async (req, res) => {
     try {
         const user = req.user;
-        if (user.role !== "admin") {
+        if (user.role !== "admin" && user.role !== "super_admin") {
             return res.status(403).json({ success: false, code: "AUTH_FORBIDDEN", message: "Admin access required" });
         }
         const { from, to, timeZone } = req.query;

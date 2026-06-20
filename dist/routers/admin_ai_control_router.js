@@ -5,7 +5,7 @@ const admin_ai_control_controller_1 = require("../controllers/admin_ai_control_c
 const auth_middleware_1 = require("../middlewares/auth_middleware");
 const router = (0, express_1.Router)();
 // Ensure only super admin or AI engineers have access to the AI Control Center
-router.use((0, auth_middleware_1.authorizeRoles)("admin", "staff"));
+router.use(auth_middleware_1.protect, (0, auth_middleware_1.authorizeRoles)("super_admin", "admin", "staff"));
 // Providers
 router.get("/providers", admin_ai_control_controller_1.getProviders);
 router.post("/providers", admin_ai_control_controller_1.createProvider);

@@ -4,7 +4,7 @@ const express_1 = require("express");
 const admin_home_experience_controller_1 = require("../controllers/admin_home_experience_controller");
 const auth_middleware_1 = require("../middlewares/auth_middleware");
 const router = (0, express_1.Router)();
-router.use((0, auth_middleware_1.authorizeRoles)("admin", "staff"));
+router.use(auth_middleware_1.protect, (0, auth_middleware_1.authorizeRoles)("super_admin", "admin", "staff"));
 // Widgets
 router.get("/widgets", admin_home_experience_controller_1.getWidgets);
 router.post("/widgets", admin_home_experience_controller_1.createWidget);
