@@ -6,11 +6,11 @@ import {
   getSections, createSection, updateSection, deleteSection,
   getHomeAnalytics
 } from "../controllers/admin_home_experience_controller";
-import { authorizeRoles } from "../middlewares/auth_middleware";
+import { protect, authorizeRoles } from "../middlewares/auth_middleware";
 
 const router = Router();
 
-router.use(authorizeRoles("admin", "staff"));
+router.use(protect, authorizeRoles("super_admin", "admin", "staff"));
 
 // Widgets
 router.get("/widgets", getWidgets);

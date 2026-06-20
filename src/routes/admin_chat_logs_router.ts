@@ -7,12 +7,12 @@ import {
   getChatToolCalls, 
   getChatDiagnoses 
 } from "../controllers/admin_chat_logs_controller";
-import { authorizeRoles } from '../middlewares/auth_middleware';
+import { protect, authorizeRoles } from '../middlewares/auth_middleware';
 
 const router = Router();
 
 // Protect all routes
-router.use(authorizeRoles("admin", "staff"));
+router.use(protect, authorizeRoles("super_admin", "admin", "staff"));
 
 router.get("/analytics", getChatAnalytics);
 router.get("/sessions", getChatSessions);

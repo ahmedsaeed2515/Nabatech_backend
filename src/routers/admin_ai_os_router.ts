@@ -8,12 +8,12 @@ import {
   updatePrompt,
   getAuditLogs
 } from "../controllers/admin_ai_os_controller";
-import { authorizeRoles } from "../middlewares/auth_middleware";
+import { protect, authorizeRoles } from "../middlewares/auth_middleware";
 
 const router = Router();
 
 // Ensure only super admin or AI engineers have access to the AI OS Center
-router.use(authorizeRoles("admin", "staff"));
+router.use(protect, authorizeRoles("super_admin", "admin", "staff"));
 
 // Agents
 router.get("/agents", getAgentProfiles);
