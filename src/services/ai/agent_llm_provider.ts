@@ -32,7 +32,14 @@ export class AgentLlmProvider {
     if (providers.length === 0) {
       await manager.reloadProviders();
     }
-    const agentProvider = manager.getProviders().find(p => p.enabled && p.status !== "failed" && (p.providerName.includes('openai') || p.providerName.includes('openrouter') || p.baseUrl.includes('openai.com') || p.baseUrl.includes('openrouter.ai')));
+    const agentProvider = manager.getProviders().find(p => p.enabled && p.status !== "failed" && (
+      p.providerName.includes('openai') || 
+      p.providerName.includes('openrouter') || 
+      p.providerName.includes('agentrouter') || 
+      p.baseUrl.includes('openai.com') || 
+      p.baseUrl.includes('openrouter.ai') ||
+      p.baseUrl.includes('agentrouter.org')
+    ));
 
     if (!agentProvider) {
       throw new AiProviderError("No compatible generic_llm provider available for Agent Tool Calling.");
@@ -41,6 +48,7 @@ export class AgentLlmProvider {
     const endpointUrl = agentProvider.baseUrl;
     const apiKey = decryptSecret(agentProvider.apiKeyEncrypted);
     const isOpenRouter = endpointUrl.includes("openrouter.ai");
+    const isAgentRouter = endpointUrl.includes("agentrouter.org");
 
     if (!apiKey) {
       throw new Error("API Key is required for Agent Tool Calling");
@@ -69,6 +77,10 @@ export class AgentLlmProvider {
           ...(isOpenRouter ? { 
             "HTTP-Referer": "https://nabatech.com", 
             "X-Title": "Nabatech AI Platform" 
+          } : {}),
+          ...(isAgentRouter ? { 
+            "HTTP-Referer": "https://agentrouter.org/", 
+            "X-Title": "MyApp" 
           } : {})
         }
       });

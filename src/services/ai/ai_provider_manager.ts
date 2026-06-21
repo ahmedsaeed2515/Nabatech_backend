@@ -6,13 +6,25 @@ import { callProvider, HistoryTurn, LlmResult } from "./llm_provider";
 import { AiProviderError } from "./ai_errors";
 import { getAiSettings } from "./ai_config_service";
 
+// Global interceptor for agentrouter.org requirements
+axios.interceptors.request.use((config) => {
+  if (config.url && config.url.includes("agentrouter.org")) {
+    config.headers["HTTP-Referer"] = "https://agentrouter.org/";
+    config.headers["X-Title"] = "MyApp";
+  }
+  return config;
+});
+
 class AiProviderManager {
   private providers: IAiProviderSettings[] = [];
+  private lastReloadAt = 0;
+  private readonly RELOAD_TTL_MS = 30_000; // refresh from DB every 30s
 
   constructor() {}
 
   public async reloadProviders() {
     this.providers = await AiProviderSettings.find({ enabled: true }).sort({ priority: 1 });
+    this.lastReloadAt = Date.now();
   }
 
   public getProviders() {
@@ -36,7 +48,9 @@ class AiProviderManager {
     history: HistoryTurn[],
     options: { timeoutMs?: number } = {}
   ): Promise<LlmResult> {
-    if (this.providers.length === 0) {
+    // Always reload if cache is empty or stale (TTL expired)
+    const now = Date.now();
+    if (this.providers.length === 0 || (now - this.lastReloadAt) > this.RELOAD_TTL_MS) {
       await this.reloadProviders();
     }
 
@@ -93,8 +107,10 @@ class AiProviderManager {
       const fallbackResult = await askRagFallback("https://ahmedsaeed111-rag-only.hf.space/ask", message, history);
       return { message: fallbackResult, source: "hf-rag-fallback", provider: "hf-rag-fallback" };
     } catch (fallbackErr: any) {
-      logger.error("Emergency fallback also failed", fallbackErr);
-      throw new AiProviderError(`All AI providers failed. Errors: ${JSON.stringify(errors)}`);
+      logger.error("Emergency fallback also failed: " + (fallbackErr?.message || String(fallbackErr)));
+      // Safely serialize errors — avoid circular reference from axios error objects
+      const safeErrors = errors.map((e: any) => ({ provider: e.provider, error: String(e.error) }));
+      throw new AiProviderError(`All AI providers failed. Errors: ${JSON.stringify(safeErrors)}`);
     }
   }
 

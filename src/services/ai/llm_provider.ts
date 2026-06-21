@@ -80,6 +80,7 @@ export const callProvider = async (args: {
 
   if (args.providerType === "generic_llm" || args.providerType === "openai_compatible") {
     const isOpenRouter = args.endpointUrl.includes("openrouter.ai");
+    const isAgentRouter = args.endpointUrl.includes("agentrouter.org");
     const response = await axios.post<OpenAiCompletionResponse>(
       args.endpointUrl,
       {
@@ -98,6 +99,10 @@ export const callProvider = async (args: {
           ...(isOpenRouter ? { 
             "HTTP-Referer": "https://nabatech.com", 
             "X-Title": "Nabatech AI Platform" 
+          } : {}),
+          ...(isAgentRouter ? { 
+            "HTTP-Referer": "https://agentrouter.org/", 
+            "X-Title": "MyApp" 
           } : {})
         },
       }

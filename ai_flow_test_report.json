@@ -1,0 +1,99 @@
+{
+  "timestamp": "2026-06-21T21:45:37.518Z",
+  "baseUrl": "http://localhost:10000",
+  "imagePath": "tomato.jpg",
+  "totalTimeMs": 36405,
+  "summary": {
+    "total": 11,
+    "passed": 11,
+    "failed": 0,
+    "skipped": 0,
+    "successRate": "100.0%"
+  },
+  "steps": [
+    {
+      "name": "Health Check",
+      "passed": true,
+      "latencyMs": 54
+    },
+    {
+      "name": "Login",
+      "passed": true,
+      "latencyMs": 738
+    },
+    {
+      "name": "Text Chat: \"مرحبا، نباتتي عندها مشكلة...\"",
+      "passed": true,
+      "latencyMs": 7068,
+      "provider": "hf-rag-fallback",
+      "source": "hf-rag-fallback",
+      "responseLength": 70
+    },
+    {
+      "name": "Text Chat: \"How do I treat powdery mildew ...\"",
+      "passed": true,
+      "latencyMs": 5154,
+      "provider": "hf-rag-fallback",
+      "source": "hf-rag-fallback",
+      "responseLength": 37
+    },
+    {
+      "name": "Text Chat: \"What is the best fertilizer fo...\"",
+      "passed": true,
+      "latencyMs": 4920,
+      "provider": "hf-rag-fallback",
+      "source": "hf-rag-fallback",
+      "responseLength": 46
+    },
+    {
+      "name": "Text Chat: \"ما هي أسباب اصفرار أوراق النبا...\"",
+      "passed": true,
+      "latencyMs": 5294,
+      "provider": "hf-rag-fallback",
+      "source": "hf-rag-fallback",
+      "responseLength": 25
+    },
+    {
+      "name": "Chat History",
+      "passed": true,
+      "latencyMs": 299,
+      "messageCount": 8
+    },
+    {
+      "name": "Image Chat (with CNN+RAG+LLM)",
+      "passed": true,
+      "latencyMs": 4692,
+      "mode": "diagnosis",
+      "source": "cnn",
+      "provider": "huggingface-space",
+      "prediction": "Tomato_Healthy",
+      "confidence": 0.3569,
+      "responseLength": 146,
+      "hasRagContext": false,
+      "hasCommunityContext": false
+    },
+    {
+      "name": "Standalone Diagnosis",
+      "passed": true,
+      "latencyMs": 5385,
+      "prediction": {
+        "diseaseNameEn": "Tomato_Healthy",
+        "confidence": 0.3569,
+        "candidates": [],
+        "provider": "huggingface-space"
+      }
+    },
+    {
+      "name": "Test Assistant (no auth, image)",
+      "passed": true,
+      "latencyMs": 2741,
+      "prediction": "Tomato_Healthy",
+      "confidence": 0.3569
+    },
+    {
+      "name": "Health Debug",
+      "passed": true,
+      "latencyMs": 3
+    }
+  ]
+}

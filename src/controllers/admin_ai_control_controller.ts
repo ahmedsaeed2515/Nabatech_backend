@@ -33,6 +33,7 @@ export const createProvider = async (req: Request, res: Response, next: NextFunc
       baseUrl,
       apiKeyEnc: encryptSecret(apiKey),
     });
+    clearSettingsCache();
     return ok(res, { provider: { id: provider._id, name: provider.name } });
   } catch (error) {
     next(error);
