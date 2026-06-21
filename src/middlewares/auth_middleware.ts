@@ -13,9 +13,29 @@ interface JwtPayload {
 export const protect = async (req: Request, res: Response, next: NextFunction) => {
     console.log("protect called! Auth header:", req.headers.authorization ? 'present' : 'missing');
     
-    // TEMPORARY TESTING MOCK TO BYPASS AUTH
-    (req as any).user = { id: "6a34bc5a27f1ee0a94b8f6d9", role: "super_admin" };
-    return next();
+    if (!req.headers.authorization || !req.headers.authorization.startsWith('Bearer ')) {
+        return next(new AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Not authorized, missing or invalid token format' }));
+    }
+
+    const token = req.headers.authorization.split(' ')[1];
+    if (!token) {
+        return next(new AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Not authorized, no token provided' }));
+    }
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret') as JwtPayload;
+
+        const user = await User.findById(decoded.id).select('-passwordHash');
+        if (!user) {
+            return next(new AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Not authorized, user not found' }));
+        }
+
+        (req as any).user = user;
+        return next();
+    } catch (error) {
+        console.error("JWT Verification failed:", error);
+        return next(new AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Not authorized, token failed' }));
+    }
 };
 
 export const authorizeRoles = (...roles: string[]) => {

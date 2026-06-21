@@ -11,12 +11,18 @@ import { ok } from "../utils/api_response";
 // @access  Public
 export const getStoreProducts = async (req: Request, res: Response) => {
   try {
-    const { category } = req.query;
+    const { category, search, page, limit } = req.query;
     const query: any = {};
-    if (category) {
-      query.category = category;
-    }
-    const products = await StoreProduct.find(query);
+    if (category) query.category = category;
+    if (search) query.name = { $regex: search, $options: "i" };
+
+    const pageNum = parseInt(page as string) || 1;
+    const limitNum = parseInt(limit as string) || 20;
+    const skip = (pageNum - 1) * limitNum;
+
+    const products = await StoreProduct.find(query)
+      .skip(skip)
+      .limit(limitNum);
 
     return ok(res, products.map(p => ({
       id: p._id,
@@ -37,10 +43,13 @@ export const getStoreProducts = async (req: Request, res: Response) => {
 // @access  Public
 export const getExperts = async (req: Request, res: Response) => {
   try {
-    const { specialty } = req.query;
+    const { specialty, search } = req.query;
     
     // Find all users with role 'expert'
-    const users = await User.find({ role: 'expert' }).select('name avatarUrl');
+    const userQuery: any = { role: 'expert' };
+    if (search) userQuery.name = { $regex: search, $options: "i" };
+
+    const users = await User.find(userQuery).select('name avatarUrl');
     const userIds = users.map(u => u._id);
     
     // Find their profiles

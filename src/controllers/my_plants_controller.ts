@@ -505,7 +505,7 @@ export const getPlantDiaries = async (req: Request, res: Response, next: NextFun
       .sort({ date: -1 })
       .skip(skip)
       .limit(limit)
-      .select('_id title date imageUrl content')
+      .select('_id title notes date moodCode healthScore')
       .lean();
 
     const count = await DiaryEntry.countDocuments({ plantId, user: userId });
@@ -538,12 +538,12 @@ export const getPlantReminders = async (req: Request, res: Response, next: NextF
     }
 
     const reminders = await Reminder.find({ plantId, user: userId })
-      .select('_id title scheduledAt type isCompleted')
+      .select('_id title scheduledAt recurrence enabled iconCodePoint')
       .lean();
 
     const formattedReminders = reminders.map((reminder: any) => {
       const { _id, ...rest } = reminder;
-      return { id: _id, ...rest };
+      return { id: _id, plantName: plant.name, ...rest };
     });
 
     return ok(res, {
@@ -571,7 +571,7 @@ export const getPlantDiagnoses = async (req: Request, res: Response, next: NextF
     const diagnoses = await DiagnosisHistory.find({ plantId, user: userId })
       .sort({ diagnosedAt: -1 })
       .limit(10)
-      .select('_id diseaseName confidence diagnosedAt imageUrl')
+      .select('_id imageUrl diseaseNameEn diseaseNameAr confidence severity diagnosedAt')
       .lean();
 
     const formattedDiagnoses = diagnoses.map((diagnosis: any) => {

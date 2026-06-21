@@ -6,6 +6,7 @@ import AiBenchmark from "../models/ai_benchmark_model";
 import AiCallLog from "../models/ai_call_log_model";
 import { encryptSecret, decryptSecret } from "../services/ai/secret_crypto";
 import { ok } from "../utils/api_response";
+import { clearSettingsCache } from "../services/ai/ai_config_service";
 
 // --- Providers ---
 export const getProviders = async (req: Request, res: Response, next: NextFunction) => {
@@ -51,6 +52,7 @@ export const getModels = async (req: Request, res: Response, next: NextFunction)
 export const createModel = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const model = await AiModel.create(req.body);
+    clearSettingsCache();
     const populated = await model.populate("provider", "name displayName");
     return ok(res, { model: populated });
   } catch (error) {
@@ -62,6 +64,7 @@ export const updateModel = async (req: Request, res: Response, next: NextFunctio
   try {
     const model = await AiModel.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate("provider", "name displayName");
     if (!model) return res.status(404).json({ success: false, message: "Model not found" });
+    clearSettingsCache();
     return ok(res, { model });
   } catch (error) {
     next(error);
@@ -72,6 +75,7 @@ export const deleteModel = async (req: Request, res: Response, next: NextFunctio
   try {
     const model = await AiModel.findByIdAndDelete(req.params.id);
     if (!model) return res.status(404).json({ success: false, message: "Model not found" });
+    clearSettingsCache();
     return ok(res, { message: "Model deleted" });
   } catch (error) {
     next(error);
@@ -113,6 +117,8 @@ export const updateRoutingRule = async (req: Request, res: Response, next: NextF
       await rule.save();
     }
     
+    clearSettingsCache();
+
     const populated = await rule.populate("primaryModel fallbackModels");
     return ok(res, { rule: populated });
   } catch (error) {

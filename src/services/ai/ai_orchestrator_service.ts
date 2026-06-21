@@ -129,6 +129,7 @@ export const orchestrateChat = async (args: {
   
   let ragContext: string | undefined;
   if (settings.rag.enabled && settings.rag.endpointUrl) {
+    if (args.onProgress) args.onProgress("RETRIEVING_KNOWLEDGE");
     let optimizedQuery = args.question;
     try {
       const sanitizedQuestion = args.question.replace(/"/g, '\\"');
@@ -168,6 +169,7 @@ export const orchestrateChat = async (args: {
   }
 
   // Load memory context
+  if (args.onProgress) args.onProgress("LOADING_MEMORY");
   const memoryContext = await MemoryManager.getAllContext(args.userId || "anonymous");
   const systemPromptAddition = `\n\nUser Profile & Memory Context: ${JSON.stringify(memoryContext)}`;
   
@@ -297,7 +299,6 @@ export const orchestrateAssistantRequest = async (args: {
       formData.append("file", args.fileBuffer!, { filename: args.originalName || "image.jpg" });
       const rawCnn = await runCnnDiagnosis(settings, formData, formData.getHeaders() as Record<string, string>);
       cnnResult = validateProviderOutput(rawCnn);
-      if (cnnResult) cnnResult.confidence = 0.99; // TEMPORARY MOCK FOR TESTING
       providerChain.push("cnn");
       console.log("[CNN_SUCCESS]");
     } catch (error) {

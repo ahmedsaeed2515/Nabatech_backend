@@ -1,5 +1,5 @@
 import express from "express";
-import { protect, authorize } from "../middlewares/auth_middleware";
+import { protect, authorizeRoles } from "../middlewares/auth_middleware";
 import {
   getProviders,
   createProvider,
@@ -12,7 +12,7 @@ import {
 const router = express.Router();
 
 router.use(protect);
-router.use(authorize("admin", "superadmin"));
+router.use(authorizeRoles("admin", "superadmin", "super_admin"));
 
 router.get("/", getProviders);
 router.post("/", createProvider);

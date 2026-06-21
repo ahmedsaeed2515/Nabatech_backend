@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { orchestrateAssistantRequest } from "../services/ai/ai_orchestrator_service";
 import { NextFunction } from "express";
-import { AiCallLog } from "../models/ai_call_log_model";
+import AiCallLog from "../models/ai_call_log_model";
 import { sanitizeErrorMessage } from "../services/ai/ai_errors";
 import cloudinary from "../config/cloudinary";
 import DiagnosisHistory from "../models/diagnosis_history_model";
@@ -32,7 +32,8 @@ export const postTestAssistantRequest = async (req: Request, res: Response) => {
       userId: "test-bypass-id",
       requestId: "test-req-id",
       question,
-      imageUrl,
+      fileBuffer: req.file?.buffer,
+      originalName: req.file?.originalname,
       history: [],
       topK: 3,
       language: "en"

@@ -166,6 +166,32 @@ export const getWateringRecommendation = async (req: Request, res: Response) => 
   }
 };
 
+export const getWateringSchedule = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const plants = await require('../models/my_plant_model').default.find({ user: userId }).lean();
+    
+    const schedule = plants.map((p: any) => {
+      const lastWatered = p.lastWatered ? new Date(p.lastWatered) : new Date(p.createdAt);
+      const nextWateringDate = new Date(lastWatered.getTime() + (p.waterFrequencyDays || 7) * 24 * 60 * 60 * 1000);
+      return {
+        plantId: p._id,
+        plantName: p.name,
+        imageUrl: p.imageUrl,
+        lastWatered: lastWatered,
+        waterFrequencyDays: p.waterFrequencyDays || 7,
+        nextWateringDate: nextWateringDate
+      };
+    });
+
+    schedule.sort((a: any, b: any) => a.nextWateringDate.getTime() - b.nextWateringDate.getTime());
+
+    return res.status(200).json({ success: true, data: { items: schedule } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Failed to fetch watering schedule" });
+  }
+};
+
 // ---------- Admin Analytics ----------
 export const getHomeToolsAnalytics = async (req: Request, res: Response) => {
   try {

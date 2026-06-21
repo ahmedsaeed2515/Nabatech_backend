@@ -8,6 +8,7 @@ import {
   getLightRecommendation,
   getWateringHistory,
   getWateringRecommendation,
+  getWateringSchedule,
   getHomeFeed,
   trackHomeEvent,
 } from "../controllers/home_tools_controller";
@@ -29,6 +30,7 @@ router.get("/light-meter/history", protect, validateRequest(paginationQuerySchem
 router.post("/light-meter/history", protect, validateRequest(lightMeterHistorySchema), createLightMeterHistory);
 router.get("/light-meter/recommendations/:plantId", protect, validateRequest(lightRecommendationSchema), getLightRecommendation);
 
+router.get("/watering/schedule", protect, getWateringSchedule);
 router.get("/watering/history", protect, validateRequest(paginationQuerySchema), getWateringHistory);
 router.post("/watering/history", protect, validateRequest(wateringHistorySchema), createWateringHistory);
 router.get("/watering/recommendations", protect, validateRequest(wateringRecommendationSchema), getWateringRecommendation);

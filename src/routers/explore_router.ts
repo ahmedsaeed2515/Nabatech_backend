@@ -11,6 +11,7 @@ import {
   deleteOutbreak,
   updateOutbreak
 } from "../controllers/explore_controller";
+import { getArScanSessions, createArScanSession } from "../controllers/ar_scan_controller";
 import {
   getExploreFeed,
   getFeaturedContent,
@@ -60,6 +61,9 @@ router.get("/featured", getFeaturedContent);
 router.get("/trending", getTrendingContent);
 router.post("/event", optionalProtect, recordExploreEvent);
 router.get("/recommendations", protect, getRecommendations);
+router.get("/ar-scan-sessions", protect, getArScanSessions);
+router.get("/ar-scan-sessions/:plantId", protect, getArScanSessions);
+router.post("/ar-scan-sessions", protect, createArScanSession);
 
 // --- Admin explore placement config & stats ---
 router.get("/admin/stats", protect, adminOrMod, getAdminExploreStats);

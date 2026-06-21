@@ -23,7 +23,8 @@ export const getReminders = async (req: Request, res: Response) => {
 
     const reminders = await Reminder.find(query)
       .sort({ _id: -1 })
-      .limit(queryLimit + 1);
+      .limit(queryLimit + 1)
+      .populate('plantId', 'name');
 
     const hasNextPage = reminders.length > queryLimit;
     if (hasNextPage) reminders.pop();
@@ -35,7 +36,8 @@ export const getReminders = async (req: Request, res: Response) => {
         items: reminders.map(r => ({
           id: r._id,
           title: r.title,
-          plantId: r.plantId,
+          plantId: (r.plantId as any)?._id || r.plantId,
+          plantName: (r.plantId as any)?.name || 'Unknown Plant',
           timeLabel: r.timeLabel,
           iconCodePoint: r.iconCodePoint,
           enabled: r.enabled,
@@ -57,7 +59,8 @@ export const getReminders = async (req: Request, res: Response) => {
       reminders: reminders.map(r => ({
         id: r._id,
         title: r.title,
-        plantId: r.plantId,
+        plantId: (r.plantId as any)?._id || r.plantId,
+        plantName: (r.plantId as any)?.name || 'Unknown Plant',
         timeLabel: r.timeLabel,
         iconCodePoint: r.iconCodePoint,
         enabled: r.enabled,
@@ -123,6 +126,7 @@ export const createReminder = async (req: Request, res: Response) => {
       id: reminder._id,
       title: reminder.title,
       plantId: reminder.plantId,
+      plantName: req.body.plantName || 'Unknown Plant',
       timeLabel: reminder.timeLabel,
       iconCodePoint: reminder.iconCodePoint,
       enabled: reminder.enabled,
@@ -192,6 +196,7 @@ export const updateReminder = async (req: Request, res: Response) => {
       id: reminder._id,
       title: reminder.title,
       plantId: reminder.plantId,
+      plantName: req.body.plantName || 'Unknown Plant',
       timeLabel: reminder.timeLabel,
       iconCodePoint: reminder.iconCodePoint,
       enabled: reminder.enabled,

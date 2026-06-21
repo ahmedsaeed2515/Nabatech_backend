@@ -114,6 +114,14 @@ export const chatWithAI = async (req: Request, res: Response) => {
       status: "sent"
     });
 
+    const isSSE = req.headers.accept === "text/event-stream";
+    if (isSSE) {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.flushHeaders();
+    }
+
     let chatResult;
     try {
       chatResult = await orchestrateChat({
@@ -123,6 +131,11 @@ export const chatWithAI = async (req: Request, res: Response) => {
         history, // ✅ FIX #1: merged DB + client history injected
         topK,
         language,
+        onProgress: (phase: string) => {
+          if (isSSE) {
+            res.write(`data: ${JSON.stringify({ type: "progress", phase })}\n\n`);
+          }
+        }
       });
     } catch (aiError) {
       // Record failed assistant response
@@ -138,6 +151,10 @@ export const chatWithAI = async (req: Request, res: Response) => {
         errorCode: "PROVIDER_UNAVAILABLE"
       });
       console.error("Chat orchestration failure:", sanitizeErrorMessage(aiError));
+      if (isSSE) {
+        res.write(`data: ${JSON.stringify({ type: "error", message: "Chat failed" })}\n\n`);
+        return res.end();
+      }
       return res.status(502).json({ success: false, message: "Chat failed" });
     }
 
@@ -167,13 +184,7 @@ export const chatWithAI = async (req: Request, res: Response) => {
       sourceIds: assistantMsg.sourceIds
     };
 
-    const isSSE = req.headers.accept === "text/event-stream";
     if (isSSE) {
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
-      res.flushHeaders();
-      
       res.write(`data: ${JSON.stringify({ type: "result", data: finalResponse })}\n\n`);
       return res.end();
     }

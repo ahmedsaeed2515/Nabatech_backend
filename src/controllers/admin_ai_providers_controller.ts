@@ -5,6 +5,7 @@ import { ok } from "../utils/api_response";
 import axios from "axios";
 import { getProviderManager } from "../services/ai/ai_provider_manager";
 import AiCallLog from "../models/ai_call_log_model";
+import { clearSettingsCache } from "../services/ai/ai_config_service";
 
 export const getProviders = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -46,6 +47,13 @@ export const createProvider = async (req: Request, res: Response, next: NextFunc
       status: "unknown"
     });
 
+    // Clear settings cache
+    clearSettingsCache();
+    
+    // Reload provider manager
+    const manager = getProviderManager();
+    await manager.reloadProviders();
+
     return ok(res, { provider: { id: provider._id, providerName: provider.providerName } });
   } catch (error) {
     next(error);
@@ -74,6 +82,9 @@ export const updateProvider = async (req: Request, res: Response, next: NextFunc
     if (baseUrl !== undefined) provider.baseUrl = baseUrl;
 
     await provider.save();
+
+    // Clear settings cache
+    clearSettingsCache();
 
     // Re-init the provider manager so it picks up new settings immediately
     const manager = getProviderManager();

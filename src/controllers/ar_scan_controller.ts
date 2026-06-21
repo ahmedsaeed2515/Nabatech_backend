@@ -5,6 +5,7 @@ const toSessionPayload = (session: any) => ({
   id: session._id,
   mode: session.mode,
   label: session.label,
+  plantId: session.plantId,
   createdAt: session.createdAt,
 });
 
@@ -15,8 +16,10 @@ export const getArScanSessions = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
     const { cursor, limit, mode } = req.query as any;
+    const plantId = req.params.plantId;
     const pageSize = Math.min(parseInt(limit) || 20, 50);
     const query: any = { user: userId };
+    if (plantId) query.plantId = plantId;
     if (mode) query.mode = mode;
     if (cursor) query._id = { $lt: cursor };
     const items = await ArScanSession.find(query).sort({ _id: -1 }).limit(pageSize + 1);
@@ -36,7 +39,7 @@ export const getArScanSessions = async (req: Request, res: Response) => {
 export const createArScanSession = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const { mode, label, clientOperationId, deviceModel, appVersion, modelId, confidence } = req.body;
+    const { mode, label, clientOperationId, deviceModel, appVersion, modelId, confidence, plantId } = req.body;
     if (!mode || !label) {
       return res.status(400).json({ success: false, message: "mode and label are required" });
     }
@@ -49,6 +52,7 @@ export const createArScanSession = async (req: Request, res: Response) => {
       appVersion: appVersion ? String(appVersion).trim() : undefined,
       modelId: modelId ? String(modelId).trim() : undefined,
       confidence: confidence !== undefined ? Number(confidence) : undefined,
+      plantId: plantId || undefined,
     }).catch((err) => {
       if (err.code === 11000) throw { status: 409, code: "CONFLICT", message: "Duplicate operation" };
       throw err;

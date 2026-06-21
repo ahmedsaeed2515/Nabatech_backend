@@ -9,6 +9,7 @@ export interface IArScanSession extends Document {
   appVersion?: string;
   modelId?: string;
   confidence?: number;
+  plantId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +24,7 @@ const arScanSessionSchema = new Schema<IArScanSession>(
     appVersion: { type: String, trim: true },
     modelId: { type: String, trim: true },
     confidence: { type: Number, min: 0, max: 1 },
+    plantId: { type: Schema.Types.ObjectId, ref: "MyPlant", index: true },
   },
   { timestamps: true }
 );

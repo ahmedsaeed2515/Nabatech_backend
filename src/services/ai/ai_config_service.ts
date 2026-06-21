@@ -252,6 +252,11 @@ const mergeSettings = (defaults: AiSettingsShape, db: Partial<IAiSettings> | nul
   };
 };
 
+export const clearSettingsCache = () => {
+  _settingsCache = null;
+  _settingsCacheTs = 0;
+};
+
 export const getAiSettings = async (): Promise<AiSettingsShape> => {
   const now = Date.now();
   if (_settingsCache && now - _settingsCacheTs < SETTINGS_CACHE_TTL_MS) {

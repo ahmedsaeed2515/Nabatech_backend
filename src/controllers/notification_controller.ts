@@ -47,8 +47,10 @@ export const getNotifications = async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      data: formattedNotifications,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+      data: {
+        items: formattedNotifications,
+        pageInfo: { page, limit, total, pages: Math.ceil(total / limit) }
+      }
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });
