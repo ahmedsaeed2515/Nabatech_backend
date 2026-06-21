@@ -13,6 +13,19 @@ import { AGENT_TOOLS } from "./agent_tool_registry";
 import { MemoryManager } from "./memory_manager";
 import { ExpertEscalationService } from "../expert_escalation_service";
 
+const sanitizeLlmResponse = (text: string): string => {
+  if (!text) return text;
+  return text
+    .replace(/\[source:.*?\]/gi, "")
+    .replace(/\[doc:.*?\]/gi, "")
+    .replace(/relevance:\s*[\d.]+/gi, "")
+    .replace(/\[chunk_id:.*?\]/gi, "")
+    .replace(/\[chunk.*?\]/gi, "")
+    .replace(/\[id:.*?\]/gi, "")
+    .replace(/\(source:.*?\)/gi, "")
+    .trim();
+};
+
 const logAiCall = async (payload: {
   userId?: string;
   requestId?: string;
@@ -133,7 +146,8 @@ export const orchestrateChat = async (args: {
         settings,
         "",
         optimizedQuery,
-        args.topK
+        args.topK,
+        args.language
       );
       ragContext = ragResult.contextText;
       console.log(`[RAG_SUCCESS] ${ragResult.chunks.length} chunks retrieved for text chat`);
@@ -222,12 +236,8 @@ User message: "${args.question.substring(0, 300)}"`;
 
   // Cascade logic
   if (chatResult.source === "fallback") {
-    if (ragContext) {
-      console.log("[FINAL_RESPONSE_SOURCE] rag");
-      chatResult = { message: ragContext, source: "rag", provider: "rag" };
-    } else {
-      console.log("[FINAL_RESPONSE_SOURCE] fallback");
-    }
+    console.log("[FINAL_RESPONSE_SOURCE] fallback");
+    chatResult.message = "I am currently experiencing high traffic and cannot generate a detailed response. Please try again later.";
   } else {
     console.log("[FINAL_RESPONSE_SOURCE] llm");
   }
@@ -245,7 +255,7 @@ User message: "${args.question.substring(0, 300)}"`;
     toolCalls: chatResult.toolCalls,
   });
 
-  return { message: chatResult.message, source: chatResult.source, provider: chatResult.provider, ragContext, communityContext };
+  return { message: sanitizeLlmResponse(chatResult.message), source: chatResult.source, provider: chatResult.provider, ragContext, communityContext };
 };
 
 export const orchestrateAssistantRequest = async (args: {
@@ -370,8 +380,9 @@ export const orchestrateAssistantRequest = async (args: {
         const ragResult = await retrieveRagChunks(
           settings,
           cnnResult.prediction,
-          optimizedQuery,
+          args.question || "",
           args.topK,
+          args.language
         );
         ragRetrievedContext = ragResult.contextText;
         ragContext = ragRetrievedContext;
@@ -444,10 +455,7 @@ export const orchestrateAssistantRequest = async (args: {
     
     // Cascade logic
     if (chatResult.source === "fallback") {
-       if (ragContext) {
-           console.log("[FINAL_RESPONSE_SOURCE] rag");
-           chatResult = { message: ragContext, source: "rag", provider: "rag" };
-       } else if (cnnResult) {
+       if (cnnResult) {
            console.log("[FINAL_RESPONSE_SOURCE] cnn");
            const confStr = typeof cnnResult.confidence === "number" ? (cnnResult.confidence * 100).toFixed(2) + "%" : "Unknown";
            let cnnMessage = `Disease Detected: **${cnnResult.prediction.replace(/_/g, " ")}**\n\nConfidence: ${confStr}\n`;
@@ -458,15 +466,16 @@ export const orchestrateAssistantRequest = async (args: {
               cnnMessage += `\nPlease monitor your plant carefully and ensure proper watering and light conditions.`;
            }
            chatResult = { message: cnnMessage, source: "cnn", provider: cnnResult.provider || "cnn" };
-        } else {
+       } else {
            console.log("[FINAL_RESPONSE_SOURCE] fallback");
-        }
+           chatResult.message = "I am currently experiencing high traffic and cannot generate a detailed response. Please try again later.";
+       }
     } else {
        console.log(`[FINAL_RESPONSE_SOURCE] ${chatResult.source}`);
     }
 
     providerChain.push(chatResult.provider);
-    message = chatResult.message;
+    message = sanitizeLlmResponse(chatResult.message);
     source = chatResult.source;
     provider = chatResult.provider;
   }

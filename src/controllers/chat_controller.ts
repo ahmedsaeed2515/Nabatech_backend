@@ -158,15 +158,28 @@ export const chatWithAI = async (req: Request, res: Response) => {
       sourceIds: [chatResult.provider]
     });
 
-    // Return response with success and message fields
-    return res.status(200).json({
+    const finalResponse = {
       success: true,
       message: aiResponse,
       messageId: assistantMsg._id,
       source: chatResult.source,
       provider: { name: chatResult.provider },
       sourceIds: assistantMsg.sourceIds
-    });
+    };
+
+    const isSSE = req.headers.accept === "text/event-stream";
+    if (isSSE) {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.flushHeaders();
+      
+      res.write(`data: ${JSON.stringify({ type: "result", data: finalResponse })}\n\n`);
+      return res.end();
+    }
+
+    // Return standard response
+    return res.status(200).json(finalResponse);
 
   } catch (error) {
     console.error(error);

@@ -36,7 +36,8 @@ export const retrieveRagChunks = async (
   settings: AiSettingsShape,
   diseaseName: string,
   question?: string,
-  topK?: number
+  topK?: number,
+  language?: string
 ): Promise<RagResult> => {
   if (!settings.rag.enabled || !settings.rag.endpointUrl) {
     throw new AiProviderError("RAG disabled or not configured", {
@@ -73,6 +74,7 @@ export const retrieveRagChunks = async (
         disease_name: sanitizedDisease,
         question: usefulQuestion,
         top_k: topK || settings.rag.topK || 8,
+        language: language,
       },
       {
         timeout: settings.rag.timeoutMs,
