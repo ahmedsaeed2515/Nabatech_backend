@@ -45,6 +45,7 @@ import adminAiControlRouter from "./routers/admin_ai_control_router";
 import adminAiOsRouter from "./routers/admin_ai_os_router";
 import adminHomeExperienceRouter from "./routers/admin_home_experience_router";
 import adminChatLogsRouter from "./routes/admin_chat_logs_router";
+import adminAiProvidersRouter from "./routers/admin_ai_providers_router";
 const app = express();
 
 // CORS Middleware - Strict allowed origins
@@ -161,6 +162,7 @@ app.use("/api/admin/ai", adminAiControlRouter);
 app.use("/api/admin/ai-os", adminAiOsRouter);
 app.use("/api/admin/home", adminHomeExperienceRouter);
 app.use("/api/admin/chat-logs", adminChatLogsRouter);
+app.use("/api/admin/ai-providers", adminAiProvidersRouter);
 
 app.get("/", (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: { message: "Express + TypeScript is working" } });

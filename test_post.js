@@ -15,10 +15,10 @@ async function test() {
 
   const form = new FormData();
   form.append('question', 'ما هو مرض هذا النبات؟');
-  form.append('file', fs.createReadStream('potato.jpg'));
+  form.append('file', fs.createReadStream('tomato.jpg'));
 
   try {
-    const res = await axios.post('http://localhost:10000/api/ai/test_assistant', form, {
+    const res = await axios.post('http://localhost:10000/api/ai/assistant', form, {
       headers: {
         ...form.getHeaders(),
         'Accept-Language': 'ar'

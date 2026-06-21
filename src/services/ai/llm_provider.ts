@@ -27,7 +27,7 @@ type OllamaResponse = {
   response?: string;
 };
 
-type HistoryTurn = { role: string; content: string };
+export type HistoryTurn = { role: string; content: string };
 
 /**
  * Bounds conversation history to last N exchanges (2*N messages).
@@ -66,7 +66,7 @@ const formatHistoryAsText = (history: HistoryTurn[]): string => {
   );
 };
 
-const callProvider = async (args: {
+export const callProvider = async (args: {
   providerType: "generic_llm" | "openai_compatible" | "anthropic" | "gemini" | "cohere" | "huggingface_inference" | "ollama";
   endpointUrl: string;
   model: string;
@@ -79,6 +79,7 @@ const callProvider = async (args: {
   const bounded = boundHistory(args.history);
 
   if (args.providerType === "generic_llm" || args.providerType === "openai_compatible") {
+    const isOpenRouter = args.endpointUrl.includes("openrouter.ai");
     const response = await axios.post<OpenAiCompletionResponse>(
       args.endpointUrl,
       {
@@ -94,6 +95,10 @@ const callProvider = async (args: {
         headers: {
           ...(args.apiKey ? { Authorization: `Bearer ${args.apiKey}` } : {}),
           "Content-Type": "application/json",
+          ...(isOpenRouter ? { 
+            "HTTP-Referer": "https://nabatech.com", 
+            "X-Title": "Nabatech AI Platform" 
+          } : {})
         },
       }
     );
@@ -179,7 +184,7 @@ const callProvider = async (args: {
       }
     );
     const data = response.data;
-    let text = (Array.isArray(data) ? data[0]?.generated_text : data?.generated_text || "").toString();
+    let text = (Array.isArray(data) ? data[0]?.generated_text : (data as any)?.generated_text || "").toString();
     
     // Fallback: If HF still echoed the prompt, strip it out manually
     if (text.startsWith(prompt)) {
@@ -239,11 +244,11 @@ const callProvider = async (args: {
 // HuggingFace RAG /ask — used as FINAL FALLBACK after all LLM pool providers fail
 // This reuses the Qwen LLM running inside the HF Space (the RAG's own LLM).
 // ───────────────────────────────────────────────────────────────────────────
-const askRagFallback = async (
+export const askRagFallback = async (
   endpointUrl: string,
-  question: string,
-  history: HistoryTurn[],
-  timeoutMs: number
+  message: string,
+  history: HistoryTurn[] = [],
+  timeoutMs: number = 25000
 ): Promise<string> => {
   // Build history in RAG's expected format
   const ragHistory = boundHistory(history).map((h) => ({
@@ -254,7 +259,7 @@ const askRagFallback = async (
   const response = await axios.post(
     endpointUrl,
     {
-      question: question.substring(0, 2000),
+      question: (message || "Please analyze this context and diagnosis.").substring(0, 950),
       history: ragHistory,
       top_k: 5,
     },
@@ -282,92 +287,20 @@ export const askLlm = async (
   history: HistoryTurn[] = [], // ✅ FIX #1: history parameter added
   taskRole: "search" | "chat" = "chat"
 ): Promise<LlmResult> => {
-  console.log("[RUNTIME_TRACE] INSIDE askLlm. LLM ENABLED:", settings.llm.enabled);
-  if (!settings.llm.enabled || settings.llm.provider === "disabled") {
-    throw new AiProviderError("LLM disabled", { code: "LLM_DISABLED", isUpstream: false });
-  }
-  if (settings.llm.provider !== "openai" && (!settings.llm.pool || settings.llm.pool.length === 0)) {
-    throw new AiProviderError(`Unsupported LLM provider: ${settings.llm.provider}`, {
-      code: "LLM_UNSUPPORTED_PROVIDER",
-      isUpstream: false,
-    });
-  }
-  const candidates =
-    settings.llm.pool && settings.llm.pool.length
-      ? settings.llm.pool.filter((p) => p.enabled && (p.taskRole === taskRole || p.taskRole === "both"))
-        : [
-          {
-            name: "openai-default",
-            providerType: "generic_llm" as const,
-            endpointUrl: "https://api.openai.com/v1/chat/completions",
-            model: settings.llm.model,
-            timeoutMs: settings.llm.timeoutMs,
-            apiKey: settings.secrets.openaiApiKey || process.env.OPENAI_API_KEY || "",
-          },
-        ];
+  console.log("[RUNTIME_TRACE] INSIDE askLlm. Delegating to ProviderManager...");
+  
+  try {
+    const { getProviderManager } = await import("./ai_provider_manager");
+    const manager = getProviderManager();
+    const result = await manager.executeWithFailover(settings.llm.systemPrompt || "You are an expert AI.", message, history);
+    return result;
+  } catch (err: any) {
+    console.warn("LLM providers failed. Last error:", err.message);
 
-  let lastError: unknown;
-  console.log("[RUNTIME_TRACE] askLlm CANDIDATES COUNT:", candidates.length);
-  for (const candidate of candidates) {
-    console.log("[RUNTIME_TRACE] EVALUATING CANDIDATE:", candidate.name, "TYPE:", candidate.providerType);
-    const apiKey = (candidate.apiKey || "").trim();
-    const providerNeedsKey = candidate.providerType !== "generic_llm" && candidate.providerType !== "ollama";
-    if (providerNeedsKey && !apiKey) {
-      lastError = new AiProviderError(`API key missing for ${candidate.name}`, { code: "LLM_API_KEY_MISSING", isUpstream: false });
-      continue;
-    }
-    try {
-      let answer = await callProvider({
-        providerType: candidate.providerType || "generic_llm",
-        endpointUrl: candidate.endpointUrl,
-        model: candidate.model,
-        apiKey,
-        timeoutMs: candidate.timeoutMs || settings.llm.timeoutMs,
-        systemPrompt: settings.llm.systemPrompt,
-        message,
-        history, // ✅ passed through to callProvider
-      });
-      
-      // Basic structure validation to prevent malformed text (e.g., stray markdown blocks)
-      if (answer.includes("```json")) {
-        answer = answer.replace(/```json/g, "").replace(/```/g, "").trim();
-      } else if (answer.includes("```")) {
-        answer = answer.replace(/```/g, "").trim();
-      }
-
-      if (!answer || answer.length < 5) {
-        lastError = new AiProviderError(`Malformed or empty response from ${candidate.name}`, { code: "LLM_MALFORMED_RESPONSE" });
-        continue;
-      }
-      console.log("[RUNTIME_TRACE] CANDIDATE SUCCESS:", candidate.name);
-      return { message: answer, source, provider: candidate.name || "llm" };
-    } catch (error) {
-      lastError = toProviderError(error, `LLM provider request failed (${candidate.name})`, "LLM_UPSTREAM_FAILED");
+    if (taskRole === "search") {
+      throw err;
     }
   }
-
-  console.warn("LLM providers failed. Last error:", lastError);
-
-  if (taskRole === "search") {
-    throw lastError || new Error("All Search LLM providers failed");
-  }
-
-  // ── Stage 2: HuggingFace RAG /ask (Qwen inside HF Space) ──────────────────────────────
-  if (settings.ragFallback?.enabled && settings.ragFallback?.endpointUrl) {
-    try {
-      const ragAnswer = await askRagFallback(
-        settings.ragFallback.endpointUrl,
-        message,
-        history,
-        settings.ragFallback.timeoutMs
-      );
-      console.log("[LLM_HF_FALLBACK_SUCCESS] HuggingFace RAG /ask responded.");
-      return { message: ragAnswer, source: "hf-rag-fallback", provider: "hf-rag-fallback" };
-    } catch (ragFallbackErr) {
-      console.warn("[LLM_HF_FALLBACK_FAILED] HuggingFace RAG /ask also failed:", ragFallbackErr);
-    }
-  }
-  // ─────────────────────────────────────────────────────────────────────────────────
 
   // ── Stage 3: Static text fallback (last resort) ──────────────────────────────────────
   console.warn("[LLM_ALL_FAILED] All LLM providers + HF RAG fallback failed. Using local text.");

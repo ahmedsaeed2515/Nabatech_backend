@@ -9,6 +9,23 @@ const store = redisClient
     })
   : undefined; // fallback to default MemoryStore if Redis isn't configured
 
+// Define the global rate limiter for the application
+export const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10000, // Increased limit from 5000 to 10000
+  message: {
+    success: false,
+    message: "Too many requests from this IP, please try again after 15 minutes",
+    error: {
+      code: "RATE_LIMIT_EXCEEDED",
+      details: "You have exceeded the maximum number of requests allowed.",
+    },
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  // Removed custom keyGenerator to use the built-in default which handles IPv6 safely
+});
+
 export const aiRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 10, // Limit each IP/User to 10 requests per minute
@@ -19,10 +36,6 @@ export const aiRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   store,
-  keyGenerator: (req: Request) => {
-    // Rate limit by User ID if authenticated, otherwise by IP
-    return (req as any)?.user?.id || req.ip;
-  },
 });
 
 // Standard limit for login attempts (5 per 15 minutes)

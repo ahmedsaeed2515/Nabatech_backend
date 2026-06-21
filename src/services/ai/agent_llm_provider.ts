@@ -1,6 +1,9 @@
 import axios from "axios";
 import { AiSettingsShape } from "./ai_config_service";
 import { AgentToolDefinition, AgentToolRegistry } from "./agent_tool_registry";
+import { getProviderManager } from "./ai_provider_manager";
+import { decryptSecret } from "./secret_crypto";
+import { AiProviderError } from "./ai_errors";
 
 export class AgentLlmProvider {
   private registry = new AgentToolRegistry();
@@ -23,10 +26,21 @@ export class AgentLlmProvider {
     
     const executedToolCalls: any[] = [];
 
-    // We'll use OpenAI compatible format for Tool Calling as it's the industry standard
-    // In production, we'd route to Gemini or OpenAI based on settings
-    const endpointUrl = "https://api.openai.com/v1/chat/completions";
-    const apiKey = settings.secrets.openaiApiKey || process.env.OPENAI_API_KEY || "";
+    // Get the top generic_llm provider from AiProviderManager
+    const manager = getProviderManager();
+    const providers = manager.getProviders();
+    if (providers.length === 0) {
+      await manager.reloadProviders();
+    }
+    const agentProvider = manager.getProviders().find(p => p.enabled && p.status !== "failed" && (p.providerName.includes('openai') || p.providerName.includes('openrouter') || p.baseUrl.includes('openai.com') || p.baseUrl.includes('openrouter.ai')));
+
+    if (!agentProvider) {
+      throw new AiProviderError("No compatible generic_llm provider available for Agent Tool Calling.");
+    }
+
+    const endpointUrl = agentProvider.baseUrl;
+    const apiKey = decryptSecret(agentProvider.apiKeyEncrypted);
+    const isOpenRouter = endpointUrl.includes("openrouter.ai");
 
     if (!apiKey) {
       throw new Error("API Key is required for Agent Tool Calling");
@@ -35,7 +49,7 @@ export class AgentLlmProvider {
     while (iteration < maxIterations) {
       iteration++;
       const payload = {
-        model: settings.llm.model || "gpt-4o",
+        model: agentProvider.llmModel || "gpt-4o",
         messages,
         tools: tools.map(t => ({
           type: "function",
@@ -51,7 +65,11 @@ export class AgentLlmProvider {
       const response = await axios.post(endpointUrl, payload, {
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          ...(isOpenRouter ? { 
+            "HTTP-Referer": "https://nabatech.com", 
+            "X-Title": "Nabatech AI Platform" 
+          } : {})
         }
       });
 

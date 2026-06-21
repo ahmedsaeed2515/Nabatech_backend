@@ -242,6 +242,7 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
     }
 
     const finalResponse = { success: true, ...result, imageUrl: imageUrl || undefined, uncertain: Boolean((result as any).lowConfidenceWarning) };
+    delete (finalResponse as any).ragContext;
     if (isSSE) {
       res.write(`data: ${JSON.stringify({ type: "result", data: finalResponse })}\n\n`);
       return res.end();
