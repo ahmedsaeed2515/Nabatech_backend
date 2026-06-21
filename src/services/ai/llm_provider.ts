@@ -161,10 +161,14 @@ const callProvider = async (args: {
   if (args.providerType === "huggingface_inference") {
     // HuggingFace doesn't support structured multi-turn; format as text block
     const historyText = formatHistoryAsText(bounded); // ✅ inject as text
+    const prompt = `${args.systemPrompt}\n\n${historyText}User: ${args.message}\nAssistant:`;
     const response = await axios.post<HuggingFaceInferenceResponse>(
       args.endpointUrl,
       {
-        inputs: `${args.systemPrompt}\n\n${historyText}User: ${args.message}`,
+        inputs: prompt,
+        parameters: {
+          return_full_text: false, // Prevent HF from echoing the prompt back
+        }
       },
       {
         timeout: args.timeoutMs,
@@ -175,8 +179,14 @@ const callProvider = async (args: {
       }
     );
     const data = response.data;
-    const text = Array.isArray(data) ? data[0]?.generated_text : data?.generated_text;
-    return (text || "").toString().trim();
+    let text = (Array.isArray(data) ? data[0]?.generated_text : data?.generated_text || "").toString();
+    
+    // Fallback: If HF still echoed the prompt, strip it out manually
+    if (text.startsWith(prompt)) {
+      text = text.substring(prompt.length);
+    }
+    
+    return text.trim();
   }
 
   if (args.providerType === "ollama") {
@@ -272,6 +282,7 @@ export const askLlm = async (
   history: HistoryTurn[] = [], // ✅ FIX #1: history parameter added
   taskRole: "search" | "chat" = "chat"
 ): Promise<LlmResult> => {
+  console.log("[RUNTIME_TRACE] INSIDE askLlm. LLM ENABLED:", settings.llm.enabled);
   if (!settings.llm.enabled || settings.llm.provider === "disabled") {
     throw new AiProviderError("LLM disabled", { code: "LLM_DISABLED", isUpstream: false });
   }
@@ -296,7 +307,9 @@ export const askLlm = async (
         ];
 
   let lastError: unknown;
+  console.log("[RUNTIME_TRACE] askLlm CANDIDATES COUNT:", candidates.length);
   for (const candidate of candidates) {
+    console.log("[RUNTIME_TRACE] EVALUATING CANDIDATE:", candidate.name, "TYPE:", candidate.providerType);
     const apiKey = (candidate.apiKey || "").trim();
     const providerNeedsKey = candidate.providerType !== "generic_llm" && candidate.providerType !== "ollama";
     if (providerNeedsKey && !apiKey) {
@@ -326,6 +339,7 @@ export const askLlm = async (
         lastError = new AiProviderError(`Malformed or empty response from ${candidate.name}`, { code: "LLM_MALFORMED_RESPONSE" });
         continue;
       }
+      console.log("[RUNTIME_TRACE] CANDIDATE SUCCESS:", candidate.name);
       return { message: answer, source, provider: candidate.name || "llm" };
     } catch (error) {
       lastError = toProviderError(error, `LLM provider request failed (${candidate.name})`, "LLM_UPSTREAM_FAILED");

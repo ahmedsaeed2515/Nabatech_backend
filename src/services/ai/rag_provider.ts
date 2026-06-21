@@ -37,7 +37,8 @@ export const retrieveRagChunks = async (
   diseaseName: string,
   question?: string,
   topK?: number,
-  language?: string
+  language?: string,
+  crop?: string
 ): Promise<RagResult> => {
   if (!settings.rag.enabled || !settings.rag.endpointUrl) {
     throw new AiProviderError("RAG disabled or not configured", {
@@ -75,6 +76,7 @@ export const retrieveRagChunks = async (
         question: usefulQuestion,
         top_k: topK || settings.rag.topK || 8,
         language: language,
+        crop: crop,
       },
       {
         timeout: settings.rag.timeoutMs,
@@ -99,7 +101,15 @@ export const retrieveRagChunks = async (
     );
   }
 
-  const chunks: RagChunk[] = rawChunks
+  let filteredChunks = rawChunks;
+  if (crop) {
+    filteredChunks = rawChunks.filter((c) => {
+      const chunkCrop = c.metadata?.crop || c.crop || "";
+      return chunkCrop === "" || chunkCrop.toLowerCase() === crop.toLowerCase();
+    });
+  }
+
+  const chunks: RagChunk[] = filteredChunks
     .filter((c) => c && typeof c.text === "string" && c.text.trim().length > 10)
     .map((c) => ({
       text: String(c.text).trim(),

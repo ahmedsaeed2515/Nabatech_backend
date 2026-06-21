@@ -322,6 +322,15 @@ export const orchestrateAssistantRequest = async (args: {
       cnnResult.confidence < settings.cnn.confidenceThreshold
   );
 
+  let predictedCrop = "";
+  let predictedDisease = cnnResult?.prediction || "";
+
+  if (cnnResult?.prediction && cnnResult.prediction.includes("___")) {
+    const parts = cnnResult.prediction.split("___");
+    predictedCrop = parts[0].replace(/_/g, " ").trim();
+    predictedDisease = parts[1].replace(/_/g, " ").trim();
+  }
+
   if (isLowConfidence && cnnResult) {
     const conf = typeof cnnResult.confidence === "number" ? cnnResult.confidence : 0;
     lowConfidenceWarning = `Low CNN confidence (${conf.toFixed(3)}) below threshold (${settings.cnn.confidenceThreshold.toFixed(3)}).`;
@@ -334,19 +343,40 @@ export const orchestrateAssistantRequest = async (args: {
           aiPrediction: cnnResult.prediction,
           aiConfidence: cnnResult.confidence,
           userContext: args.question || "Uploaded for diagnosis.",
-          imagePath: args.originalName // In reality, this would be an S3 URI or local stored path
+          imagePath: args.originalName 
         });
         lowConfidenceWarning += " An expert has been notified to review your plant.";
       } catch (escErr) {
         console.error("Failed to request expert review:", escErr);
       }
     }
+
+    // [CRITICAL FIX] HARD ABORT ON LOW CONFIDENCE
+    const formattedDisease = cnnResult.prediction.replace(/___/g, " - ").replace(/_/g, " ");
+    const abortMessage = `Disease:\n${formattedDisease}\n\nConfidence:\n${(conf * 100).toFixed(0)}%\n\nResult:\nLow confidence diagnosis\n\nRecommendation:\nPlease upload a clearer image showing affected leaves.`;
+
+    await logAiCall({
+      userId: args.userId,
+      requestId: reqId,
+      feature: "image_chat",
+      provider: "cnn",
+      status: "success",
+      latencyMs: Date.now() - started,
+      inputMeta: { mode: "image_chat_aborted" },
+    });
+
+    return {
+      mode: "diagnosis" as const,
+      diagnosis: cnnResult,
+      message: abortMessage,
+      source: "cnn",
+      provider: cnnResult.provider,
+      providerChain: ["cnn"],
+      lowConfidenceWarning: "Diagnosis rejected due to low confidence."
+    } as any;
   }
 
-  const shouldGenerateAnswer =
-    !args.skipAdvice &&
-    (Boolean(question) || settings.pipeline.answerAfterDiagnosis) &&
-    !(isLowConfidence && settings.pipeline.lowConfidenceBehavior === "block");
+  const shouldGenerateAnswer = !args.skipAdvice && (Boolean(question) || settings.pipeline.answerAfterDiagnosis);
 
   let message = "";
   let source: "rag" | "llm" | "fallback" | "cnn" | "hf-rag-fallback" = "cnn";
@@ -355,10 +385,7 @@ export const orchestrateAssistantRequest = async (args: {
   let communityContext: string | undefined;
   let kbAdvice: string | undefined;
   let kbSeverity: string | undefined;
-
-  if (isLowConfidence && settings.pipeline.lowConfidenceBehavior === "block") {
-    message = "The image confidence is too low. Please upload a clearer image of the plant to receive advice.";
-  } else if (shouldGenerateAnswer) {
+  if (shouldGenerateAnswer) {
     // ── RAG Stage: Pure Knowledge Retrieval ──────────────────────────────────
     let ragRetrievedContext: string | undefined;
     if (settings.rag.enabled && settings.rag.endpointUrl && cnnResult?.prediction) {
@@ -379,14 +406,15 @@ export const orchestrateAssistantRequest = async (args: {
       try {
         const ragResult = await retrieveRagChunks(
           settings,
-          cnnResult.prediction,
+          predictedDisease,
           args.question || "",
           args.topK,
-          args.language
+          args.language,
+          predictedCrop
         );
         ragRetrievedContext = ragResult.contextText;
         ragContext = ragRetrievedContext;
-        console.log(`[RAG_SUCCESS] ${ragResult.chunks.length} chunks for "${cnnResult.prediction}"`);
+        console.log(`[RAG_SUCCESS] ${ragResult.chunks.length} chunks for "${predictedDisease}" (crop: ${predictedCrop})`);
       } catch (ragError) {
         console.warn(
           "[RAG_FAILED] RAG /retrieve failed, proceeding without context:",
@@ -445,7 +473,11 @@ export const orchestrateAssistantRequest = async (args: {
     let chatResult: { message: string, source: "llm"|"fallback"|"rag"|"cnn"|"hf-rag-fallback", provider: string };
     // askLlm handles all internal failures and returns a safe fallback
     // object for taskRole "chat" — it never throws. No try/catch needed.
+    console.log("[RUNTIME_TRACE] BEFORE LLM CALL");
+    console.log("[RUNTIME_TRACE] LLM REQUEST PROMPT LENGTH:", prompt.length);
     chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
+    console.log("[RUNTIME_TRACE] AFTER LLM CALL");
+    console.log("[RUNTIME_TRACE] LLM RESPONSE CHAT RESULT:", JSON.stringify(chatResult));
 
     if (chatResult.source === "fallback") {
       console.warn("[LLM] All providers failed, using static fallback.");

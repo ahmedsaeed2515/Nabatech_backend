@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import { orchestrateAssistantRequest } from "../services/ai/ai_orchestrator_service";
+import { NextFunction } from "express";
+import { AiCallLog } from "../models/ai_call_log_model";
 import { sanitizeErrorMessage } from "../services/ai/ai_errors";
 import cloudinary from "../config/cloudinary";
 import DiagnosisHistory from "../models/diagnosis_history_model";
@@ -7,6 +9,41 @@ import Message from "../models/message_model";
 import { DiseaseKnowledgeRecord } from "../models/disease_knowledge_record_model";
 import { validateHistory, validateQuestion, validateTopK } from "../validation/diagnosis_schemas";
 import crypto from "crypto";
+
+export const postTestAssistantRequest = async (req: Request, res: Response) => {
+  try {
+    const question = req.body?.question || req.body?.text || "";
+    let uploadedImagePublicId: string | null = null;
+    let imageUrl = req.body?.imageUrl || "";
+
+    if (req.file) {
+      const uploadResult: any = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream({ folder: "assistant_images" }, (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }).end(req.file!.buffer);
+      });
+      imageUrl = uploadResult.secure_url;
+      uploadedImagePublicId = uploadResult.public_id;
+    }
+
+    const { orchestrateAssistantRequest } = await import("../services/ai/ai_orchestrator_service");
+    const result = await orchestrateAssistantRequest({
+      userId: "test-bypass-id",
+      requestId: "test-req-id",
+      question,
+      imageUrl,
+      history: [],
+      topK: 3,
+      language: "en"
+    });
+
+    return res.status(200).json({ success: true, ...result, imageUrl: imageUrl || undefined });
+  } catch (error: any) {
+    console.error("Test Assistant request failed:", error.message);
+    return res.status(502).json({ success: false, message: error.message });
+  }
+};
 
 const parseHistory = (raw: unknown): Array<{ role: string; content: string }> => {
   if (Array.isArray(raw)) return raw as Array<{ role: string; content: string }>;
