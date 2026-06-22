@@ -307,7 +307,7 @@ export const postQueryLibrary = async (req: Request, res: Response) => {
   }
 };
 
-const greetingCache = new Map<string, { time: number, text: string }>();
+const greetingCache = new Map<string, { time: number, data: any }>();
 
 export const getGreeting = async (req: Request, res: Response) => {
   try {
@@ -316,8 +316,9 @@ export const getGreeting = async (req: Request, res: Response) => {
 
     const now = Date.now();
     const cached = greetingCache.get(userId);
-    if (cached && now - cached.time < 3600 * 1000) {
-      return res.status(200).json({ success: true, greeting: cached.text });
+    // Cache for 24 hours
+    if (cached && now - cached.time < 24 * 3600 * 1000) {
+      return res.status(200).json({ success: true, greeting: cached.data });
     }
 
     const PlantModel = (await import("../models/plant_model")).default;
@@ -331,14 +332,35 @@ export const getGreeting = async (req: Request, res: Response) => {
     const prompt = `You are a smart AI garden assistant named Nabatech. Generate a dynamic 2-line greeting for the user. 
 They currently have: ${plantStr}. 
 Pretend you know the weather is sunny. Suggest a brief care tip.
-Do NOT use markdown, emojis are allowed. Maximum 2 short lines.`;
+Maximum 2 short lines. Output STRICTLY as a JSON object with this exact structure, nothing else:
+{
+  "arabicGreeting": "...",
+  "englishGreeting": "..."
+}`;
     
     const llmRes = await askLlm(settings, prompt, "llm", []);
-    const greeting = llmRes.message.replace(/"/g, '').trim();
+    
+    // Strip <think> tags completely
+    let rawContent = llmRes.message.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    
+    let parsedGreeting: any;
+    try {
+      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+      const jsonStr = jsonMatch ? jsonMatch[0] : rawContent;
+      parsedGreeting = JSON.parse(jsonStr);
+    } catch (e) {
+      console.error("Failed to parse greeting JSON, using fallback. Raw:", rawContent);
+      parsedGreeting = {
+        arabicGreeting: "🌱 صباح الخير! لا تنس متابعة نباتاتك اليوم.",
+        englishGreeting: "🌱 Good morning! Don't forget to check on your plants today."
+      };
+    }
+    
+    parsedGreeting.generatedDate = new Date().toISOString().split('T')[0];
 
-    greetingCache.set(userId, { time: now, text: greeting });
+    greetingCache.set(userId, { time: now, data: parsedGreeting });
 
-    return res.status(200).json({ success: true, greeting });
+    return res.status(200).json({ success: true, greeting: parsedGreeting });
   } catch (error) {
     console.error("Greeting failed:", sanitizeErrorMessage(error));
     return res.status(500).json({ success: false, message: "Greeting failed" });

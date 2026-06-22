@@ -39,10 +39,9 @@ describe('[UNIT] PlantIdentificationService', () => {
 
     const mockAiResponse = {
       text: JSON.stringify({
-        identifiedSpecies: 'Monstera Deliciosa',
-        confidenceScore: 0.95,
-        category: 'Indoor',
-        careSummary: 'Water weekly'
+        scientificName: 'Monstera Deliciosa',
+        plantName: 'Monstera',
+        confidenceScore: 0.95
       })
     };
 
@@ -59,8 +58,8 @@ describe('[UNIT] PlantIdentificationService', () => {
 
     const result = await service.identifyImage('user_1', 'path/to/image.jpg');
 
-    expect(result.species).toBe('Monstera Deliciosa');
-    expect(result.confidence).toBe(0.95);
+    expect(result.scientificName).toBe('Monstera Deliciosa');
+    expect(result.confidenceScore).toBe(0.95);
     expect(result.libraryMatch?.nameEn).toBe('Monstera');
     expect(PlantIdentificationRepository.prototype.create).toHaveBeenCalled();
   });
