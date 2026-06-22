@@ -33,10 +33,9 @@ export class PlantIdentificationService {
         You are an expert botanist and horticulturist. Analyze this image and identify the plant species.
         Return ONLY a JSON object with the following schema, and no other text:
         {
-          "identifiedSpecies": "Scientific Name (Common Name)",
-          "confidenceScore": 0.95, // between 0.0 and 1.0
-          "category": "e.g., Indoor, Succulent, Vegetable",
-          "careSummary": "Brief 1-sentence care instruction"
+          "plantName": "Common Name",
+          "scientificName": "Scientific Name",
+          "confidenceScore": 0.95 // between 0.0 and 1.0
         }
       `;
 
@@ -56,12 +55,11 @@ export class PlantIdentificationService {
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              identifiedSpecies: { type: Type.STRING },
-              confidenceScore: { type: Type.NUMBER },
-              category: { type: Type.STRING },
-              careSummary: { type: Type.STRING }
+              plantName: { type: Type.STRING },
+              scientificName: { type: Type.STRING },
+              confidenceScore: { type: Type.NUMBER }
             },
-            required: ['identifiedSpecies', 'confidenceScore']
+            required: ['plantName', 'scientificName', 'confidenceScore']
           }
         }
       });
@@ -70,44 +68,56 @@ export class PlantIdentificationService {
       if (!rawText) throw new Error('No response from AI');
 
       const parsedData = JSON.parse(rawText);
+      
+      if (parsedData.confidenceScore < 0.70) {
+        throw new Error('LOW_CONFIDENCE');
+      }
 
       // Log to history
       const historyRecord = await this.idRepo.create({
         user: new mongoose.Types.ObjectId(userId) as any,
-        imageUrl: imagePath, // In a real app, this should be the Cloudinary URL
-        identifiedSpecies: parsedData.identifiedSpecies,
+        imageUrl: imagePath,
+        identifiedSpecies: parsedData.scientificName,
         confidenceScore: parsedData.confidenceScore,
         rawResponse: parsedData
       });
 
       // Semantic Search for Library Match
-      const libraryMatch = await this.matchWithLibrary(parsedData.identifiedSpecies);
+      const libraryMatch = await this.matchWithLibrary(parsedData.scientificName, parsedData.plantName);
 
       return {
         identificationId: historyRecord._id,
-        species: parsedData.identifiedSpecies,
-        confidence: parsedData.confidenceScore,
-        category: parsedData.category,
-        careSummary: parsedData.careSummary,
+        plantName: parsedData.plantName,
+        scientificName: parsedData.scientificName,
+        confidenceScore: parsedData.confidenceScore,
         libraryMatch
       };
 
     } catch (error: any) {
+      if (error.message === 'LOW_CONFIDENCE') {
+        throw error;
+      }
       logger.error('Failed to identify plant: ' + error.message);
       throw new Error('Plant identification failed: ' + error.message);
     }
   }
 
   /**
-   * Search PlantModel using vector search for the closest match.
+   * Search PlantModel directly using fuzzy matching.
    */
-  async matchWithLibrary(speciesName: string) {
+  async matchWithLibrary(scientificName: string, plantName: string) {
     try {
-      const results = await PlantEmbeddingsService.searchSimilarPlants(speciesName, 1);
-      if (results && results.length > 0) {
-        return results[0];
-      }
-      return null;
+      const query = {
+        isLibraryItem: true,
+        $or: [
+          { scientificName: { $regex: scientificName, $options: 'i' } },
+          { nameEn: { $regex: plantName, $options: 'i' } },
+          { normalizedNameEn: { $regex: plantName.toLowerCase(), $options: 'i' } }
+        ]
+      };
+      
+      const match = await Plant.findOne(query).lean();
+      return match || null;
     } catch (e) {
       logger.warn('Failed to match identified plant with library: ' + e);
       return null;

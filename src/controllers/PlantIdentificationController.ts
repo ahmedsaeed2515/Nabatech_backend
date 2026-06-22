@@ -22,6 +22,9 @@ export class PlantIdentificationController {
       const result = await this.idService.identifyImage(userId, imagePath);
       res.status(200).json({ status: 'success', data: result });
     } catch (err: any) {
+      if (err.message === 'LOW_CONFIDENCE') {
+        return res.status(400).json({ status: 'error', code: 'LOW_CONFIDENCE', message: 'We are not confident enough. Please take another photo.' });
+      }
       res.status(400).json({ status: 'error', message: err.message });
     }
   };
