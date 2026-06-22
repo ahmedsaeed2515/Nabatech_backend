@@ -99,6 +99,13 @@ const chatWithAI = async (req, res) => {
             requestId,
             status: "sent"
         });
+        const isSSE = req.headers.accept === "text/event-stream";
+        if (isSSE) {
+            res.setHeader("Content-Type", "text/event-stream");
+            res.setHeader("Cache-Control", "no-cache");
+            res.setHeader("Connection", "keep-alive");
+            res.flushHeaders();
+        }
         let chatResult;
         try {
             chatResult = await (0, ai_orchestrator_service_1.orchestrateChat)({
@@ -108,6 +115,11 @@ const chatWithAI = async (req, res) => {
                 history, // ✅ FIX #1: merged DB + client history injected
                 topK,
                 language,
+                onProgress: (phase) => {
+                    if (isSSE) {
+                        res.write(`data: ${JSON.stringify({ type: "progress", phase })}\n\n`);
+                    }
+                }
             });
         }
         catch (aiError) {
@@ -124,6 +136,10 @@ const chatWithAI = async (req, res) => {
                 errorCode: "PROVIDER_UNAVAILABLE"
             });
             console.error("Chat orchestration failure:", (0, ai_errors_1.sanitizeErrorMessage)(aiError));
+            if (isSSE) {
+                res.write(`data: ${JSON.stringify({ type: "error", message: "Chat failed" })}\n\n`);
+                return res.end();
+            }
             return res.status(502).json({ success: false, message: "Chat failed" });
         }
         const aiResponse = chatResult.message;
@@ -141,15 +157,20 @@ const chatWithAI = async (req, res) => {
             source: chatResult.source,
             sourceIds: [chatResult.provider]
         });
-        // Return response with success and message fields
-        return res.status(200).json({
+        const finalResponse = {
             success: true,
             message: aiResponse,
             messageId: assistantMsg._id,
             source: chatResult.source,
             provider: { name: chatResult.provider },
             sourceIds: assistantMsg.sourceIds
-        });
+        };
+        if (isSSE) {
+            res.write(`data: ${JSON.stringify({ type: "result", data: finalResponse })}\n\n`);
+            return res.end();
+        }
+        // Return standard response
+        return res.status(200).json(finalResponse);
     }
     catch (error) {
         console.error(error);

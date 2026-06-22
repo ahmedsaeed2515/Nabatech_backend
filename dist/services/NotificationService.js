@@ -10,10 +10,17 @@ const logger_1 = require("../utils/logger");
 const notification_model_1 = __importDefault(require("../models/notification_model"));
 // Initialize Firebase Admin lazily if the project provides credentials
 try {
-    if (!admin.apps.length) {
+    if (!admin.apps || !admin.apps.length) {
         if (env_1.env.FIREBASE_CREDENTIALS) {
+            let creds;
+            try {
+                creds = JSON.parse(env_1.env.FIREBASE_CREDENTIALS);
+            }
+            catch (parseErr) {
+                throw new Error("FIREBASE_CREDENTIALS is not valid JSON.");
+            }
             admin.initializeApp({
-                credential: admin.credential.cert(JSON.parse(env_1.env.FIREBASE_CREDENTIALS))
+                credential: admin.credential.cert(creds)
             });
         }
         else {
@@ -27,7 +34,7 @@ try {
     }
 }
 catch (e) {
-    logger_1.logger.error('Failed to initialize Firebase Admin', e);
+    logger_1.logger.error('Failed to initialize Firebase Admin: ' + e.message);
 }
 class NotificationService {
     /**

@@ -9,6 +9,7 @@ const toSessionPayload = (session) => ({
     id: session._id,
     mode: session.mode,
     label: session.label,
+    plantId: session.plantId,
     createdAt: session.createdAt,
 });
 // @desc    Get AR scan sessions of current user
@@ -18,8 +19,11 @@ const getArScanSessions = async (req, res) => {
     try {
         const userId = req.user.id;
         const { cursor, limit, mode } = req.query;
+        const plantId = req.params.plantId;
         const pageSize = Math.min(parseInt(limit) || 20, 50);
         const query = { user: userId };
+        if (plantId)
+            query.plantId = plantId;
         if (mode)
             query.mode = mode;
         if (cursor)
@@ -42,7 +46,7 @@ exports.getArScanSessions = getArScanSessions;
 const createArScanSession = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { mode, label, clientOperationId, deviceModel, appVersion, modelId, confidence } = req.body;
+        const { mode, label, clientOperationId, deviceModel, appVersion, modelId, confidence, plantId } = req.body;
         if (!mode || !label) {
             return res.status(400).json({ success: false, message: "mode and label are required" });
         }
@@ -55,6 +59,7 @@ const createArScanSession = async (req, res) => {
             appVersion: appVersion ? String(appVersion).trim() : undefined,
             modelId: modelId ? String(modelId).trim() : undefined,
             confidence: confidence !== undefined ? Number(confidence) : undefined,
+            plantId: plantId || undefined,
         }).catch((err) => {
             if (err.code === 11000)
                 throw { status: 409, code: "CONFLICT", message: "Duplicate operation" };

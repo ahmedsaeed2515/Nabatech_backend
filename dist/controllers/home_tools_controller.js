@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.trackHomeEvent = exports.getHomeFeed = exports.getHomeToolsAnalytics = exports.getWateringRecommendation = exports.createWateringHistory = exports.getWateringHistory = exports.getLightRecommendation = exports.createLightMeterHistory = exports.getLightMeterHistory = void 0;
+exports.trackHomeEvent = exports.getHomeFeed = exports.getHomeToolsAnalytics = exports.getWateringSchedule = exports.getWateringRecommendation = exports.createWateringHistory = exports.getWateringHistory = exports.getLightRecommendation = exports.createLightMeterHistory = exports.getLightMeterHistory = void 0;
 const light_meter_session_model_1 = __importDefault(require("../models/light_meter_session_model"));
 const watering_calculation_model_1 = __importDefault(require("../models/watering_calculation_model"));
 const home_widget_model_1 = __importDefault(require("../models/home_widget_model"));
@@ -180,6 +180,30 @@ const getWateringRecommendation = async (req, res) => {
     }
 };
 exports.getWateringRecommendation = getWateringRecommendation;
+const getWateringSchedule = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const plants = await require('../models/my_plant_model').default.find({ user: userId }).lean();
+        const schedule = plants.map((p) => {
+            const lastWatered = p.lastWatered ? new Date(p.lastWatered) : new Date(p.createdAt);
+            const nextWateringDate = new Date(lastWatered.getTime() + (p.waterFrequencyDays || 7) * 24 * 60 * 60 * 1000);
+            return {
+                plantId: p._id,
+                plantName: p.name,
+                imageUrl: p.imageUrl,
+                lastWatered: lastWatered,
+                waterFrequencyDays: p.waterFrequencyDays || 7,
+                nextWateringDate: nextWateringDate
+            };
+        });
+        schedule.sort((a, b) => a.nextWateringDate.getTime() - b.nextWateringDate.getTime());
+        return res.status(200).json({ success: true, data: { items: schedule } });
+    }
+    catch (error) {
+        return res.status(500).json({ success: false, message: "Failed to fetch watering schedule" });
+    }
+};
+exports.getWateringSchedule = getWateringSchedule;
 // ---------- Admin Analytics ----------
 const getHomeToolsAnalytics = async (req, res) => {
     try {

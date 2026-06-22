@@ -40,16 +40,17 @@ export const getStoreProducts = async (req: Request, res: Response) => {
 
 // @desc    Get all experts
 // @route   GET /api/explore/experts
-// @access  Public
+// @access  Public (bearer optional)
 export const getExperts = async (req: Request, res: Response) => {
   try {
-    const { specialty, search } = req.query;
+    const { specialty, search, limit } = req.query;
+    const qLimit = limit ? Math.min(parseInt(limit as string, 10), 100) : 50;
     
     // Find all users with role 'expert'
     const userQuery: any = { role: 'expert' };
     if (search) userQuery.name = { $regex: search, $options: "i" };
 
-    const users = await User.find(userQuery).select('name avatarUrl');
+    const users = await User.find(userQuery).select('name avatarUrl').limit(qLimit);
     const userIds = users.map(u => u._id);
     
     // Find their profiles
@@ -72,14 +73,16 @@ export const getExperts = async (req: Request, res: Response) => {
       if (specialty && !p) continue;
       
       result.push({
-        id: u._id,
+        id: u._id.toString(),
         name: u.name,
-        avatarUrl: u.avatarUrl,
+        avatarUrl: u.avatarUrl || null,
         specialization: p?.specialization || 'General',
-        bio: p?.bio || '',
+        bio: p?.bio || null,
         yearsExperience: p?.yearsExperience || 0,
         postsCount: p?.expertPostsCount || 0,
         repliesCount: p?.expertRepliesCount || 0,
+        rating: p?.rating || 0.0,
+        isOnline: true
       });
     }
 

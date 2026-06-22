@@ -23,7 +23,8 @@ const getReminders = async (req, res) => {
         }
         const reminders = await reminder_model_1.default.find(query)
             .sort({ _id: -1 })
-            .limit(queryLimit + 1);
+            .limit(queryLimit + 1)
+            .populate('plantId', 'name');
         const hasNextPage = reminders.length > queryLimit;
         if (hasNextPage)
             reminders.pop();
@@ -33,7 +34,8 @@ const getReminders = async (req, res) => {
                 items: reminders.map(r => ({
                     id: r._id,
                     title: r.title,
-                    plantId: r.plantId,
+                    plantId: r.plantId?._id || r.plantId,
+                    plantName: r.plantId?.name || 'Unknown Plant',
                     timeLabel: r.timeLabel,
                     iconCodePoint: r.iconCodePoint,
                     enabled: r.enabled,
@@ -55,7 +57,8 @@ const getReminders = async (req, res) => {
             reminders: reminders.map(r => ({
                 id: r._id,
                 title: r.title,
-                plantId: r.plantId,
+                plantId: r.plantId?._id || r.plantId,
+                plantName: r.plantId?.name || 'Unknown Plant',
                 timeLabel: r.timeLabel,
                 iconCodePoint: r.iconCodePoint,
                 enabled: r.enabled,
@@ -116,6 +119,7 @@ const createReminder = async (req, res) => {
             id: reminder._id,
             title: reminder.title,
             plantId: reminder.plantId,
+            plantName: req.body.plantName || 'Unknown Plant',
             timeLabel: reminder.timeLabel,
             iconCodePoint: reminder.iconCodePoint,
             enabled: reminder.enabled,
@@ -184,6 +188,7 @@ const updateReminder = async (req, res) => {
             id: reminder._id,
             title: reminder.title,
             plantId: reminder.plantId,
+            plantName: req.body.plantName || 'Unknown Plant',
             timeLabel: reminder.timeLabel,
             iconCodePoint: reminder.iconCodePoint,
             enabled: reminder.enabled,

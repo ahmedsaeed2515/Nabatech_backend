@@ -12,6 +12,7 @@ router.post("/track", auth_middleware_1.protect, home_tools_controller_1.trackHo
 router.get("/light-meter/history", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(home_tools_schemas_1.paginationQuerySchema), home_tools_controller_1.getLightMeterHistory);
 router.post("/light-meter/history", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(home_tools_schemas_1.lightMeterHistorySchema), home_tools_controller_1.createLightMeterHistory);
 router.get("/light-meter/recommendations/:plantId", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(home_tools_schemas_1.lightRecommendationSchema), home_tools_controller_1.getLightRecommendation);
+router.get("/watering/schedule", auth_middleware_1.protect, home_tools_controller_1.getWateringSchedule);
 router.get("/watering/history", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(home_tools_schemas_1.paginationQuerySchema), home_tools_controller_1.getWateringHistory);
 router.post("/watering/history", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(home_tools_schemas_1.wateringHistorySchema), home_tools_controller_1.createWateringHistory);
 router.get("/watering/recommendations", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(home_tools_schemas_1.wateringRecommendationSchema), home_tools_controller_1.getWateringRecommendation);

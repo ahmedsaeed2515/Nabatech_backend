@@ -11,6 +11,7 @@ const ai_benchmark_model_1 = __importDefault(require("../models/ai_benchmark_mod
 const ai_call_log_model_1 = __importDefault(require("../models/ai_call_log_model"));
 const secret_crypto_1 = require("../services/ai/secret_crypto");
 const api_response_1 = require("../utils/api_response");
+const ai_config_service_1 = require("../services/ai/ai_config_service");
 // --- Providers ---
 const getProviders = async (req, res, next) => {
     try {
@@ -37,6 +38,7 @@ const createProvider = async (req, res, next) => {
             baseUrl,
             apiKeyEnc: (0, secret_crypto_1.encryptSecret)(apiKey),
         });
+        (0, ai_config_service_1.clearSettingsCache)();
         return (0, api_response_1.ok)(res, { provider: { id: provider._id, name: provider.name } });
     }
     catch (error) {
@@ -58,6 +60,7 @@ exports.getModels = getModels;
 const createModel = async (req, res, next) => {
     try {
         const model = await ai_model_model_1.default.create(req.body);
+        (0, ai_config_service_1.clearSettingsCache)();
         const populated = await model.populate("provider", "name displayName");
         return (0, api_response_1.ok)(res, { model: populated });
     }
@@ -71,6 +74,7 @@ const updateModel = async (req, res, next) => {
         const model = await ai_model_model_1.default.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate("provider", "name displayName");
         if (!model)
             return res.status(404).json({ success: false, message: "Model not found" });
+        (0, ai_config_service_1.clearSettingsCache)();
         return (0, api_response_1.ok)(res, { model });
     }
     catch (error) {
@@ -83,6 +87,7 @@ const deleteModel = async (req, res, next) => {
         const model = await ai_model_model_1.default.findByIdAndDelete(req.params.id);
         if (!model)
             return res.status(404).json({ success: false, message: "Model not found" });
+        (0, ai_config_service_1.clearSettingsCache)();
         return (0, api_response_1.ok)(res, { message: "Model deleted" });
     }
     catch (error) {
@@ -127,6 +132,7 @@ const updateRoutingRule = async (req, res, next) => {
             Object.assign(rule, req.body);
             await rule.save();
         }
+        (0, ai_config_service_1.clearSettingsCache)();
         const populated = await rule.populate("primaryModel fallbackModels");
         return (0, api_response_1.ok)(res, { rule: populated });
     }

@@ -11,6 +11,8 @@ export interface IComment extends Document {
   moderationReason?: string;
   moderatedBy?: mongoose.Types.ObjectId;
   moderatedAt?: Date;
+  lastEditedAt?: Date;
+  parentId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,6 +29,8 @@ const commentSchema = new Schema<IComment>(
     moderationReason: { type: String },
     moderatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     moderatedAt: { type: Date },
+    lastEditedAt: { type: Date },
+    parentId: { type: Schema.Types.ObjectId, ref: "Comment" },
   },
   { timestamps: true }
 );

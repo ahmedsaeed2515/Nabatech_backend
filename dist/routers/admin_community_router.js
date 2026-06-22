@@ -5,10 +5,18 @@ const auth_middleware_1 = require("../middlewares/auth_middleware");
 const validate_request_middleware_1 = require("../middlewares/validate_request_middleware");
 const community_schemas_1 = require("../validation/community_schemas");
 const admin_community_controller_1 = require("../controllers/admin_community_controller");
+const report_controller_1 = require("../controllers/report_controller");
 const router = (0, express_1.Router)();
+router.get('/analytics', auth_middleware_1.protect, auth_middleware_1.admin, admin_community_controller_1.getCommunityAnalytics);
+router.get('/reputation-stats', auth_middleware_1.protect, auth_middleware_1.admin, admin_community_controller_1.getCommunityReputationStats);
 router.get('/posts', auth_middleware_1.protect, auth_middleware_1.admin, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.adminCommunityQuerySchema), admin_community_controller_1.adminGetPosts);
 router.patch('/posts/:id/moderation', auth_middleware_1.protect, auth_middleware_1.admin, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.adminModerationSchema), admin_community_controller_1.adminModeratePost);
 router.patch('/posts/:id/resolve', auth_middleware_1.protect, auth_middleware_1.admin, admin_community_controller_1.adminResolvePost);
 router.get('/comments', auth_middleware_1.protect, auth_middleware_1.admin, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.adminCommunityQuerySchema), admin_community_controller_1.adminGetComments);
 router.patch('/comments/:id/moderation', auth_middleware_1.protect, auth_middleware_1.admin, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.adminModerationSchema), admin_community_controller_1.adminModerateComment);
+// Reports
+router.get('/reports', auth_middleware_1.protect, auth_middleware_1.admin, report_controller_1.ReportController.getReports);
+router.patch('/reports/:id/resolve', auth_middleware_1.protect, auth_middleware_1.admin, report_controller_1.ReportController.resolveReport);
+router.patch('/reports/:id/dismiss', auth_middleware_1.protect, auth_middleware_1.admin, report_controller_1.ReportController.dismissReport);
+router.patch('/posts/:id/hide', auth_middleware_1.protect, auth_middleware_1.admin, report_controller_1.ReportController.hidePost);
 exports.default = router;

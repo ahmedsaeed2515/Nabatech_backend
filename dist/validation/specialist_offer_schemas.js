@@ -16,8 +16,9 @@ exports.updateOfferStatusSchema = zod_1.z.object({
         id: zod_1.z.string().regex(objectIdRegex, 'Invalid offer ID format'),
     }),
     body: zod_1.z.object({
-        status: zod_1.z.enum(['accepted', 'rejected', 'cancelled']),
+        status: zod_1.z.enum(['accepted', 'rejected', 'withdrawn', 'cancelled']),
         version: zod_1.z.number().int().nonnegative(),
+        clientOperationId: zod_1.z.string().min(1).optional(),
     }),
 });
 exports.adminModerationSchema = zod_1.z.object({
@@ -34,14 +35,14 @@ exports.offersQuerySchema = zod_1.z.object({
     query: zod_1.z.object({
         cursor: zod_1.z.string().optional(),
         limit: zod_1.z.coerce.number().int().min(1).max(50).default(20),
-        status: zod_1.z.enum(['pending', 'accepted', 'rejected', 'cancelled']).optional(),
+        status: zod_1.z.enum(['pending', 'accepted', 'rejected', 'withdrawn', 'cancelled']).optional(),
     }),
 });
 exports.adminOffersQuerySchema = zod_1.z.object({
     query: zod_1.z.object({
         cursor: zod_1.z.string().optional(),
         limit: zod_1.z.coerce.number().int().min(1).max(50).default(20),
-        status: zod_1.z.enum(['pending', 'accepted', 'rejected', 'cancelled']).optional(),
+        status: zod_1.z.enum(['pending', 'accepted', 'rejected', 'withdrawn', 'cancelled']).optional(),
         adminStatus: zod_1.z.enum(['flagged', 'cleared', 'voided']).optional(),
         farmerId: zod_1.z.string().regex(objectIdRegex, 'Invalid farmer ID format').optional(),
         specialistId: zod_1.z.string().regex(objectIdRegex, 'Invalid specialist ID format').optional(),

@@ -9,34 +9,31 @@ const user_model_1 = __importDefault(require("../models/user_model"));
 const app_error_1 = require("../utils/app_error");
 const protect = async (req, res, next) => {
     console.log("protect called! Auth header:", req.headers.authorization ? 'present' : 'missing');
-    let token;
-    if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
-        try {
-            token = req.headers.authorization.split(' ')[1];
-            const jwtSecret = process.env.JWT_SECRET;
-            if (!jwtSecret) {
-                throw new Error('JWT_SECRET is not configured');
-            }
-            const decoded = jsonwebtoken_1.default.verify(token, jwtSecret);
-            const user = await user_model_1.default.findById(decoded.id).select('-password');
-            if (!user) {
-                return next(new app_error_1.AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Not authorized, user not found' }));
-            }
-            if (user.status === 'disabled') {
-                return next(new app_error_1.AppError({ code: 'AUTH_ACCOUNT_DISABLED', statusCode: 401, message: 'Account disabled' }));
-            }
-            if (user.tokenVersion !== decoded.tokenVersion) {
-                return next(new app_error_1.AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Token invalid or revoked' }));
-            }
-            req.user = user;
-            return next();
-        }
-        catch (error) {
-            return next(new app_error_1.AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Not authorized, token failed' }));
-        }
+    if (!req.headers.authorization || !req.headers.authorization.startsWith('Bearer ')) {
+        return next(new app_error_1.AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Not authorized, missing or invalid token format' }));
     }
+    const token = req.headers.authorization.split(' ')[1];
     if (!token) {
-        return next(new app_error_1.AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Not authorized, no token' }));
+        return next(new app_error_1.AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Not authorized, no token provided' }));
+    }
+    try {
+        const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'fallback_secret');
+        const user = await user_model_1.default.findById(decoded.id).select('-passwordHash');
+        if (!user) {
+            return next(new app_error_1.AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Not authorized, user not found' }));
+        }
+        if (user.status === 'disabled') {
+            return next(new app_error_1.AppError({ code: 'AUTH_FORBIDDEN', statusCode: 403, message: 'Your account has been disabled' }));
+        }
+        if (decoded.tokenVersion !== undefined && user.tokenVersion !== decoded.tokenVersion) {
+            return next(new app_error_1.AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Session expired, please login again' }));
+        }
+        req.user = user;
+        return next();
+    }
+    catch (error) {
+        console.error("JWT Verification failed:", error);
+        return next(new app_error_1.AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Not authorized, token failed' }));
     }
 };
 exports.protect = protect;

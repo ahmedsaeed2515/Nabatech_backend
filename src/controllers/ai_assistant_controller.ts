@@ -306,3 +306,41 @@ export const postQueryLibrary = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: "Library query failed" });
   }
 };
+
+const greetingCache = new Map<string, { time: number, text: string }>();
+
+export const getGreeting = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any)?.user?.id;
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    const now = Date.now();
+    const cached = greetingCache.get(userId);
+    if (cached && now - cached.time < 3600 * 1000) {
+      return res.status(200).json({ success: true, greeting: cached.text });
+    }
+
+    const PlantModel = (await import("../models/plant_model")).default;
+    const plants = await PlantModel.find({ user: userId }).lean();
+    let plantStr = plants.length > 0 ? plants.map((p: any) => p.name || p.species).join(', ') : "no plants yet";
+    
+    const { getAiSettings } = await import("../services/ai/ai_config_service");
+    const { askLlm } = await import("../services/ai/llm_provider");
+    
+    const settings = await getAiSettings();
+    const prompt = `You are a smart AI garden assistant named Nabatech. Generate a dynamic 2-line greeting for the user. 
+They currently have: ${plantStr}. 
+Pretend you know the weather is sunny. Suggest a brief care tip.
+Do NOT use markdown, emojis are allowed. Maximum 2 short lines.`;
+    
+    const llmRes = await askLlm(settings, prompt, "llm", []);
+    const greeting = llmRes.message.replace(/"/g, '').trim();
+
+    greetingCache.set(userId, { time: now, text: greeting });
+
+    return res.status(200).json({ success: true, greeting });
+  } catch (error) {
+    console.error("Greeting failed:", sanitizeErrorMessage(error));
+    return res.status(500).json({ success: false, message: "Greeting failed" });
+  }
+};

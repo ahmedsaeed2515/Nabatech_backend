@@ -116,7 +116,7 @@ const syncOfflineDiagnosis = async (req, res) => {
     }
 };
 exports.syncOfflineDiagnosis = syncOfflineDiagnosis;
-// @desc    Predict disease from an image using the ML API
+// @desc    Predict disease from an image using the CNN provider (HuggingFace Space)
 // @route   POST /api/diagnosis/predict
 // @access  Private
 const predictOnline = async (req, res) => {
@@ -125,9 +125,25 @@ const predictOnline = async (req, res) => {
         if (!req.file) {
             return res.status(400).json({ success: false, message: "Image file is required" });
         }
-        const mlService = new (require("../services/ai/disease_detection_service").DiseaseDetectionService)();
-        const prediction = await mlService.predictFromImage(req.file.buffer, req.file.originalname);
-        // After getting prediction, save it to DiagnosisHistory
+        // ✅ FIX: Use the same CNN provider as the orchestrator (HuggingFace Space)
+        // instead of the unavailable local Python ML service
+        const FormData = require("form-data");
+        const { runCnnDiagnosis } = require("../services/ai/cnn_provider");
+        const { getAiSettings } = require("../services/ai/ai_config_service");
+        const settings = await getAiSettings();
+        const formData = new FormData();
+        formData.append("file", req.file.buffer, { filename: req.file.originalname || "image.jpg" });
+        const rawResult = await runCnnDiagnosis(settings, formData, formData.getHeaders());
+        const prediction = {
+            diseaseNameEn: rawResult.prediction,
+            confidence: rawResult.confidence ?? 0,
+            candidates: (rawResult.candidates || []).map((c) => ({
+                diseaseNameEn: c.label,
+                confidence: c.confidence ?? 0,
+            })),
+            provider: rawResult.provider,
+        };
+        // Upload image to Cloudinary
         const cloudinaryUpload = (fileBuffer) => {
             return new Promise((resolve, reject) => {
                 const stream = cloudinary_1.default.uploader.upload_stream({ folder: "diagnoses" }, (error, result) => {
@@ -138,28 +154,37 @@ const predictOnline = async (req, res) => {
                 stream.end(fileBuffer);
             });
         };
-        const uploadResult = await cloudinaryUpload(req.file.buffer);
+        let imageUrl = "";
+        let imagePublicId = "";
+        try {
+            const uploadResult = await cloudinaryUpload(req.file.buffer);
+            imageUrl = uploadResult.secure_url;
+            imagePublicId = uploadResult.public_id;
+        }
+        catch (cloudErr) {
+            console.warn("Cloudinary upload failed (non-fatal):", cloudErr.message);
+        }
         const historyRecord = await diagnosis_history_model_1.default.create({
             user: userId,
-            imageUrl: uploadResult.secure_url,
-            imagePublicId: uploadResult.public_id,
+            imageUrl,
+            imagePublicId,
             diseaseNameEn: prediction.diseaseNameEn,
             confidence: prediction.confidence,
             candidates: prediction.candidates,
             isOffline: false,
             diagnosisSource: "online",
-            provider: "python_ml",
-            needsNewImage: false,
+            provider: rawResult.provider || "cnn",
+            needsNewImage: (rawResult.confidence ?? 0) < settings.cnn.confidenceThreshold,
             diagnosedAt: new Date(),
         });
         return res.status(200).json({
             success: true,
             prediction,
-            historyId: historyRecord._id
+            historyId: historyRecord._id,
         });
     }
     catch (error) {
-        console.error("ML Prediction Error:", error.message);
+        console.error("CNN Prediction Error:", error.message);
         return res.status(500).json({ success: false, message: "Failed to predict disease from image" });
     }
 };

@@ -45,6 +45,8 @@ const commentSchema = new mongoose_1.Schema({
     moderationReason: { type: String },
     moderatedBy: { type: mongoose_1.Schema.Types.ObjectId, ref: "User" },
     moderatedAt: { type: Date },
+    lastEditedAt: { type: Date },
+    parentId: { type: mongoose_1.Schema.Types.ObjectId, ref: "Comment" },
 }, { timestamps: true });
 // Indexes for feed and idempotency
 commentSchema.index({ post: 1, createdAt: -1, _id: -1 });

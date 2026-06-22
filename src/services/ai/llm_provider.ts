@@ -4,8 +4,10 @@ import { AiProviderError, toProviderError } from "./ai_errors";
 
 export type LlmResult = {
   message: string;
-  source: "llm" | "fallback" | "hf-rag-fallback";
+  source: "llm" | "fallback" | "rag" | "hf-rag-fallback";
   provider: string;
+  model?: string;
+  toolCalls?: any[];
 };
 
 type OpenAiCompletionResponse = {

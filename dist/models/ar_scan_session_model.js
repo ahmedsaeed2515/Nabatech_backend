@@ -43,6 +43,7 @@ const arScanSessionSchema = new mongoose_1.Schema({
     appVersion: { type: String, trim: true },
     modelId: { type: String, trim: true },
     confidence: { type: Number, min: 0, max: 1 },
+    plantId: { type: mongoose_1.Schema.Types.ObjectId, ref: "MyPlant", index: true },
 }, { timestamps: true });
 // Indexes for pagination and idempotency
 arScanSessionSchema.index({ user: 1, createdAt: -1, _id: -1 });

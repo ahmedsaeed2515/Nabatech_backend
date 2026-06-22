@@ -12,6 +12,7 @@ import { CommunityController } from '../../controllers/CommunityController';
 import { ToolingController } from '../../controllers/ToolingController';
 import { EdgeController } from '../../controllers/EdgeController';
 import { PlantIdentificationController } from '../../controllers/PlantIdentificationController';
+import { ReportController } from '../../controllers/report_controller';
 import upload from '../../middlewares/upload_middleware';
 import { protectV2 } from '../../middlewares/auth_v2';
 import { IdempotencyCheck } from '../../middlewares/idempotency';
@@ -99,6 +100,10 @@ router.post('/posts/:id/comments', protectV2, IdempotencyCheck, communityControl
 router.get('/posts/:id/comments', protectV2, communityController.getComments);
 router.put('/posts/:postId/comments/:commentId', protectV2, IdempotencyCheck, communityController.updateComment);
 router.delete('/posts/:postId/comments/:commentId', protectV2, communityController.deleteComment);
+
+// Community Reports
+import { communityReportLimiter } from '../../middlewares/rate_limit_middleware';
+router.post('/community/reports', protectV2, communityReportLimiter, IdempotencyCheck, ReportController.createReport);
 
 // Tooling (Wishlist & Inventory)
 router.post('/wishlist', protectV2, validateRequest(createWishlistItemSchema), IdempotencyCheck, toolingController.createWishlistItem);

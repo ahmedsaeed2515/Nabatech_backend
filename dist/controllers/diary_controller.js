@@ -11,14 +11,25 @@ const diary_entry_model_1 = __importDefault(require("../models/diary_entry_model
 const getDiaryEntries = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { plantId } = req.query;
+        const { plantId, cursor, limit } = req.query;
         const query = { user: userId };
         if (plantId)
             query.plantId = plantId;
-        const entries = await diary_entry_model_1.default.find(query).sort({ date: -1 });
+        if (cursor)
+            query._id = { $lt: cursor };
+        const qLimit = Math.min(parseInt(limit) || 50, 50);
+        const entries = await diary_entry_model_1.default.find(query)
+            .sort({ _id: -1 })
+            .limit(qLimit + 1)
+            .populate('plantId', 'name');
+        const hasNextPage = entries.length > qLimit;
+        if (hasNextPage)
+            entries.pop();
+        const nextCursor = hasNextPage ? entries[entries.length - 1]._id : null;
         const payload = entries.map(e => ({
             id: e._id,
-            plantId: e.plantId,
+            plantId: e.plantId?._id || e.plantId,
+            plantName: e.plantId?.name || 'Unknown Plant',
             title: e.title,
             notes: e.notes,
             date: e.date,
@@ -27,7 +38,13 @@ const getDiaryEntries = async (req, res) => {
         }));
         res.status(200).json({
             success: true,
-            entries: payload
+            data: {
+                items: payload,
+                pageInfo: {
+                    hasNextPage,
+                    nextCursor
+                }
+            }
         });
     }
     catch (error) {

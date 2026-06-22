@@ -14,9 +14,14 @@ import { MemoryManager } from "./memory_manager";
 import { getProviderManager } from "./ai_provider_manager";
 import { ExpertEscalationService } from "../expert_escalation_service";
 
+import { sanitizeModelOutput } from "../../utils/ai_sanitizer";
+
 const sanitizeLlmResponse = (text: string): string => {
   if (!text) return text;
-  return text
+  // First run the new global sanitizer to strip <think> blocks
+  let sanitized = sanitizeModelOutput(text);
+  // Then strip specific local metadata tags
+  return sanitized
     .replace(/\[source:.*?\]/gi, "")
     .replace(/\[doc:.*?\]/gi, "")
     .replace(/relevance:\s*[\d.]+/gi, "")
@@ -127,51 +132,70 @@ export const orchestrateChat = async (args: {
   const reqId = args.requestId || crypto.randomUUID();
   const sanitizedHistory = args.history.filter(msg => msg.role !== "system");
   
-  let ragContext: string | undefined;
-  if (settings.rag.enabled && settings.rag.endpointUrl) {
-    if (args.onProgress) args.onProgress("RETRIEVING_KNOWLEDGE");
-    let optimizedQuery = args.question;
-    try {
-      const sanitizedQuestion = args.question.replace(/"/g, '\\"');
-      const searchPrompt = `Generate a precise agricultural search query to find the best treatment or information in a database for the following question. Output ONLY the search query text, without quotes or extra explanation.\n\nUser Question: ${sanitizedQuestion}`;
-      const searchRes = await Promise.race([
-        askLlm(settings, searchPrompt, "llm", [], "search"),
-        new Promise<any>((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 5000))
-      ]);
-      optimizedQuery = searchRes.message;
-    } catch (searchErr) {
-      console.warn("[SEARCH_LLM_FAILED] Search LLM failed or not configured, using raw question.");
-    }
+  const isGreeting = /^(hello|hi|hey|greetings|good morning|good afternoon|good evening|howdy|what'?s up)\b/i.test(args.question.trim());
+  const isSmallTalk = /^(how are you|who are you|thanks|thank you|bye|goodbye)\b/i.test(args.question.trim());
+  const shouldSkipRag = isGreeting || isSmallTalk;
 
-    try {
-      const ragResult = await retrieveRagChunks(
-        settings,
-        "",
-        optimizedQuery,
-        args.topK,
-        args.language
-      );
-      ragContext = ragResult.contextText;
-      console.log(`[RAG_SUCCESS] ${ragResult.chunks.length} chunks retrieved for text chat`);
-    } catch (error) {
-      console.warn("[RAG_FAILED] RAG retrieval failed for text chat:", sanitizeErrorMessage(error));
-    }
-  }
+  if (args.onProgress) args.onProgress("LOADING_CONTEXT");
 
-  let communityContext: string | undefined;
-  try {
-    const commResult = await retrieveCommunityContext(undefined, args.question);
-    if (commResult.hasData) {
-      communityContext = commResult.text;
-    }
-  } catch (error) {
-    console.warn("Community context retrieval failed for text chat:", sanitizeErrorMessage(error));
-  }
+  const [ragResultData, commResultData, memoryContext, gardenContext] = await Promise.all([
+    // 1. RAG Retrieval
+    (async () => {
+      if (shouldSkipRag || !settings.rag.enabled || !settings.rag.endpointUrl) return undefined;
+      let optimizedQuery = args.question;
+      try {
+        const sanitizedQuestion = args.question.replace(/"/g, '\\"');
+        const searchPrompt = `Generate a precise agricultural search query to find the best treatment or information in a database for the following question. Output ONLY the search query text, without quotes or extra explanation.\n\nUser Question: ${sanitizedQuestion}`;
+        const searchRes = await Promise.race([
+          askLlm(settings, searchPrompt, "llm", [], "search"),
+          new Promise<any>((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 5000))
+        ]);
+        optimizedQuery = sanitizeModelOutput(searchRes.message);
+      } catch (searchErr) {
+        console.warn("[SEARCH_LLM_FAILED] Search LLM failed, using raw question.");
+      }
 
-  // Load memory context
-  if (args.onProgress) args.onProgress("LOADING_MEMORY");
-  const memoryContext = await MemoryManager.getAllContext(args.userId || "anonymous");
-  const systemPromptAddition = `\n\nUser Profile & Memory Context: ${JSON.stringify(memoryContext)}`;
+      try {
+        const result = await retrieveRagChunks(settings, "", optimizedQuery, args.topK || 4, args.language);
+        console.log(`[RAG_SUCCESS] ${result.chunks.length} chunks retrieved for text chat`);
+        return result.contextText;
+      } catch (error) {
+        console.warn("[RAG_FAILED] RAG retrieval failed:", sanitizeErrorMessage(error));
+        return undefined;
+      }
+    })(),
+
+    // 2. Community Context Retrieval
+    (async () => {
+      try {
+        const result = await retrieveCommunityContext(undefined, args.question);
+        return result.hasData ? result.text : undefined;
+      } catch (error) {
+        console.warn("Community context retrieval failed:", sanitizeErrorMessage(error));
+        return undefined;
+      }
+    })(),
+
+    // 3. Memory Retrieval
+    MemoryManager.getAllContext(args.userId || "anonymous"),
+
+    // 4. Deep Garden Context
+    (async () => {
+      if (!args.userId) return undefined;
+      try {
+        const PlantModel = (await import("../../models/plant_model")).default;
+        const plants = await PlantModel.find({ user: args.userId }).lean();
+        if (!plants || plants.length === 0) return "User has no plants in their garden.";
+        return "User's Garden Plants: " + JSON.stringify(plants.map((p: any) => ({
+          name: p.name, species: p.species, stage: p.stage, health: p.healthScore, lastWatered: p.lastWatered
+        })));
+      } catch (e) { return undefined; }
+    })()
+  ]);
+
+  const ragContext = ragResultData;
+  const communityContext = commResultData;
+  const systemPromptAddition = `\n\nUser Profile & Memory Context: ${JSON.stringify(memoryContext)}\n\n${gardenContext || ""}`;
   
   const prompt = buildAssistantPrompt({
     userQuestion: args.question,
@@ -202,20 +226,34 @@ export const orchestrateChat = async (args: {
       await MemoryManager.saveShortTermMemory(args.userId, `last_chat_${reqId}`, args.question);
 
       // ✅ NEW: Extract and save long-term user profile facts from conversation
-      try {
-        const factExtractionPrompt = `Analyze this user message and extract any permanent facts about the user (location, preferred language, farming experience, plant preferences, treatment preferences like organic/chemical). Return JSON: {"facts": [{"key": "string", "value": "string"}]}. If no new facts, return {"facts": []}.
+      let attempt = 0;
+      let success = false;
+      while (attempt < 2 && !success) {
+        try {
+          const factExtractionPrompt = `Analyze this user message and extract any permanent facts about the user (location, preferred language, farming experience, plant preferences, treatment preferences like organic/chemical). Return JSON: {"facts": [{"key": "string", "value": "string"}]}. If no new facts, return {"facts": []}.
 
 User message: "${args.question.substring(0, 300)}"`;
-        const factRes = await askLlm(settings, factExtractionPrompt, "llm", [], "search");
-        const parsed = JSON.parse(factRes.message.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
-        for (const fact of (parsed.facts || [])) {
-          if (fact.key && fact.value) {
-            await MemoryManager.saveLongTermMemory(args.userId, fact.key, fact.value);
-            console.log(`[MEMORY] Saved long-term fact: ${fact.key} = ${fact.value}`);
+          const factRes = await askLlm(settings, factExtractionPrompt, "llm", [], "search");
+          const cleanedMessage = sanitizeModelOutput(factRes.message);
+          const parsed = JSON.parse(cleanedMessage.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+          
+          if (!parsed || !Array.isArray(parsed.facts)) {
+            throw new Error("Invalid schema: 'facts' array missing");
+          }
+
+          for (const fact of parsed.facts) {
+            if (fact.key && fact.value) {
+              await MemoryManager.saveLongTermMemory(args.userId, fact.key, fact.value);
+              console.log(`[MEMORY] Saved long-term fact: ${fact.key} = ${fact.value}`);
+            }
+          }
+          success = true;
+        } catch (memErr) {
+          attempt++;
+          if (attempt >= 2) {
+            console.warn("[MEMORY] Long-term fact extraction failed (non-critical) after 2 attempts:", (memErr as any).message);
           }
         }
-      } catch (memErr) {
-        console.warn("[MEMORY] Long-term fact extraction failed (non-critical):", (memErr as any).message);
       }
 
       chatResult = { message: agentResult.message, source: "llm", provider: "agent_llm", toolCalls: agentResult.toolCalls };
@@ -327,6 +365,7 @@ export const orchestrateAssistantRequest = async (args: {
 
   let predictedCrop = "";
   let predictedDisease = cnnResult?.prediction || "";
+  const isHealthy = predictedDisease.toLowerCase().includes("healthy");
 
   if (cnnResult?.prediction) {
     if (cnnResult.prediction.includes("___")) {
@@ -361,8 +400,32 @@ export const orchestrateAssistantRequest = async (args: {
     }
 
     // [CRITICAL FIX] HARD ABORT ON LOW CONFIDENCE
-    const formattedDisease = cnnResult.prediction.replace(/___/g, " - ").replace(/_/g, " ");
-    const abortMessage = `Disease:\n${formattedDisease}\n\nConfidence:\n${(conf * 100).toFixed(0)}%\n\nResult:\nLow confidence diagnosis\n\nRecommendation:\nPlease upload a clearer image showing affected leaves.`;
+    let abortMessage = "";
+    if (isHealthy) {
+       abortMessage = `Result:\nInconclusive\n\nRecommendation:\nThe image analysis is uncertain. Please upload a clearer image of the affected plant parts.`;
+    } else {
+       const formattedDisease = cnnResult.prediction.replace(/___/g, " - ").replace(/_/g, " ");
+       abortMessage = `Disease:\n${formattedDisease}\n\nConfidence:\n${(conf * 100).toFixed(0)}%\n\nResult:\nLow confidence diagnosis\n\nRecommendation:\nPlease upload a clearer image showing affected leaves.`;
+    }
+
+    let communityDraft: any = null;
+    if (args.userId && args.originalName) {
+      try {
+        const formattedDisease = cnnResult.prediction.replace(/___/g, " - ").replace(/_/g, " ");
+        const draftPrompt = `You are a helpful plant expert assistant. The user uploaded an image of a plant that our AI diagnosed as "${formattedDisease}" with only ${(conf * 100).toFixed(0)}% confidence. This is too low to be certain.
+Please generate a draft for a community post so the user can ask human experts for help.
+Output valid JSON in this exact format:
+{
+  "title": "Short descriptive title",
+  "content": "Detailed description explaining that the AI suggested ${formattedDisease} but wasn't sure, and asking the community for their opinion."
+}`;
+        const draftRes = await askLlm(settings, draftPrompt, "llm", [], "search");
+        const cleanedMessage = sanitizeModelOutput(draftRes.message);
+        communityDraft = JSON.parse(cleanedMessage.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+      } catch (draftErr) {
+        console.warn("Failed to generate community draft on low confidence:", draftErr);
+      }
+    }
 
     await logAiCall({
       userId: args.userId,
@@ -381,7 +444,8 @@ export const orchestrateAssistantRequest = async (args: {
       source: "cnn",
       provider: cnnResult.provider,
       providerChain: ["cnn"],
-      lowConfidenceWarning: "Diagnosis rejected due to low confidence."
+      lowConfidenceWarning: "Diagnosis rejected due to low confidence.",
+      communityDraft
     } as any;
   }
 
@@ -394,6 +458,7 @@ export const orchestrateAssistantRequest = async (args: {
   let communityContext: string | undefined;
   let kbAdvice: string | undefined;
   let kbSeverity: string | undefined;
+  let toolCalls: any[] | undefined;
   if (shouldGenerateAnswer) {
     // ── RAG Stage: Pure Knowledge Retrieval ──────────────────────────────────
     let ragRetrievedContext: string | undefined;
@@ -480,12 +545,37 @@ export const orchestrateAssistantRequest = async (args: {
       language: args.language,
     });
 
-    let chatResult: { message: string, source: "llm"|"fallback"|"rag"|"cnn"|"hf-rag-fallback", provider: string };
+    let chatResult: { message: string, source: "llm"|"fallback"|"rag"|"cnn"|"hf-rag-fallback", provider: string, toolCalls?: any[] };
     // askLlm handles all internal failures and returns a safe fallback
     // object for taskRole "chat" — it never throws. No try/catch needed.
     console.log("[RUNTIME_TRACE] BEFORE LLM CALL");
     console.log("[RUNTIME_TRACE] LLM REQUEST PROMPT LENGTH:", prompt.length);
-    chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
+    
+    if (args.userId && settings.llm.enabled && !args.skipAdvice) {
+       console.log("[AGENT] Starting Tool Calling Loop for Diagnosis");
+       try {
+         const agentProvider = new AgentLlmProvider();
+         const targetPlantName = predictedCrop || predictedDisease.replace(/_/g, " ").split(" ")[0];
+         const systemPrompt = prompt + `\n\nCRITICAL INSTRUCTION: Since the diagnosis is completed, you MUST automatically add this plant to the user's garden using the add_plant_to_garden tool. Pass plantName: "${targetPlantName}". After adding, briefly summarize the care advice. Do not ask for confirmation.`;
+         
+         const agentResult = await agentProvider.runAgentLoop(
+           settings,
+           args.userId,
+           systemPrompt,
+           sanitizedHistory,
+           AGENT_TOOLS,
+           5,
+           args.onProgress
+         );
+         chatResult = { message: agentResult.message, source: "llm", provider: "agent_llm", toolCalls: agentResult.toolCalls };
+       } catch (agentErr: any) {
+         console.warn("[AGENT_FAILED] Falling back to standard LLM flow:", agentErr.message);
+         chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
+       }
+    } else {
+       chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
+    }
+    
     console.log("[RUNTIME_TRACE] AFTER LLM CALL");
     console.log("[RUNTIME_TRACE] LLM RESPONSE CHAT RESULT:", JSON.stringify(chatResult));
 
@@ -520,6 +610,7 @@ export const orchestrateAssistantRequest = async (args: {
     message = sanitizeLlmResponse(chatResult.message);
     source = chatResult.source;
     provider = chatResult.provider;
+    toolCalls = chatResult.toolCalls;
   }
 
   if (isLowConfidence && settings.pipeline.lowConfidenceBehavior === "ask_for_new_image") {
@@ -580,6 +671,7 @@ export const orchestrateAssistantRequest = async (args: {
     communityContext,
     kbAdvice,
     kbSeverity,
+    toolCalls,
   };
 
   try {

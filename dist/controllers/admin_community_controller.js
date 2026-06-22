@@ -3,10 +3,124 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminModerateComment = exports.adminGetComments = exports.adminResolvePost = exports.adminModeratePost = exports.adminGetPosts = void 0;
+exports.getCommunityReputationStats = exports.adminModerateComment = exports.adminGetComments = exports.adminResolvePost = exports.adminModeratePost = exports.adminGetPosts = exports.getCommunityAnalytics = void 0;
 const community_post_model_1 = __importDefault(require("../models/community_post_model"));
 const comment_model_1 = __importDefault(require("../models/comment_model"));
 const logger_1 = require("../utils/logger");
+const community_report_model_1 = __importDefault(require("../models/community_report_model"));
+const user_reputation_model_1 = __importDefault(require("../models/user_reputation_model"));
+const follow_model_1 = __importDefault(require("../models/follow_model"));
+const saved_post_model_1 = __importDefault(require("../models/saved_post_model"));
+const community_audit_model_1 = __importDefault(require("../models/community_audit_model"));
+const getCommunityAnalytics = async (req, res) => {
+    try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const [topPostToday, topAuthor, mostDiscussed, mostReported, postsPerDay, commentsPerDay, totalFollowers, totalSavedPosts, totalActivities, followersPerDay, savesPerDay, activitiesPerDay] = await Promise.all([
+            // Top post today (most likes)
+            community_post_model_1.default.findOne({ createdAt: { $gte: today }, status: 'visible' }).sort({ likes: -1 }).populate('author', 'name'),
+            // Top author (most posts)
+            community_post_model_1.default.aggregate([
+                { $match: { status: 'visible' } },
+                { $group: { _id: "$authorName", count: { $sum: 1 } } },
+                { $sort: { count: -1 } },
+                { $limit: 1 }
+            ]),
+            // Most discussed (most comments)
+            community_post_model_1.default.findOne({ status: 'visible' }).sort({ commentsCount: -1 }).populate('author', 'name'),
+            // Most reported
+            community_report_model_1.default.aggregate([
+                { $group: { _id: "$reportedPost", count: { $sum: 1 } } },
+                { $sort: { count: -1 } },
+                { $limit: 1 }
+            ]),
+            // Posts per day
+            community_post_model_1.default.aggregate([
+                {
+                    $group: {
+                        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                        count: { $sum: 1 }
+                    }
+                },
+                { $sort: { _id: 1 } }
+            ]),
+            // Comments per day
+            comment_model_1.default.aggregate([
+                {
+                    $group: {
+                        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                        count: { $sum: 1 }
+                    }
+                },
+                { $sort: { _id: 1 } }
+            ]),
+            // Total Followers
+            follow_model_1.default.countDocuments(),
+            // Total Saved Posts
+            saved_post_model_1.default.countDocuments(),
+            // Total Activities
+            community_audit_model_1.default.countDocuments(),
+            // Followers per day
+            follow_model_1.default.aggregate([
+                {
+                    $group: {
+                        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                        count: { $sum: 1 }
+                    }
+                },
+                { $sort: { _id: 1 } }
+            ]),
+            // Saves per day
+            saved_post_model_1.default.aggregate([
+                {
+                    $group: {
+                        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                        count: { $sum: 1 }
+                    }
+                },
+                { $sort: { _id: 1 } }
+            ]),
+            // Activities per day
+            community_audit_model_1.default.aggregate([
+                {
+                    $group: {
+                        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                        count: { $sum: 1 }
+                    }
+                },
+                { $sort: { _id: 1 } }
+            ])
+        ]);
+        let mostReportedPostDetails = null;
+        if (mostReported.length > 0 && mostReported[0]._id) {
+            mostReportedPostDetails = await community_post_model_1.default.findById(mostReported[0]._id).populate('author', 'name');
+        }
+        res.status(200).json({
+            success: true,
+            data: {
+                topPostToday: topPostToday ? { title: topPostToday.title, likes: topPostToday.likes, author: topPostToday.authorName } : null,
+                topAuthor: topAuthor.length > 0 ? { name: topAuthor[0]._id, posts: topAuthor[0].count } : null,
+                mostDiscussedPost: mostDiscussed ? { title: mostDiscussed.title, comments: mostDiscussed.commentsCount, author: mostDiscussed.authorName } : null,
+                mostReportedPost: mostReportedPostDetails ? { title: mostReportedPostDetails.title, reports: mostReported[0].count, author: mostReportedPostDetails.authorName } : null,
+                totalFollowers,
+                totalSavedPosts,
+                totalActivities,
+                charts: {
+                    postsPerDay: postsPerDay.map(p => ({ date: p._id, count: p.count })),
+                    commentsPerDay: commentsPerDay.map(c => ({ date: c._id, count: c.count })),
+                    followersPerDay: followersPerDay.map(f => ({ date: f._id, count: f.count })),
+                    savesPerDay: savesPerDay.map(s => ({ date: s._id, count: s.count })),
+                    activitiesPerDay: activitiesPerDay.map(a => ({ date: a._id, count: a.count }))
+                }
+            }
+        });
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to get community analytics', { event: 'community_feed_and_moderation.admin_analytics.error', error });
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+exports.getCommunityAnalytics = getCommunityAnalytics;
 const adminGetPosts = async (req, res) => {
     try {
         const { cursor, limit, status, authorId } = req.query;
@@ -175,3 +289,52 @@ const adminModerateComment = async (req, res) => {
     }
 };
 exports.adminModerateComment = adminModerateComment;
+const getCommunityReputationStats = async (req, res) => {
+    try {
+        const [topContributor, mostFollowed, highestReputation, recentExperts, badgeDistribution] = await Promise.all([
+            // Top Contributor by points
+            user_reputation_model_1.default.findOne().sort({ points: -1 }).populate('userId', 'name role'),
+            // Most Followed Expert
+            follow_model_1.default.aggregate([
+                { $group: { _id: "$following", followerCount: { $sum: 1 } } },
+                { $sort: { followerCount: -1 } },
+                { $limit: 1 }
+            ]),
+            // Highest Reputation (same as top contributor essentially, but could be different metric)
+            user_reputation_model_1.default.findOne().sort({ points: -1 }).populate('userId', 'name'),
+            // Recent Experts
+            user_reputation_model_1.default.find({ level: { $in: ['Expert', 'Master'] } })
+                .sort({ updatedAt: -1 })
+                .limit(5)
+                .populate('userId', 'name avatarUrl'),
+            // Badge Distribution
+            user_reputation_model_1.default.aggregate([
+                { $unwind: "$badges" },
+                { $group: { _id: "$badges", count: { $sum: 1 } } }
+            ])
+        ]);
+        let mostFollowedUserDetails = null;
+        if (mostFollowed.length > 0 && mostFollowed[0]._id) {
+            // Need to populate the user info manually since aggregate doesn't
+            mostFollowedUserDetails = await user_reputation_model_1.default.findOne({ userId: mostFollowed[0]._id }).populate('userId', 'name');
+        }
+        res.status(200).json({
+            success: true,
+            data: {
+                topContributor: topContributor ? { name: topContributor.userId?.name, points: topContributor.points } : null,
+                mostFollowed: mostFollowedUserDetails ? { name: mostFollowedUserDetails.userId?.name, followers: mostFollowed[0].followerCount } : null,
+                highestReputation: highestReputation ? { name: highestReputation.userId?.name, points: highestReputation.points } : null,
+                recentExperts: recentExperts.map(re => ({
+                    name: re.userId?.name,
+                    level: re.level,
+                })),
+                badgeDistribution: badgeDistribution.map(b => ({ badge: b._id, count: b.count }))
+            }
+        });
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to get community reputation stats', { event: 'community_feed_and_moderation.admin_reputation_stats.error', error });
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+exports.getCommunityReputationStats = getCommunityReputationStats;

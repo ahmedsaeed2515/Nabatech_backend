@@ -1,0 +1,150 @@
+[
+  {
+    "test": "Test G: Fetch Models",
+    "error_status": 401,
+    "error_data": {
+      "error": {
+        "message": "unauthorized client detected, contact support for assistance at https://discord.gg/aYq5B4RW3"
+      },
+      "message": "UNAUTHENTICATED",
+      "success": false,
+      "type": "unauthorized_client_error"
+    }
+  },
+  {
+    "test": "Test A: Simple Hello (deepseek-v4-flash)",
+    "payload": {
+      "model": "deepseek-v4-flash",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Hello"
+        }
+      ]
+    },
+    "error_status": 401,
+    "error_data": {
+      "error": {
+        "message": "unauthorized client detected, contact support for assistance at https://discord.gg/aYq5B4RW3"
+      },
+      "message": "UNAUTHENTICATED",
+      "success": false,
+      "type": "unauthorized_client_error"
+    },
+    "error_message": "Request failed with status code 401"
+  },
+  {
+    "test": "Test B: Tomato Plant (deepseek-v4-flash)",
+    "payload": {
+      "model": "deepseek-v4-flash",
+      "messages": [
+        {
+          "role": "user",
+          "content": "What is a tomato plant?"
+        }
+      ]
+    },
+    "error_status": 401,
+    "error_data": {
+      "error": {
+        "message": "unauthorized client detected, contact support for assistance at https://discord.gg/aYq5B4RW3"
+      },
+      "message": "UNAUTHENTICATED",
+      "success": false,
+      "type": "unauthorized_client_error"
+    },
+    "error_message": "Request failed with status code 401"
+  },
+  {
+    "test": "Test C: Production Prompt (deepseek-v4-flash)",
+    "payload": {
+      "model": "deepseek-v4-flash",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are an agricultural expert."
+        },
+        {
+          "role": "user",
+          "content": "My tomato plant has yellow leaves. What is wrong?"
+        }
+      ]
+    },
+    "error_status": 401,
+    "error_data": {
+      "error": {
+        "message": "unauthorized client detected, contact support for assistance at https://discord.gg/aYq5B4RW3"
+      },
+      "message": "UNAUTHENTICATED",
+      "success": false,
+      "type": "unauthorized_client_error"
+    },
+    "error_message": "Request failed with status code 401"
+  },
+  {
+    "test": "Test D: Standard OpenRouter Model (openai/gpt-4o-mini)",
+    "payload": {
+      "model": "openai/gpt-4o-mini",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Hello"
+        }
+      ]
+    },
+    "error_status": 401,
+    "error_data": {
+      "error": {
+        "message": "unauthorized client detected, contact support for assistance at https://discord.gg/aYq5B4RW3"
+      },
+      "message": "UNAUTHENTICATED",
+      "success": false,
+      "type": "unauthorized_client_error"
+    },
+    "error_message": "Request failed with status code 401"
+  },
+  {
+    "test": "Test E: Standard DeepSeek Model (deepseek-chat)",
+    "payload": {
+      "model": "deepseek-chat",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Hello"
+        }
+      ]
+    },
+    "error_status": 401,
+    "error_data": {
+      "error": {
+        "message": "unauthorized client detected, contact support for assistance at https://discord.gg/aYq5B4RW3"
+      },
+      "message": "UNAUTHENTICATED",
+      "success": false,
+      "type": "unauthorized_client_error"
+    },
+    "error_message": "Request failed with status code 401"
+  },
+  {
+    "test": "Test F: Invalid Model Name Test",
+    "payload": {
+      "model": "fake-model-xyz-123",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Hello"
+        }
+      ]
+    },
+    "error_status": 401,
+    "error_data": {
+      "error": {
+        "message": "unauthorized client detected, contact support for assistance at https://discord.gg/aYq5B4RW3"
+      },
+      "message": "UNAUTHENTICATED",
+      "success": false,
+      "type": "unauthorized_client_error"
+    },
+    "error_message": "Request failed with status code 401"
+  }
+]

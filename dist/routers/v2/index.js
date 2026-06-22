@@ -17,6 +17,7 @@ const CommunityController_1 = require("../../controllers/CommunityController");
 const ToolingController_1 = require("../../controllers/ToolingController");
 const EdgeController_1 = require("../../controllers/EdgeController");
 const PlantIdentificationController_1 = require("../../controllers/PlantIdentificationController");
+const report_controller_1 = require("../../controllers/report_controller");
 const upload_middleware_1 = __importDefault(require("../../middlewares/upload_middleware"));
 const auth_v2_1 = require("../../middlewares/auth_v2");
 const idempotency_1 = require("../../middlewares/idempotency");
@@ -87,6 +88,9 @@ router.post('/posts/:id/comments', auth_v2_1.protectV2, idempotency_1.Idempotenc
 router.get('/posts/:id/comments', auth_v2_1.protectV2, communityController.getComments);
 router.put('/posts/:postId/comments/:commentId', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, communityController.updateComment);
 router.delete('/posts/:postId/comments/:commentId', auth_v2_1.protectV2, communityController.deleteComment);
+// Community Reports
+const rate_limit_middleware_1 = require("../../middlewares/rate_limit_middleware");
+router.post('/community/reports', auth_v2_1.protectV2, rate_limit_middleware_1.communityReportLimiter, idempotency_1.IdempotencyCheck, report_controller_1.ReportController.createReport);
 // Tooling (Wishlist & Inventory)
 router.post('/wishlist', auth_v2_1.protectV2, (0, validate_request_middleware_1.validateRequest)(v2_1.createWishlistItemSchema), idempotency_1.IdempotencyCheck, toolingController.createWishlistItem);
 router.get('/wishlist', auth_v2_1.protectV2, toolingController.getWishlist);

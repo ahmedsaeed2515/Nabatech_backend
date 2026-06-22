@@ -44,13 +44,14 @@ const specialistOfferSchema = new mongoose_1.Schema({
     price: { type: Number, required: true, min: 0 },
     status: {
         type: String,
-        enum: ["pending", "accepted", "rejected", "cancelled"],
+        enum: ["pending", "accepted", "rejected", "withdrawn", "cancelled"],
         default: "pending",
     },
     clientOperationId: { type: String, required: false, index: true },
     version: { type: Number, default: 0 },
     acceptedAt: { type: Date },
     rejectedAt: { type: Date },
+    withdrawnAt: { type: Date },
     cancelledAt: { type: Date },
     adminStatus: { type: String, enum: ["flagged", "cleared", "voided"], default: undefined },
 }, { timestamps: true });

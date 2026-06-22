@@ -5,16 +5,17 @@ import User from "../models/user_model";
 import { logger } from '../utils/logger';
 
 const toOfferPayload = (offer: any) => ({
-  id: offer._id,
-  postId: offer.post,
-  specialistId: offer.specialist,
+  id: offer._id.toString(),
+  postId: offer.post?.toString() || offer.post,
+  specialistId: offer.specialist?.toString() || offer.specialist,
   specialistName: offer.specialistName,
-  farmerId: offer.farmer,
+  farmerId: offer.farmer?.toString() || offer.farmer,
   farmerName: offer.farmerName,
   plan: offer.plan,
   price: offer.price,
   status: offer.status,
-  createdAt: offer.createdAt,
+  version: offer.version ?? 1,
+  createdAt: offer.createdAt?.toISOString ? offer.createdAt.toISOString() : offer.createdAt,
 });
 
 // @desc    Create specialist cure plan offer
@@ -164,31 +165,53 @@ export const updateSpecialistOfferStatus = async (req: Request, res: Response) =
 
     const offer = await SpecialistOffer.findById(req.params.id);
     if (!offer) {
-      return res.status(404).json({ success: false, message: "Offer not found", code: 'RESOURCE_NOT_FOUND' });
+      return res.status(404).json({ error: "Offer not found", errorCode: 'RESOURCE_NOT_FOUND' });
     }
 
+    // Optimistic concurrency check
     if (offer.version !== version) {
-      return res.status(409).json({ success: false, message: "Version mismatch", code: 'CONFLICT' });
+      return res.status(409).json({ error: "Version conflict — offer was modified by another request", errorCode: 'CONFLICT' });
     }
 
-    if (offer.status !== 'pending') {
-      return res.status(400).json({ success: false, message: "Offer is no longer pending", code: 'INVALID_STATE_TRANSITION' });
+    // Terminal state check
+    if (offer.status === 'rejected' || offer.status === 'withdrawn' || offer.status === 'cancelled') {
+      return res.status(400).json({
+        error: `Invalid state transition from '${offer.status}' to '${status}'`,
+        errorCode: 'INVALID_STATE_TRANSITION'
+      });
     }
 
+    const isFarmer = offer.farmer.toString() === userId;
+    const isSpecialist = offer.specialist.toString() === userId;
+
+    // Full state transition matrix per spec
     let isValidTransition = false;
-    if (offer.farmer.toString() === userId) {
-      isValidTransition = status === 'accepted' || status === 'rejected';
-    } else if (offer.specialist.toString() === userId) {
-      isValidTransition = status === 'cancelled';
+    if (offer.status === 'pending') {
+      if (isFarmer && (status === 'accepted' || status === 'rejected')) {
+        isValidTransition = true;
+      } else if (isSpecialist && (status === 'withdrawn' || status === 'cancelled')) {
+        isValidTransition = true;
+      }
+    } else if (offer.status === 'accepted') {
+      if (isSpecialist && (status === 'withdrawn' || status === 'cancelled')) {
+        isValidTransition = true;
+      }
     }
 
     if (!isValidTransition) {
-      return res.status(403).json({ success: false, message: "Not authorized or invalid state transition", code: 'AUTH_FORBIDDEN' });
+      if (!isFarmer && !isSpecialist) {
+        return res.status(403).json({ error: "Not authorized to modify this offer", errorCode: 'AUTH_FORBIDDEN' });
+      }
+      return res.status(400).json({
+        error: `Invalid state transition from '${offer.status}' to '${status}'`,
+        errorCode: 'INVALID_STATE_TRANSITION'
+      });
     }
 
     offer.status = status;
     if (status === 'accepted') offer.acceptedAt = new Date();
     else if (status === 'rejected') offer.rejectedAt = new Date();
+    else if (status === 'withdrawn') (offer as any).withdrawnAt = new Date();
     else if (status === 'cancelled') offer.cancelledAt = new Date();
 
     offer.version += 1;
@@ -209,3 +232,4 @@ export const updateSpecialistOfferStatus = async (req: Request, res: Response) =
     return res.status(500).json({ success: false, message: "Failed to update offer status" });
   }
 };
+

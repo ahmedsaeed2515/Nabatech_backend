@@ -1,11 +1,43 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.askLlm = void 0;
+exports.askLlm = exports.askRagFallback = exports.callProvider = void 0;
 const axios_1 = __importDefault(require("axios"));
-const ai_errors_1 = require("./ai_errors");
 /**
  * Bounds conversation history to last N exchanges (2*N messages).
  * Prevents token overflow while preserving the most recent context.
@@ -43,6 +75,8 @@ const formatHistoryAsText = (history) => {
 const callProvider = async (args) => {
     const bounded = boundHistory(args.history);
     if (args.providerType === "generic_llm" || args.providerType === "openai_compatible") {
+        const isOpenRouter = args.endpointUrl.includes("openrouter.ai");
+        const isAgentRouter = args.endpointUrl.includes("agentrouter.org");
         const response = await axios_1.default.post(args.endpointUrl, {
             model: args.model,
             messages: [
@@ -55,6 +89,14 @@ const callProvider = async (args) => {
             headers: {
                 ...(args.apiKey ? { Authorization: `Bearer ${args.apiKey}` } : {}),
                 "Content-Type": "application/json",
+                ...(isOpenRouter ? {
+                    "HTTP-Referer": "https://nabatech.com",
+                    "X-Title": "Nabatech AI Platform"
+                } : {}),
+                ...(isAgentRouter ? {
+                    "HTTP-Referer": "https://agentrouter.org/",
+                    "X-Title": "MyApp"
+                } : {})
             },
         });
         return (response.data?.choices?.[0]?.message?.content || "").toString().trim();
@@ -108,8 +150,12 @@ const callProvider = async (args) => {
     if (args.providerType === "huggingface_inference") {
         // HuggingFace doesn't support structured multi-turn; format as text block
         const historyText = formatHistoryAsText(bounded); // ✅ inject as text
+        const prompt = `${args.systemPrompt}\n\n${historyText}User: ${args.message}\nAssistant:`;
         const response = await axios_1.default.post(args.endpointUrl, {
-            inputs: `${args.systemPrompt}\n\n${historyText}User: ${args.message}`,
+            inputs: prompt,
+            parameters: {
+                return_full_text: false, // Prevent HF from echoing the prompt back
+            }
         }, {
             timeout: args.timeoutMs,
             headers: {
@@ -118,8 +164,12 @@ const callProvider = async (args) => {
             },
         });
         const data = response.data;
-        const text = Array.isArray(data) ? data[0]?.generated_text : data?.generated_text;
-        return (text || "").toString().trim();
+        let text = (Array.isArray(data) ? data[0]?.generated_text : data?.generated_text || "").toString();
+        // Fallback: If HF still echoed the prompt, strip it out manually
+        if (text.startsWith(prompt)) {
+            text = text.substring(prompt.length);
+        }
+        return text.trim();
     }
     if (args.providerType === "ollama") {
         const response = await axios_1.default.post(args.endpointUrl, {
@@ -156,18 +206,19 @@ const callProvider = async (args) => {
         .join(" ")
         .trim();
 };
+exports.callProvider = callProvider;
 // ───────────────────────────────────────────────────────────────────────────
 // HuggingFace RAG /ask — used as FINAL FALLBACK after all LLM pool providers fail
 // This reuses the Qwen LLM running inside the HF Space (the RAG's own LLM).
 // ───────────────────────────────────────────────────────────────────────────
-const askRagFallback = async (endpointUrl, question, history, timeoutMs) => {
+const askRagFallback = async (endpointUrl, message, history = [], timeoutMs = 25000) => {
     // Build history in RAG's expected format
     const ragHistory = boundHistory(history).map((h) => ({
         role: h.role === "user" ? "user" : "assistant",
         content: h.content,
     }));
     const response = await axios_1.default.post(endpointUrl, {
-        question: question.substring(0, 2000),
+        question: (message || "Please analyze this context and diagnosis.").substring(0, 950),
         history: ragHistory,
         top_k: 5,
     }, {
@@ -181,81 +232,22 @@ const askRagFallback = async (endpointUrl, question, history, timeoutMs) => {
     }
     return answer;
 };
+exports.askRagFallback = askRagFallback;
 const askLlm = async (settings, message, source = "llm", history = [], // ✅ FIX #1: history parameter added
 taskRole = "chat") => {
-    if (!settings.llm.enabled || settings.llm.provider === "disabled") {
-        throw new ai_errors_1.AiProviderError("LLM disabled", { code: "LLM_DISABLED", isUpstream: false });
+    console.log("[RUNTIME_TRACE] INSIDE askLlm. Delegating to ProviderManager...");
+    try {
+        const { getProviderManager } = await Promise.resolve().then(() => __importStar(require("./ai_provider_manager")));
+        const manager = getProviderManager();
+        const result = await manager.executeWithFailover(settings.llm.systemPrompt || "You are an expert AI.", message, history);
+        return result;
     }
-    if (settings.llm.provider !== "openai" && (!settings.llm.pool || settings.llm.pool.length === 0)) {
-        throw new ai_errors_1.AiProviderError(`Unsupported LLM provider: ${settings.llm.provider}`, {
-            code: "LLM_UNSUPPORTED_PROVIDER",
-            isUpstream: false,
-        });
-    }
-    const candidates = settings.llm.pool && settings.llm.pool.length
-        ? settings.llm.pool.filter((p) => p.enabled && (p.taskRole === taskRole || p.taskRole === "both"))
-        : [
-            {
-                name: "openai-default",
-                providerType: "generic_llm",
-                endpointUrl: "https://api.openai.com/v1/chat/completions",
-                model: settings.llm.model,
-                timeoutMs: settings.llm.timeoutMs,
-                apiKey: settings.secrets.openaiApiKey || process.env.OPENAI_API_KEY || "",
-            },
-        ];
-    let lastError;
-    for (const candidate of candidates) {
-        const apiKey = (candidate.apiKey || "").trim();
-        const providerNeedsKey = candidate.providerType !== "generic_llm" && candidate.providerType !== "ollama";
-        if (providerNeedsKey && !apiKey) {
-            lastError = new ai_errors_1.AiProviderError(`API key missing for ${candidate.name}`, { code: "LLM_API_KEY_MISSING", isUpstream: false });
-            continue;
-        }
-        try {
-            let answer = await callProvider({
-                providerType: candidate.providerType || "generic_llm",
-                endpointUrl: candidate.endpointUrl,
-                model: candidate.model,
-                apiKey,
-                timeoutMs: candidate.timeoutMs || settings.llm.timeoutMs,
-                systemPrompt: settings.llm.systemPrompt,
-                message,
-                history, // ✅ passed through to callProvider
-            });
-            // Basic structure validation to prevent malformed text (e.g., stray markdown blocks)
-            if (answer.includes("```json")) {
-                answer = answer.replace(/```json/g, "").replace(/```/g, "").trim();
-            }
-            else if (answer.includes("```")) {
-                answer = answer.replace(/```/g, "").trim();
-            }
-            if (!answer || answer.length < 5) {
-                lastError = new ai_errors_1.AiProviderError(`Malformed or empty response from ${candidate.name}`, { code: "LLM_MALFORMED_RESPONSE" });
-                continue;
-            }
-            return { message: answer, source, provider: candidate.name || "llm" };
-        }
-        catch (error) {
-            lastError = (0, ai_errors_1.toProviderError)(error, `LLM provider request failed (${candidate.name})`, "LLM_UPSTREAM_FAILED");
+    catch (err) {
+        console.warn("LLM providers failed. Last error:", err.message);
+        if (taskRole === "search") {
+            throw err;
         }
     }
-    console.warn("LLM providers failed. Last error:", lastError);
-    if (taskRole === "search") {
-        throw lastError || new Error("All Search LLM providers failed");
-    }
-    // ── Stage 2: HuggingFace RAG /ask (Qwen inside HF Space) ──────────────────────────────
-    if (settings.ragFallback?.enabled && settings.ragFallback?.endpointUrl) {
-        try {
-            const ragAnswer = await askRagFallback(settings.ragFallback.endpointUrl, message, history, settings.ragFallback.timeoutMs);
-            console.log("[LLM_HF_FALLBACK_SUCCESS] HuggingFace RAG /ask responded.");
-            return { message: ragAnswer, source: "hf-rag-fallback", provider: "hf-rag-fallback" };
-        }
-        catch (ragFallbackErr) {
-            console.warn("[LLM_HF_FALLBACK_FAILED] HuggingFace RAG /ask also failed:", ragFallbackErr);
-        }
-    }
-    // ─────────────────────────────────────────────────────────────────────────────────
     // ── Stage 3: Static text fallback (last resort) ──────────────────────────────────────
     console.warn("[LLM_ALL_FAILED] All LLM providers + HF RAG fallback failed. Using local text.");
     const lowerMsg = message.toLowerCase();

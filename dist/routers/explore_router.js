@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const explore_controller_1 = require("../controllers/explore_controller");
+const ar_scan_controller_1 = require("../controllers/ar_scan_controller");
 const explore_engine_controller_1 = require("../controllers/explore_engine_controller");
 const auth_middleware_1 = require("../middlewares/auth_middleware");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
@@ -36,6 +37,9 @@ router.get("/featured", explore_engine_controller_1.getFeaturedContent);
 router.get("/trending", explore_engine_controller_1.getTrendingContent);
 router.post("/event", optionalProtect, explore_engine_controller_1.recordExploreEvent);
 router.get("/recommendations", auth_middleware_1.protect, explore_engine_controller_1.getRecommendations);
+router.get("/ar-scan-sessions", auth_middleware_1.protect, ar_scan_controller_1.getArScanSessions);
+router.get("/ar-scan-sessions/:plantId", auth_middleware_1.protect, ar_scan_controller_1.getArScanSessions);
+router.post("/ar-scan-sessions", auth_middleware_1.protect, ar_scan_controller_1.createArScanSession);
 // --- Admin explore placement config & stats ---
 router.get("/admin/stats", auth_middleware_1.protect, adminOrMod, explore_engine_controller_1.getAdminExploreStats);
 router.get("/admin/content", auth_middleware_1.protect, adminOrMod, explore_engine_controller_1.getAdminExplorePlacements);
@@ -51,7 +55,7 @@ router.delete("/admin/sections/:id", auth_middleware_1.protect, auth_middleware_
 router.get("/store-products", explore_controller_1.getStoreProducts);
 router.post("/store-products", auth_middleware_1.protect, auth_middleware_1.admin, explore_controller_1.createStoreProduct);
 router.delete("/store-products/:id", auth_middleware_1.protect, auth_middleware_1.admin, explore_controller_1.deleteStoreProduct);
-router.get("/experts", explore_controller_1.getExperts);
+router.get("/experts", auth_middleware_1.protect, explore_controller_1.getExperts);
 router.post("/experts", auth_middleware_1.protect, auth_middleware_1.admin, explore_controller_1.createExpert);
 router.delete("/experts/:id", auth_middleware_1.protect, auth_middleware_1.admin, explore_controller_1.deleteExpert);
 router.get("/outbreaks", explore_controller_1.getOutbreaks);

@@ -44,6 +44,10 @@ const communityPostSchema = new mongoose_1.Schema({
     commentsCount: { type: Number, default: 0 },
     imagePath: { type: String, default: "" },
     imagePublicId: { type: String },
+    imageUrls: [{ type: String }],
+    viewsCount: { type: Number, default: 0 },
+    isPinned: { type: Boolean, default: false },
+    poll: { type: mongoose_1.Schema.Types.ObjectId, ref: "CommunityPoll" },
     likedBy: [{ type: mongoose_1.Schema.Types.ObjectId, ref: "User" }],
     status: { type: String, enum: ["visible", "hidden", "removed", "resolved"], default: "visible" },
     moderationReason: { type: String },
@@ -53,8 +57,10 @@ const communityPostSchema = new mongoose_1.Schema({
     clientOperationId: { type: String, index: true },
     linkedDiagnosis: { type: mongoose_1.Schema.Types.ObjectId, ref: "DiagnosisHistory" },
     version: { type: Number, default: 0 },
+    lastEditedAt: { type: Date },
 }, { timestamps: true });
 // Indexes for feed and idempotency
 communityPostSchema.index({ status: 1, createdAt: -1, _id: -1 });
 communityPostSchema.index({ author: 1, clientOperationId: 1 }, { unique: true, sparse: true });
+communityPostSchema.index({ title: "text", content: "text", plantTag: "text" });
 exports.default = mongoose_1.default.model("CommunityPost", communityPostSchema);

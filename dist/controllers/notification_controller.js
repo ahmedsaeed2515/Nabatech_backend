@@ -50,8 +50,10 @@ const getNotifications = async (req, res) => {
         });
         return res.json({
             success: true,
-            data: formattedNotifications,
-            pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+            data: {
+                items: formattedNotifications,
+                pageInfo: { page, limit, total, pages: Math.ceil(total / limit) }
+            }
         });
     }
     catch (err) {

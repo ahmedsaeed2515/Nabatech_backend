@@ -30,6 +30,14 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
             return next(new AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Not authorized, user not found' }));
         }
 
+        if (user.status === 'disabled') {
+            return next(new AppError({ code: 'AUTH_FORBIDDEN', statusCode: 403, message: 'Your account has been disabled' }));
+        }
+
+        if (decoded.tokenVersion !== undefined && user.tokenVersion !== decoded.tokenVersion) {
+            return next(new AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Session expired, please login again' }));
+        }
+
         (req as any).user = user;
         return next();
     } catch (error) {

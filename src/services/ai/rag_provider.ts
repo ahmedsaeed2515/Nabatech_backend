@@ -58,7 +58,7 @@ export const retrieveRagChunks = async (
     .replace(/\/$/, "");
   const retrieveUrl = `${baseUrl}/retrieve`;
 
-  const sanitizedDisease = diseaseName.trim().substring(0, 200);
+  const sanitizedDisease = diseaseName.trim().substring(0, 200) || "General";
 
   const skipPhrases = ["please analyze", "analyze this", "analyze my", "please check"];
   const lowerQ = (question || "").toLowerCase();
@@ -69,15 +69,17 @@ export const retrieveRagChunks = async (
 
   let response: any;
   try {
+    const payload = {
+      disease_name: sanitizedDisease,
+      question: usefulQuestion,
+      top_k: topK || settings.rag.topK || 8,
+      language: language,
+      crop: crop,
+    };
+    console.log("RAG PAYLOAD SENT:", JSON.stringify(payload, null, 2));
     response = await axios.post(
       retrieveUrl,
-      {
-        disease_name: sanitizedDisease,
-        question: usefulQuestion,
-        top_k: topK || settings.rag.topK || 8,
-        language: language,
-        crop: crop,
-      },
+      payload,
       {
         timeout: settings.rag.timeoutMs,
         headers: ragApiKey ? { Authorization: `Bearer ${ragApiKey}` } : undefined,
@@ -102,11 +104,43 @@ export const retrieveRagChunks = async (
   }
 
   let filteredChunks = rawChunks;
+  
+  // 1. Strict metadata filtering
   if (crop) {
     filteredChunks = rawChunks.filter((c) => {
       const chunkCrop = c.metadata?.crop || c.crop || "";
-      return chunkCrop === "" || chunkCrop.toLowerCase() === crop.toLowerCase();
+      return chunkCrop === "" || chunkCrop.toLowerCase().includes(crop.toLowerCase());
     });
+  }
+
+  // 2. Semantic Similarity Threshold
+  const MIN_SCORE = 0.45;
+  filteredChunks = filteredChunks.filter(c => {
+    if (typeof c.score === "number") {
+      // If score is similarity, filter low values. If distance, filter high values. 
+      // Assuming score is similarity normalized 0-1 based on previous code.
+      if (c.score < MIN_SCORE) return false;
+    }
+    return true;
+  });
+
+  // 3. Keyword/Crop Contamination Check for Text Chat
+  // If no crop was provided, but the question explicitly mentions a crop, reject chunks from obviously different crops.
+  if (!crop && question) {
+    const qLower = question.toLowerCase();
+    const commonCrops = ["tomato", "potato", "onion", "wheat", "cotton", "mustard", "mango", "apple", "basil", "corn", "rice"];
+    const mentionedCrops = commonCrops.filter(c => qLower.includes(c));
+    
+    if (mentionedCrops.length > 0) {
+      filteredChunks = filteredChunks.filter(c => {
+        const textLower = (c.text || "").toLowerCase();
+        // If the chunk mentions a common crop that wasn't in the question, penalize/reject it
+        const chunkMentionsOtherCrops = commonCrops.some(otherCrop => 
+          !mentionedCrops.includes(otherCrop) && textLower.includes(otherCrop) && !textLower.includes(mentionedCrops[0])
+        );
+        return !chunkMentionsOtherCrops;
+      });
+    }
   }
 
   const chunks: RagChunk[] = filteredChunks

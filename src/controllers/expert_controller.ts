@@ -3,6 +3,7 @@ import ExpertProfile from '../models/expert_profile_model';
 import User from '../models/user_model';
 import CommunityPost from '../models/community_post_model';
 import { AppError } from '../utils/app_error';
+import { formatRelativeTime } from './community_controller';
 
 // @desc    Get expert profile by userId
 // @route   GET /api/experts/:id
@@ -29,22 +30,33 @@ export const getExpertProfile = async (req: Request, res: Response, next: NextFu
       success: true,
       data: {
         expert: {
-          id: user._id,
+          id: user._id.toString(),
           name: user.name,
-          email: user.email,
+          specialization: (profile as any)?.specialization || 'General',
+          bio: (profile as any)?.bio || '',
+          yearsExperience: (profile as any)?.yearsExperience || 0,
           avatarUrl: user.avatarUrl,
-          joinedAt: user.createdAt,
-          role: user.role,
+          rating: (profile as any)?.rating || 0.0,
+          isOnline: true
         },
-        profile: profile || null,
+        profile: {
+          expertPostsCount: (profile as any)?.expertPostsCount || 0,
+          expertRepliesCount: (profile as any)?.expertRepliesCount || 0,
+          joinedDate: user.createdAt.toISOString(),
+          certifications: (profile as any)?.certifications || [],
+          availableForConsultation: (profile as any)?.availableForConsultation ?? true,
+          consultationFee: (profile as any)?.consultationFee || 0,
+          responseTimeMinutes: (profile as any)?.responseTimeMinutes || 60
+        },
         recentPosts: recentPosts.map(p => ({
-          id: p._id,
+          id: p._id.toString(),
           title: p.title,
           content: p.content,
           plantTag: p.plantTag,
-          commentsCount: p.commentsCount,
-          likesCount: p.likes,
-          createdAt: p.createdAt,
+          comments: p.commentsCount,
+          likes: p.likes,
+          timeLabel: formatRelativeTime(p.createdAt),
+          imagePath: p.imagePath,
         })),
       }
     });

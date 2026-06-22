@@ -12,12 +12,18 @@ const upload = (0, multer_1.default)({
         fileSize: 8 * 1024 * 1024, // 8 MB max
     },
     fileFilter: (req, file, cb) => {
-        // Check if the file is an image or a generic binary stream (Flutter Dio default for files without extension)
-        if (file.mimetype.startsWith('image/') || file.mimetype === 'application/octet-stream') {
+        const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        // Strip original name of path components and check extension
+        const ext = file.originalname.split('.').pop()?.toLowerCase();
+        const dangerousExts = ['svg', 'exe', 'zip', 'js', 'html', 'php', 'sh', 'bat'];
+        if (dangerousExts.includes(ext ?? '')) {
+            return cb(new app_error_1.AppError({ message: `Dangerous file extensions are not allowed`, statusCode: 400, code: 'UPLOAD_INVALID' }));
+        }
+        if (allowedMimeTypes.includes(file.mimetype) || (file.mimetype === 'application/octet-stream' && ext && ['jpg', 'jpeg', 'png', 'webp'].includes(ext))) {
             cb(null, true);
         }
         else {
-            cb(new app_error_1.AppError({ message: `Only image files are allowed, got ${file.mimetype}`, statusCode: 400, code: 'UPLOAD_INVALID' }));
+            cb(new app_error_1.AppError({ message: `Only jpg, png, webp image files are allowed, got ${file.mimetype}`, statusCode: 400, code: 'UPLOAD_INVALID' }));
         }
     }
 });

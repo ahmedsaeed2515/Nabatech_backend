@@ -35,10 +35,14 @@ export class AgentLlmProvider {
     const agentProvider = manager.getProviders().find(p => p.enabled && p.status !== "failed" && (
       p.providerName.includes('openai') || 
       p.providerName.includes('openrouter') || 
+      p.providerName.includes('groq') || 
       p.providerName.includes('agentrouter') || 
       p.baseUrl.includes('openai.com') || 
       p.baseUrl.includes('openrouter.ai') ||
-      p.baseUrl.includes('agentrouter.org')
+      p.baseUrl.includes('api.groq.com') ||
+      p.baseUrl.includes('agentrouter.org') ||
+      p.baseUrl.includes('router.huggingface.co') ||
+      p.providerName.includes('huggingface')
     ));
 
     if (!agentProvider) {
@@ -70,20 +74,52 @@ export class AgentLlmProvider {
         tool_choice: "auto"
       };
 
-      const response = await axios.post(endpointUrl, payload, {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          ...(isOpenRouter ? { 
-            "HTTP-Referer": "https://nabatech.com", 
-            "X-Title": "Nabatech AI Platform" 
-          } : {}),
-          ...(isAgentRouter ? { 
-            "HTTP-Referer": "https://agentrouter.org/", 
-            "X-Title": "MyApp" 
-          } : {})
+      let response: any = null;
+      let callAttempt = 0;
+      let maxCallAttempts = 3;
+      
+      while (callAttempt < maxCallAttempts && !response) {
+        callAttempt++;
+        try {
+          response = await axios.post(endpointUrl, payload, {
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+              ...(isOpenRouter ? { 
+                "HTTP-Referer": "https://nabatech.com", 
+                "X-Title": "Nabatech AI Platform" 
+              } : {}),
+              ...(isAgentRouter ? { 
+                "HTTP-Referer": "https://agentrouter.org/", 
+                "X-Title": "MyApp" 
+              } : {})
+            },
+            timeout: 15000 // 15s timeout to prevent hanging
+          });
+        } catch (callErr: any) {
+          if (callErr.response?.status === 429) {
+            console.warn(`[AGENT] 429 Rate Limit. Retrying attempt ${callAttempt}/${maxCallAttempts}...`);
+            if (callAttempt >= maxCallAttempts) throw callErr;
+            await new Promise(r => setTimeout(r, 1000 * Math.pow(2, callAttempt))); // Exponential backoff: 2s, 4s
+          } else if (callErr.response?.status === 413) {
+            console.warn(`[AGENT] 413 Payload Too Large. Compressing messages...`);
+            if (messages.length > 5) {
+              // Keep first message (system/context), and last 3 messages, drop middle
+              messages.splice(1, messages.length - 4);
+              payload.messages = messages;
+            } else {
+              throw callErr;
+            }
+          } else {
+            console.warn(`[AGENT] Call failed: ${callErr.message}`);
+            if (callAttempt >= maxCallAttempts) throw callErr;
+          }
         }
-      });
+      }
+
+      if (!response) {
+        throw new Error("Agent LLM call failed after retries.");
+      }
 
       const responseMessage = (response.data as any).choices[0].message;
       messages.push(responseMessage);
@@ -92,7 +128,19 @@ export class AgentLlmProvider {
         // AI wants to call tools
         for (const toolCall of responseMessage.tool_calls) {
           const functionName = toolCall.function.name;
-          const functionArgs = JSON.parse(toolCall.function.arguments);
+          let functionArgs;
+          try {
+            functionArgs = JSON.parse(toolCall.function.arguments);
+          } catch (err) {
+            console.warn(`[AGENT_LOOP] Invalid JSON in tool arguments for ${functionName}. Error:`, (err as any).message);
+            messages.push({
+              tool_call_id: toolCall.id,
+              role: "tool",
+              name: functionName,
+              content: `Error: Invalid JSON payload provided to tool ${functionName}. Please fix syntax.`
+            });
+            continue;
+          }
           
           totalToolCalls++;
           const currentCount = (toolCallCounts.get(functionName) || 0) + 1;

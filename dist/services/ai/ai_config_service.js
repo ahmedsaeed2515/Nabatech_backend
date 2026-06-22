@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.redactAiSettings = exports.updateAiSettings = exports.getAiSettings = void 0;
+exports.redactAiSettings = exports.updateAiSettings = exports.getAiSettings = exports.clearSettingsCache = void 0;
 const ai_settings_model_1 = __importDefault(require("../../models/ai_settings_model"));
 const secret_crypto_1 = require("./secret_crypto");
 // ─── Settings Cache ───────────────────────────────────────────
@@ -198,6 +198,11 @@ const mergeSettings = (defaults, db) => {
         },
     };
 };
+const clearSettingsCache = () => {
+    _settingsCache = null;
+    _settingsCacheTs = 0;
+};
+exports.clearSettingsCache = clearSettingsCache;
 const getAiSettings = async () => {
     const now = Date.now();
     if (_settingsCache && now - _settingsCacheTs < SETTINGS_CACHE_TTL_MS) {

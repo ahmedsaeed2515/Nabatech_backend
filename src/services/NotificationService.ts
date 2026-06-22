@@ -5,10 +5,16 @@ import NotificationModel, { NotificationType } from '../models/notification_mode
 
 // Initialize Firebase Admin lazily if the project provides credentials
 try {
-  if (!admin.apps.length) {
+  if (!admin.apps || !admin.apps.length) {
     if (env.FIREBASE_CREDENTIALS) {
+      let creds;
+      try {
+        creds = JSON.parse(env.FIREBASE_CREDENTIALS);
+      } catch (parseErr) {
+        throw new Error("FIREBASE_CREDENTIALS is not valid JSON.");
+      }
       admin.initializeApp({
-        credential: admin.credential.cert(JSON.parse(env.FIREBASE_CREDENTIALS))
+        credential: admin.credential.cert(creds)
       });
     } else {
       // FIX [TASK-0.5]: Warn loudly if FCM is unconfigured
@@ -21,8 +27,8 @@ try {
       }
     }
   }
-} catch (e) {
-  logger.error('Failed to initialize Firebase Admin', e);
+} catch (e: any) {
+  logger.error('Failed to initialize Firebase Admin: ' + e.message);
 }
 
 export class NotificationService {

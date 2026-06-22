@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.postQueryLibrary = exports.postGenerateDraft = exports.postAssistantRequest = void 0;
+exports.getGreeting = exports.postQueryLibrary = exports.postGenerateDraft = exports.postAssistantRequest = exports.postTestAssistantRequest = void 0;
 const ai_orchestrator_service_1 = require("../services/ai/ai_orchestrator_service");
 const ai_errors_1 = require("../services/ai/ai_errors");
 const cloudinary_1 = __importDefault(require("../config/cloudinary"));
@@ -45,6 +45,42 @@ const message_model_1 = __importDefault(require("../models/message_model"));
 const disease_knowledge_record_model_1 = require("../models/disease_knowledge_record_model");
 const diagnosis_schemas_1 = require("../validation/diagnosis_schemas");
 const crypto_1 = __importDefault(require("crypto"));
+const postTestAssistantRequest = async (req, res) => {
+    try {
+        const question = req.body?.question || req.body?.text || "";
+        let uploadedImagePublicId = null;
+        let imageUrl = req.body?.imageUrl || "";
+        if (req.file) {
+            const uploadResult = await new Promise((resolve, reject) => {
+                cloudinary_1.default.uploader.upload_stream({ folder: "assistant_images" }, (error, result) => {
+                    if (error)
+                        reject(error);
+                    else
+                        resolve(result);
+                }).end(req.file.buffer);
+            });
+            imageUrl = uploadResult.secure_url;
+            uploadedImagePublicId = uploadResult.public_id;
+        }
+        const { orchestrateAssistantRequest } = await Promise.resolve().then(() => __importStar(require("../services/ai/ai_orchestrator_service")));
+        const result = await orchestrateAssistantRequest({
+            userId: "test-bypass-id",
+            requestId: "test-req-id",
+            question,
+            fileBuffer: req.file?.buffer,
+            originalName: req.file?.originalname,
+            history: [],
+            topK: 3,
+            language: "en"
+        });
+        return res.status(200).json({ success: true, ...result, imageUrl: imageUrl || undefined });
+    }
+    catch (error) {
+        console.error("Test Assistant request failed:", error.message);
+        return res.status(502).json({ success: false, message: error.message });
+    }
+};
+exports.postTestAssistantRequest = postTestAssistantRequest;
 const parseHistory = (raw) => {
     if (Array.isArray(raw))
         return raw;
@@ -235,6 +271,7 @@ const postAssistantRequest = async (req, res) => {
             }
         }
         const finalResponse = { success: true, ...result, imageUrl: imageUrl || undefined, uncertain: Boolean(result.lowConfidenceWarning) };
+        delete finalResponse.ragContext;
         if (isSSE) {
             res.write(`data: ${JSON.stringify({ type: "result", data: finalResponse })}\n\n`);
             return res.end();
@@ -297,3 +334,35 @@ const postQueryLibrary = async (req, res) => {
     }
 };
 exports.postQueryLibrary = postQueryLibrary;
+const greetingCache = new Map();
+const getGreeting = async (req, res) => {
+    try {
+        const userId = req?.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        const now = Date.now();
+        const cached = greetingCache.get(userId);
+        if (cached && now - cached.time < 3600 * 1000) {
+            return res.status(200).json({ success: true, greeting: cached.text });
+        }
+        const PlantModel = (await Promise.resolve().then(() => __importStar(require("../models/plant_model")))).default;
+        const plants = await PlantModel.find({ user: userId }).lean();
+        let plantStr = plants.length > 0 ? plants.map((p) => p.name || p.species).join(', ') : "no plants yet";
+        const { getAiSettings } = await Promise.resolve().then(() => __importStar(require("../services/ai/ai_config_service")));
+        const { askLlm } = await Promise.resolve().then(() => __importStar(require("../services/ai/llm_provider")));
+        const settings = await getAiSettings();
+        const prompt = `You are a smart AI garden assistant named Nabatech. Generate a dynamic 2-line greeting for the user. 
+They currently have: ${plantStr}. 
+Pretend you know the weather is sunny. Suggest a brief care tip.
+Do NOT use markdown, emojis are allowed. Maximum 2 short lines.`;
+        const llmRes = await askLlm(settings, prompt, "llm", []);
+        const greeting = llmRes.message.replace(/"/g, '').trim();
+        greetingCache.set(userId, { time: now, text: greeting });
+        return res.status(200).json({ success: true, greeting });
+    }
+    catch (error) {
+        console.error("Greeting failed:", (0, ai_errors_1.sanitizeErrorMessage)(error));
+        return res.status(500).json({ success: false, message: "Greeting failed" });
+    }
+};
+exports.getGreeting = getGreeting;

@@ -9,8 +9,9 @@ import { getAiSettings } from "./ai_config_service";
 // Global interceptor for agentrouter.org requirements
 axios.interceptors.request.use((config) => {
   if (config.url && config.url.includes("agentrouter.org")) {
-    config.headers["HTTP-Referer"] = "https://agentrouter.org/";
-    config.headers["X-Title"] = "MyApp";
+    if (!config.headers) config.headers = {} as any;
+    config.headers!["HTTP-Referer"] = "https://agentrouter.org/";
+    config.headers!["X-Title"] = "MyApp";
   }
   return config;
 });
@@ -37,7 +38,9 @@ class AiProviderManager {
     if (p.includes('anthropic')) return 'anthropic';
     if (p.includes('cohere')) return 'cohere';
     if (p.includes('openrouter')) return 'generic_llm';
+    if (p.includes('groq') || url.includes('api.groq.com')) return 'generic_llm';
     if (p.includes('openai') || url.includes('api.openai.com')) return 'generic_llm';
+    if (url.includes('router.huggingface.co')) return 'generic_llm';
     if (url.includes('hf.space') || p.includes('huggingface')) return 'huggingface_inference';
     return 'generic_llm';
   }
@@ -59,9 +62,17 @@ class AiProviderManager {
     }
 
     const errors: any[] = [];
+    
+    // Sort providers: prefer fewer consecutive errors, then by priority
+    const sortedProviders = [...this.providers].sort((a, b) => {
+      const errA = (this as any).consecutiveErrors?.[a.providerName] || 0;
+      const errB = (this as any).consecutiveErrors?.[b.providerName] || 0;
+      if (errA !== errB) return errA - errB;
+      return a.priority - b.priority;
+    });
 
-    for (const provider of this.providers) {
-      logger.info(`Attempting LLM call via ${provider.providerName} (${provider.model})`);
+    for (const provider of sortedProviders) {
+      logger.info(`Attempting LLM call via ${provider.providerName} (${provider.llmModel})`);
       const apiKey = decryptSecret(provider.apiKeyEncrypted);
       const providerType = this.determineProviderType(provider.baseUrl, provider.providerName);
 
@@ -78,7 +89,9 @@ class AiProviderManager {
           history,
         });
 
-        const latency = Date.now() - startTime;
+        // On success, reset consecutive errors
+        (this as any).consecutiveErrors = (this as any).consecutiveErrors || {};
+        (this as any).consecutiveErrors[provider.providerName] = 0;
         
         // Update health on success asynchronously
         this.updateHealth(provider._id.toString(), "healthy", "");
@@ -87,11 +100,16 @@ class AiProviderManager {
           message: content,
           source: "llm",
           provider: provider.providerName,
+          model: provider.llmModel,
         };
 
       } catch (err: any) {
         logger.warn(`Provider ${provider.providerName} failed: ${err.message}`);
         errors.push({ provider: provider.providerName, error: err.message });
+        
+        // Track consecutive errors
+        (this as any).consecutiveErrors = (this as any).consecutiveErrors || {};
+        (this as any).consecutiveErrors[provider.providerName] = ((this as any).consecutiveErrors[provider.providerName] || 0) + 1;
         
         // Update health on failure
         this.updateHealth(provider._id.toString(), "failed", err.message);
@@ -105,7 +123,7 @@ class AiProviderManager {
       const { askRagFallback } = await import("./llm_provider");
       // Use the fallback HF space endpoint
       const fallbackResult = await askRagFallback("https://ahmedsaeed111-rag-only.hf.space/ask", message, history);
-      return { message: fallbackResult, source: "hf-rag-fallback", provider: "hf-rag-fallback" };
+      return { message: fallbackResult, source: "hf-rag-fallback", provider: "hf-rag-fallback", model: "Qwen/Qwen2.5-72B-Instruct" };
     } catch (fallbackErr: any) {
       logger.error("Emergency fallback also failed: " + (fallbackErr?.message || String(fallbackErr)));
       // Safely serialize errors — avoid circular reference from axios error objects

@@ -83,7 +83,7 @@ router.get("/store-products", getStoreProducts);
 router.post("/store-products", protect, admin, createStoreProduct);
 router.delete("/store-products/:id", protect, admin, deleteStoreProduct);
 
-router.get("/experts", getExperts);
+router.get("/experts", protect, getExperts);
 router.post("/experts", protect, admin, createExpert);
 router.delete("/experts/:id", protect, admin, deleteExpert);
 

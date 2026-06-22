@@ -77,3 +77,50 @@ export const refreshLimiter = rateLimit({
   legacyHeaders: false,
   store,
 });
+
+// Community Limits
+export const communityPostLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20, // 20 posts per hour
+  message: { success: false, message: "Too many posts created, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store,
+});
+
+export const communityCommentLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 60, // 60 comments per hour
+  message: { success: false, message: "Too many comments created, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store,
+});
+
+export const communityReportLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20, // 20 reports per hour
+  message: { success: false, message: "Too many reports submitted, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store,
+});
+
+export const communitySearchLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 200, // 200 searches per hour
+  message: { success: false, message: "Too many search requests, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store,
+});
+
+export const communityFollowLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 100, // 100 follow requests per hour
+  message: { success: false, message: "Too many follow requests, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store,
+});
+

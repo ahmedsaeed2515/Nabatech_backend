@@ -41,6 +41,7 @@ const expert_profile_model_1 = __importDefault(require("../models/expert_profile
 const user_model_1 = __importDefault(require("../models/user_model"));
 const community_post_model_1 = __importDefault(require("../models/community_post_model"));
 const app_error_1 = require("../utils/app_error");
+const community_controller_1 = require("./community_controller");
 // @desc    Get expert profile by userId
 // @route   GET /api/experts/:id
 // @access  Private
@@ -62,22 +63,33 @@ const getExpertProfile = async (req, res, next) => {
             success: true,
             data: {
                 expert: {
-                    id: user._id,
+                    id: user._id.toString(),
                     name: user.name,
-                    email: user.email,
+                    specialization: profile?.specialization || 'General',
+                    bio: profile?.bio || '',
+                    yearsExperience: profile?.yearsExperience || 0,
                     avatarUrl: user.avatarUrl,
-                    joinedAt: user.createdAt,
-                    role: user.role,
+                    rating: profile?.rating || 0.0,
+                    isOnline: true
                 },
-                profile: profile || null,
+                profile: {
+                    expertPostsCount: profile?.expertPostsCount || 0,
+                    expertRepliesCount: profile?.expertRepliesCount || 0,
+                    joinedDate: user.createdAt.toISOString(),
+                    certifications: profile?.certifications || [],
+                    availableForConsultation: profile?.availableForConsultation ?? true,
+                    consultationFee: profile?.consultationFee || 0,
+                    responseTimeMinutes: profile?.responseTimeMinutes || 60
+                },
                 recentPosts: recentPosts.map(p => ({
-                    id: p._id,
+                    id: p._id.toString(),
                     title: p.title,
                     content: p.content,
                     plantTag: p.plantTag,
-                    commentsCount: p.commentsCount,
-                    likesCount: p.likes,
-                    createdAt: p.createdAt,
+                    comments: p.commentsCount,
+                    likes: p.likes,
+                    timeLabel: (0, community_controller_1.formatRelativeTime)(p.createdAt),
+                    imagePath: p.imagePath,
                 })),
             }
         });

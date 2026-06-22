@@ -57,7 +57,20 @@ export const buildAssistantPrompt = (ctx: AssistantContext): string => {
 
   let diagnosisFormatInstruction = "";
   if (ctx.cnn?.prediction) {
-    diagnosisFormatInstruction = `\n[FORMAT REQUIREMENT]
+    const isHealthy = ctx.cnn.prediction.toLowerCase().includes("healthy");
+    if (isHealthy) {
+        diagnosisFormatInstruction = `\n[FORMAT REQUIREMENT]
+Since the user uploaded an image for diagnosis and the CNN predicted healthy, you MUST format your response EXACTLY like this:
+
+Disease: ${ctx.cnn.prediction.replace(/_/g, " ")}
+Confidence: [Confidence %]
+Description: [Short assessment that the plant appears healthy]
+Treatment: None required.
+Prevention: Maintain current healthy care routines.
+
+Do NOT provide specific disease treatments or hallucinate diseases.`;
+    } else {
+        diagnosisFormatInstruction = `\n[FORMAT REQUIREMENT]
 Since the user uploaded an image for diagnosis, you MUST format your response EXACTLY like this:
 
 Disease: [Clean Disease Name, e.g. Apple Scab]
@@ -71,6 +84,7 @@ Prevention:
 • [Step 2]
 
 Do NOT use underscores in disease names (use "Apple Scab", not "Apple_Scab").`;
+    }
   }
 
   // NOTE: Do NOT add a system prompt here.

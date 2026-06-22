@@ -490,7 +490,7 @@ const getPlantDiaries = async (req, res, next) => {
             .sort({ date: -1 })
             .skip(skip)
             .limit(limit)
-            .select('_id title date imageUrl content')
+            .select('_id title notes date moodCode healthScore')
             .lean();
         const count = await diary_entry_model_1.default.countDocuments({ plantId, user: userId });
         const formattedDiaries = diaries.map((diary) => {
@@ -519,11 +519,11 @@ const getPlantReminders = async (req, res, next) => {
             throw new app_error_1.AppError({ code: 'RESOURCE_NOT_FOUND', statusCode: 404, message: 'Plant not found' });
         }
         const reminders = await reminder_model_1.default.find({ plantId, user: userId })
-            .select('_id title scheduledAt type isCompleted')
+            .select('_id title scheduledAt recurrence enabled iconCodePoint')
             .lean();
         const formattedReminders = reminders.map((reminder) => {
             const { _id, ...rest } = reminder;
-            return { id: _id, ...rest };
+            return { id: _id, plantName: plant.name, ...rest };
         });
         return (0, api_response_1.ok)(res, {
             count: formattedReminders.length,
@@ -549,7 +549,7 @@ const getPlantDiagnoses = async (req, res, next) => {
         const diagnoses = await diagnosis_history_model_1.default.find({ plantId, user: userId })
             .sort({ diagnosedAt: -1 })
             .limit(10)
-            .select('_id diseaseName confidence diagnosedAt imageUrl')
+            .select('_id imageUrl diseaseNameEn diseaseNameAr confidence severity diagnosedAt')
             .lean();
         const formattedDiagnoses = diagnoses.map((diagnosis) => {
             const { _id, ...rest } = diagnosis;

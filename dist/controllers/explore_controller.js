@@ -15,12 +15,18 @@ const api_response_1 = require("../utils/api_response");
 // @access  Public
 const getStoreProducts = async (req, res) => {
     try {
-        const { category } = req.query;
+        const { category, search, page, limit } = req.query;
         const query = {};
-        if (category) {
+        if (category)
             query.category = category;
-        }
-        const products = await store_product_model_1.default.find(query);
+        if (search)
+            query.name = { $regex: search, $options: "i" };
+        const pageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 20;
+        const skip = (pageNum - 1) * limitNum;
+        const products = await store_product_model_1.default.find(query)
+            .skip(skip)
+            .limit(limitNum);
         return (0, api_response_1.ok)(res, products.map(p => ({
             id: p._id,
             name: p.name,
@@ -38,12 +44,16 @@ const getStoreProducts = async (req, res) => {
 exports.getStoreProducts = getStoreProducts;
 // @desc    Get all experts
 // @route   GET /api/explore/experts
-// @access  Public
+// @access  Public (bearer optional)
 const getExperts = async (req, res) => {
     try {
-        const { specialty } = req.query;
+        const { specialty, search, limit } = req.query;
+        const qLimit = limit ? Math.min(parseInt(limit, 10), 100) : 50;
         // Find all users with role 'expert'
-        const users = await user_model_1.default.find({ role: 'expert' }).select('name avatarUrl');
+        const userQuery = { role: 'expert' };
+        if (search)
+            userQuery.name = { $regex: search, $options: "i" };
+        const users = await user_model_1.default.find(userQuery).select('name avatarUrl').limit(qLimit);
         const userIds = users.map(u => u._id);
         // Find their profiles
         let profilesQuery = { userId: { $in: userIds } };
@@ -63,14 +73,16 @@ const getExperts = async (req, res) => {
             if (specialty && !p)
                 continue;
             result.push({
-                id: u._id,
+                id: u._id.toString(),
                 name: u.name,
-                avatarUrl: u.avatarUrl,
+                avatarUrl: u.avatarUrl || null,
                 specialization: p?.specialization || 'General',
-                bio: p?.bio || '',
+                bio: p?.bio || null,
                 yearsExperience: p?.yearsExperience || 0,
                 postsCount: p?.expertPostsCount || 0,
                 repliesCount: p?.expertRepliesCount || 0,
+                rating: p?.rating || 0.0,
+                isOnline: true
             });
         }
         res.status(200).json({
