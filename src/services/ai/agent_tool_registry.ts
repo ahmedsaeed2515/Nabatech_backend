@@ -173,7 +173,7 @@ export class AgentToolRegistry {
         case "add_plant_to_garden":
           if (onProgress) onProgress("SAVING_GARDEN_ITEM");
           // Validate existence
-          const foundDna = await PlantDnaModel.findOne({
+          let foundDna = await PlantDnaModel.findOne({
             $or: [
               { species: { $regex: `^${args.plantName}$`, $options: "i" } },
               { species: { $regex: args.plantName, $options: "i" } }
@@ -181,9 +181,16 @@ export class AgentToolRegistry {
           });
           
           if (!foundDna) {
-            const suggestions = await PlantDnaModel.find().limit(3);
-            const sugNames = suggestions.map(s => s.species).join(", ");
-            return `Error: Plant '${args.plantName}' is not recognized in the library. Try a known plant like: ${sugNames}.`;
+            console.log(`[AGENT_TOOL] Auto-creating missing PlantDNA for ${args.plantName}`);
+            foundDna = await PlantDnaModel.create({
+              species: args.plantName,
+              scientificName: args.plantName,
+              toxicity: false,
+              minTemp: 15,
+              maxTemp: 30,
+              lightReq: "Partial Sun",
+              waterFrequencyDays: 3
+            });
           }
 
           // ✅ FIX: Auto-find or create real garden + zone for this user

@@ -401,19 +401,26 @@ export const orchestrateAssistantRequest = async (args: {
 
     // [CRITICAL FIX] HARD ABORT ON LOW CONFIDENCE
     let abortMessage = "";
+    const isArabic = /[\\u0600-\\u06FF]/.test(args.question || "") || args.language === "ar";
     if (isHealthy) {
-       abortMessage = `Result:\nInconclusive\n\nRecommendation:\nThe image analysis is uncertain. Please upload a clearer image of the affected plant parts.`;
+       abortMessage = isArabic 
+         ? `النتيجة:\nغير حاسمة\n\nالتوصية:\nتحليل الصورة غير مؤكد. يرجى رفع صورة أوضح للأجزاء المصابة من النبات.`
+         : `Result:\nInconclusive\n\nRecommendation:\nThe image analysis is uncertain. Please upload a clearer image of the affected plant parts.`;
     } else {
        const formattedDisease = cnnResult.prediction.replace(/___/g, " - ").replace(/_/g, " ");
-       abortMessage = `Disease:\n${formattedDisease}\n\nConfidence:\n${(conf * 100).toFixed(0)}%\n\nResult:\nLow confidence diagnosis\n\nRecommendation:\nPlease upload a clearer image showing affected leaves.`;
+       abortMessage = isArabic
+         ? `المرض:\n${formattedDisease}\n\nنسبة الثقة:\n${(conf * 100).toFixed(0)}%\n\nالنتيجة:\nتشخيص بنسبة ثقة منخفضة\n\nالتوصية:\nيرجى رفع صورة أوضح تظهر الأوراق المصابة.`
+         : `Disease:\n${formattedDisease}\n\nConfidence:\n${(conf * 100).toFixed(0)}%\n\nResult:\nLow confidence diagnosis\n\nRecommendation:\nPlease upload a clearer image showing affected leaves.`;
     }
 
     let communityDraft: any = null;
     if (args.userId && args.originalName) {
       try {
         const formattedDisease = cnnResult.prediction.replace(/___/g, " - ").replace(/_/g, " ");
+        const langInstruction = isArabic ? "CRITICAL: You MUST write the title and content in Arabic." : "You MUST write the title and content in the user's language.";
         const draftPrompt = `You are a helpful plant expert assistant. The user uploaded an image of a plant that our AI diagnosed as "${formattedDisease}" with only ${(conf * 100).toFixed(0)}% confidence. This is too low to be certain.
 Please generate a draft for a community post so the user can ask human experts for help.
+${langInstruction}
 Output valid JSON in this exact format:
 {
   "title": "Short descriptive title",
@@ -556,7 +563,7 @@ Output valid JSON in this exact format:
        try {
          const agentProvider = new AgentLlmProvider();
          const targetPlantName = predictedCrop || predictedDisease.replace(/_/g, " ").split(" ")[0];
-         const systemPrompt = prompt + `\n\nCRITICAL INSTRUCTION: Since the diagnosis is completed, you MUST automatically add this plant to the user's garden using the add_plant_to_garden tool. Pass plantName: "${targetPlantName}". After adding, briefly summarize the care advice. Do not ask for confirmation.`;
+         const systemPrompt = prompt + `\n\nINSTRUCTION: Try to use the add_plant_to_garden tool to add "${targetPlantName}" to the user's garden. If the tool returns an error, IGNORE the error entirely and DO NOT mention it to the user. Proceed to summarize the diagnosis and care advice in the user's language.`;
          
          const agentResult = await agentProvider.runAgentLoop(
            settings,
@@ -587,20 +594,31 @@ Output valid JSON in this exact format:
     
     // Cascade logic
     if (chatResult.source === "fallback") {
+       const isArabic = /[\\u0600-\\u06FF]/.test(args.question || "") || args.language === "ar";
        if (cnnResult) {
            console.log("[FINAL_RESPONSE_SOURCE] cnn");
            const confStr = typeof cnnResult.confidence === "number" ? (cnnResult.confidence * 100).toFixed(2) + "%" : "Unknown";
-           let cnnMessage = `Disease Detected: **${cnnResult.prediction.replace(/_/g, " ")}**\n\nConfidence: ${confStr}\n`;
-           if (kbSeverity) cnnMessage += `Severity: ${kbSeverity}\n`;
+           
+           let cnnMessage = isArabic 
+              ? `المرض المكتشف: **${cnnResult.prediction.replace(/_/g, " ")}**\n\nنسبة الثقة: ${confStr}\n`
+              : `Disease Detected: **${cnnResult.prediction.replace(/_/g, " ")}**\n\nConfidence: ${confStr}\n`;
+              
+           if (kbSeverity) {
+              cnnMessage += isArabic ? `الخطورة: ${kbSeverity}\n` : `Severity: ${kbSeverity}\n`;
+           }
            if (kbAdvice) {
-              cnnMessage += `\nRecommended Actions:\n${kbAdvice}`;
+              cnnMessage += isArabic ? `\nالإجراءات الموصى بها:\n${kbAdvice}` : `\nRecommended Actions:\n${kbAdvice}`;
            } else {
-              cnnMessage += `\nPlease monitor your plant carefully and ensure proper watering and light conditions.`;
+              cnnMessage += isArabic 
+                 ? `\nيرجى مراقبة نباتك بعناية وتوفير ظروف الري والضوء المناسبة.` 
+                 : `\nPlease monitor your plant carefully and ensure proper watering and light conditions.`;
            }
            chatResult = { message: cnnMessage, source: "cnn", provider: cnnResult.provider || "cnn" };
        } else {
            console.log("[FINAL_RESPONSE_SOURCE] fallback");
-           chatResult.message = "I am currently experiencing high traffic and cannot generate a detailed response. Please try again later.";
+           chatResult.message = isArabic 
+              ? "أواجه حاليًا ضغطًا كبيرًا ولا يمكنني إنشاء رد مفصل. يرجى المحاولة مرة أخرى لاحقًا."
+              : "I am currently experiencing high traffic and cannot generate a detailed response. Please try again later.";
        }
     } else {
        console.log(`[FINAL_RESPONSE_SOURCE] ${chatResult.source}`);
@@ -614,7 +632,10 @@ Output valid JSON in this exact format:
   }
 
   if (isLowConfidence && settings.pipeline.lowConfidenceBehavior === "ask_for_new_image") {
-    const suffix = "Please upload a clearer image of the plant for a more accurate analysis.";
+    const isArabic = /[\\u0600-\\u06FF]/.test(args.question || "") || args.language === "ar";
+    const suffix = isArabic 
+       ? "يرجى رفع صورة أوضح للنبات للحصول على تحليل أكثر دقة."
+       : "Please upload a clearer image of the plant for a more accurate analysis.";
     if (message) {
       if (!message.endsWith(suffix)) {
         message += `\n\n${suffix}`;
@@ -646,6 +667,23 @@ Output valid JSON in this exact format:
     },
   });
 
+  let gardenExtraction: any = undefined;
+  if (message && message.includes("```json")) {
+    try {
+      const match = message.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+      if (match && match[1]) {
+        const parsed = JSON.parse(match[1]);
+        if (parsed.gardenExtraction) {
+          gardenExtraction = parsed.gardenExtraction;
+          // Clean the message by removing the extraction block
+          message = message.replace(/```json\s*\{[\s\S]*?\}\s*```/g, "").trim();
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to parse gardenExtraction from message", e);
+    }
+  }
+
   const responsePayload = {
     mode: hasFile ? ("image_chat" as const) : ("chat" as const),
     diagnosis: cnnResult
@@ -672,6 +710,7 @@ Output valid JSON in this exact format:
     kbAdvice,
     kbSeverity,
     toolCalls,
+    gardenExtraction,
   };
 
   try {
