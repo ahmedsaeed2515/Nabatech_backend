@@ -26,6 +26,7 @@ export interface ICommunityPost extends Document {
   lastEditedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  createdByAI: boolean;
 }
 
 const communityPostSchema = new Schema<ICommunityPost>(
@@ -53,6 +54,7 @@ const communityPostSchema = new Schema<ICommunityPost>(
     linkedDiagnosis: { type: Schema.Types.ObjectId, ref: "DiagnosisHistory" },
     version: { type: Number, default: 0 },
     lastEditedAt: { type: Date },
+    createdByAI: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

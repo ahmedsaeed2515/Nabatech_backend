@@ -272,14 +272,60 @@ export class AgentToolRegistry {
 
         case "create_community_post":
           if (onProgress) onProgress("CREATING_POST");
+          
+          // Safety Layer: Check if intent is real or hypothetical
+          if (!args.title || !args.content) {
+            throw new Error("Missing required fields for community post.");
+          }
+
+          const { createPostSchema } = await import("../../validation/community_schemas");
+          const CommunityPost = (await import("../../models/community_post_model")).default;
+          const CommunityAudit = (await import("../../models/community_audit_model")).default;
+
+          // Validation Consistency: reuse REST schema (strip clientOperationId since AI doesn't have it)
+          const validArgs = createPostSchema.shape.body.omit({ clientOperationId: true }).parse({
+            title: args.title,
+            content: args.content,
+            plantTag: args.plantTag || "General"
+          });
+
+          // Rate Limiting: max 10 AI posts per day per user
+          const startOfDay = new Date();
+          startOfDay.setHours(0,0,0,0);
+          const aiPostCount = await CommunityPost.countDocuments({ 
+            author: new mongoose.Types.ObjectId(userId), 
+            createdByAI: true, 
+            createdAt: { $gte: startOfDay } 
+          });
+          if (aiPostCount >= 10) {
+            throw new Error("You have reached the daily limit of 10 AI-generated community posts.");
+          }
+
           const post = await this.communityService.createPost(
             userId,
-            args.content,
+            validArgs.content,
             args.imageUrl,
-            args.plantTag,
-            args.title
+            validArgs.plantTag,
+            validArgs.title,
+            true // createdByAI = true
           );
-          return `Post created successfully with ID: ${post.id}`;
+
+          // Audit Logging
+          await CommunityAudit.create({
+            actor: new mongoose.Types.ObjectId(userId),
+            action: "CREATE_POST_AI",
+            targetType: "CommunityPost",
+            targetId: post._id,
+            metadata: { source: "AI", toolCall: true }
+          });
+
+          // Deep Link Return
+          return JSON.stringify({ 
+            success: true, 
+            message: "Post created successfully", 
+            postId: post._id, 
+            deepLink: `/community/post/${post._id}` 
+          });
 
         case "schedule_reminders":
           if (onProgress) onProgress("SCHEDULING_REMINDERS");

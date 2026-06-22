@@ -21,7 +21,7 @@ export class CommunityService {
     this.userRepo = new UserRepository();
   }
 
-  async createPost(userId: string, content: string, imageUrl?: string, plantTag: string = 'General', title?: string) {
+  async createPost(userId: string, content: string, imageUrl?: string, plantTag: string = 'General', title?: string, createdByAI: boolean = false) {
     const user = await this.userRepo.findById(userId);
     const authorName = user?.name || user?.email || 'Unknown';
     return this.postRepo.create({
@@ -34,8 +34,9 @@ export class CommunityService {
       likes: 0,
       commentsCount: 0,
       likedBy: [],
-      status: 'visible'
-    });
+      status: 'visible',
+      createdByAI
+    } as any);
   }
 
   async getPosts(page: number = 1, limit: number = 10) {

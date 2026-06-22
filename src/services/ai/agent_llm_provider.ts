@@ -16,7 +16,7 @@ export class AgentLlmProvider {
     tools: AgentToolDefinition[],
     maxIterations = 15,
     onProgress?: (phase: string) => void
-  ): Promise<{ message: string; toolCalls: any[] }> {
+  ): Promise<{ message: string; toolCalls: any[]; pendingToolCall?: any }> {
     let currentMessage = message;
     let iteration = 0;
     const messages = [...history, { role: "user", content: currentMessage }];
@@ -154,6 +154,16 @@ export class AgentLlmProvider {
           if (totalToolCalls > 20) {
              console.warn(`[AGENT_LOOP] Total tool calls exceeded maximum safe limit (20).`);
              return { message: `I have performed too many actions overall for a single request. Let's start fresh.`, toolCalls: executedToolCalls };
+          }
+
+          // Intercept create_community_post for user approval (Production Hardening)
+          if (functionName === "create_community_post") {
+            console.log(`[AGENT_LOOP] Intercepting ${functionName} for user approval.`);
+            return {
+              message: "I have prepared a draft for your community post. Please review and publish it below.",
+              toolCalls: executedToolCalls,
+              pendingToolCall: { name: functionName, args: functionArgs }
+            };
           }
 
           // Execute the tool

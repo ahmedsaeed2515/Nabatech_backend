@@ -898,7 +898,27 @@ export const getSavedPosts = async (req: Request, res: Response) => {
   }
 };
 
+// @desc    Increment post view count
+// @route   POST /api/community/posts/:id/view
+// @access  Private
+export const incrementPostView = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    const post = await CommunityPost.findById(id);
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found" });
+    }
 
+    post.viewsCount = (post.viewsCount || 0) + 1;
+    await post.save();
+
+    res.status(200).json({ success: true, viewsCount: post.viewsCount });
+  } catch (error) {
+    logger.error('Failed to increment view count', { error });
+    res.status(500).json({ message: "Failed to increment view count" });
+  }
+};
 
 // @desc    Get user activity center timeline
 // @route   GET /api/community/activity

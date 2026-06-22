@@ -181,7 +181,8 @@ export const chatWithAI = async (req: Request, res: Response) => {
       messageId: assistantMsg._id,
       source: chatResult.source,
       provider: { name: chatResult.provider },
-      sourceIds: assistantMsg.sourceIds
+      sourceIds: assistantMsg.sourceIds,
+      pendingToolCall: (chatResult as any).pendingToolCall
     };
 
     if (isSSE) {
@@ -195,6 +196,32 @@ export const chatWithAI = async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Failed to process chat message", error });
+  }
+};
+
+import { AgentToolRegistry } from "../services/ai/agent_tool_registry";
+import { getAiSettings } from "../services/ai/ai_config_service";
+
+export const approveToolCall = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const { toolName, args } = req.body;
+    
+    if (!toolName || !args) {
+      return res.status(400).json({ success: false, message: "toolName and args are required" });
+    }
+
+    const settings = await getAiSettings();
+    const registry = new AgentToolRegistry();
+    
+    // Execute tool directly now that user has approved it
+    const result = await registry.executeTool(toolName, args, userId, undefined, settings);
+    
+    // We expect the tool to return a JSON string with postId and deepLink for create_community_post
+    return res.status(200).json({ success: true, result });
+  } catch (error: any) {
+    console.error("Tool approval failed:", error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 

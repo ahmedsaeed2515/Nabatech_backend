@@ -206,7 +206,7 @@ export const orchestrateChat = async (args: {
   }) + systemPromptAddition;
 
   // Use the Agent LLM loop if user provided ID (meaning they're logged in and we want full agent capabilities)
-  let chatResult: { message: string, source: "llm"|"fallback"|"rag"|"hf-rag-fallback", provider: string, toolCalls?: any[] };
+  let chatResult: { message: string, source: "llm"|"fallback"|"rag"|"hf-rag-fallback", provider: string, toolCalls?: any[], pendingToolCall?: any };
   
   if (args.userId && settings.llm.enabled) {
     console.log("[AGENT] Starting Tool Calling Loop");
@@ -256,7 +256,7 @@ User message: "${args.question.substring(0, 300)}"`;
         }
       }
 
-      chatResult = { message: agentResult.message, source: "llm", provider: "agent_llm", toolCalls: agentResult.toolCalls };
+      chatResult = { message: agentResult.message, source: "llm", provider: "agent_llm", toolCalls: agentResult.toolCalls, pendingToolCall: (agentResult as any).pendingToolCall };
     } catch (agentErr: any) {
       console.warn("[AGENT_FAILED] Falling back to standard LLM flow. Error:", agentErr.message);
       // FIX [TASK-6.2]: Add SSE phase for simple LLM path
@@ -296,7 +296,7 @@ User message: "${args.question.substring(0, 300)}"`;
     toolCalls: chatResult.toolCalls,
   });
 
-  return { message: sanitizeLlmResponse(chatResult.message), source: chatResult.source, provider: chatResult.provider, ragContext, communityContext };
+  return { message: sanitizeLlmResponse(chatResult.message), source: chatResult.source, provider: chatResult.provider, ragContext, communityContext, pendingToolCall: (chatResult as any).pendingToolCall };
 };
 
 export const orchestrateAssistantRequest = async (args: {

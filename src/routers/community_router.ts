@@ -17,7 +17,7 @@ import { CommunityNotificationController } from "../controllers/community_notifi
 import { voteOnPoll } from "../controllers/poll_controller";
 import { bookConsultation } from "../controllers/consultation_controller";
 
-import { getCommunityPosts, createPost, toggleLike, getComments, createComment, deletePost, updatePost, updateComment, deleteComment, searchPosts, getTrendingPosts, toggleSave, getSavedPosts, getActivityCenter } from "../controllers/community_controller";
+import { getCommunityPosts, createPost, toggleLike, getComments, createComment, deletePost, updatePost, updateComment, deleteComment, searchPosts, getTrendingPosts, toggleSave, getSavedPosts, getActivityCenter, incrementPostView } from "../controllers/community_controller";
 
 const router = Router();
 
@@ -27,6 +27,9 @@ router.get("/activity", protect, getActivityCenter);
 // Saved Posts
 router.get("/saved", protect, getSavedPosts);
 router.post("/posts/:id/save", protect, toggleSave);
+router.post("/posts/:id/view", protect, incrementPostView);
+
+
 
 router.get("/posts", protect, validateRequest(feedQuerySchema), getCommunityPosts);
 router.get("/search", protect, communitySearchLimiter, validateRequest(searchQuerySchema), searchPosts);

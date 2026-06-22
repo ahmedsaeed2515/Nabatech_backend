@@ -82,7 +82,9 @@ router.post('/plants/:id/growth', protectV2, IdempotencyCheck, upload.single('im
 router.get('/plants/:id/growth/timeline', protectV2, growthController.getTimeline);
 
 // AI Chat
+import { approveToolCall } from '../../controllers/chat_controller';
 router.post('/chat', protectV2, chatController.processChat);
+router.post('/chat/tool/approve', protectV2, approveToolCall);
 
 // Analytics & Reports
 router.post('/analytics/snapshot', protectV2, IdempotencyCheck, analyticsController.generateSnapshot);
