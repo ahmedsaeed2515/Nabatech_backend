@@ -358,3 +358,37 @@ export const getCommunityReputationStats = async (req: Request, res: Response) =
   }
 };
 
+export const adminUpdatePost = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { title, content, likes } = req.body;
+    const adminId = (req as any).user.id;
+
+    const post = await CommunityPost.findById(id);
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'Post not found', code: 'RESOURCE_NOT_FOUND' });
+    }
+
+    if (title !== undefined) post.title = title;
+    if (content !== undefined) post.content = content;
+    if (likes !== undefined) post.likes = likes;
+
+    post.lastEditedAt = new Date();
+    post.version += 1;
+
+    await post.save();
+
+    logger.info(`Admin updated post ${id}`, {
+      event: 'community_feed_and_moderation.admin_update_post',
+      requestId: (req as any).id,
+      actorId: adminId,
+      targetId: id
+    });
+
+    return res.status(200).json({ success: true, data: { post } });
+  } catch (error) {
+    logger.error('Failed to update post', { event: 'community_feed_and_moderation.admin_update_post.error', error });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+

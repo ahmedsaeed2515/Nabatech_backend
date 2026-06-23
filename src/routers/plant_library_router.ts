@@ -10,6 +10,7 @@ import {
   publishPlant,
   searchPlants,
   getPlantStats,
+  getCategoryStats,
   exportPlants,
   getDiseases,
   addDisease,
@@ -22,6 +23,7 @@ const router = Router();
 // Plants Routes
 router.get("/plants/search", searchPlants);
 router.get("/plants/stats", protect, admin, getPlantStats);
+router.get("/plants/categories/stats", getCategoryStats);
 router.get("/plants/export", protect, admin, exportPlants);
 router.get("/plants", getPlants);
 router.get("/plants/:id", getPlantById);

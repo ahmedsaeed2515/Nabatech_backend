@@ -29,7 +29,26 @@ export const getPlants = async (req: Request, res: Response) => {
     ];
   }
   if (category) {
-    query.category = category;
+    const normalizedCat = (category as string).toLowerCase().trim();
+    if (normalizedCat === "easy care" || normalizedCat === "easy_care" || normalizedCat === "سهولة العناية" || normalizedCat === "سهلة العناية") {
+      query.careLevel = "easy";
+    } else if (normalizedCat === "indoor plants" || normalizedCat === "indoor plant" || normalizedCat === "indoor" || normalizedCat === "نباتات داخلية") {
+      query.category = "Indoor Plant";
+    } else if (normalizedCat === "outdoor plants" || normalizedCat === "outdoor plant" || normalizedCat === "outdoor" || normalizedCat === "نباتات خارجية") {
+      query.category = "Outdoor Plant";
+    } else if (normalizedCat === "flowering plants" || normalizedCat === "flowering" || normalizedCat === "flower" || normalizedCat === "flowers" || normalizedCat === "نباتات مزهرة") {
+      query.category = "Flower";
+    } else if (normalizedCat === "herbs" || normalizedCat === "أعشاب" || normalizedCat === "مأكولات") {
+      query.category = "Herbs";
+    } else if (normalizedCat === "succulent" || normalizedCat === "succulents") {
+      query.category = "Succulent";
+    } else if (normalizedCat === "crops" || normalizedCat === "محاصيل") {
+      query.category = "Crops";
+    } else if (normalizedCat === "all" || normalizedCat === "الكل") {
+      // do nothing
+    } else {
+      query.category = category;
+    }
   }
 
   // Cursor pagination using ObjectId as opaque cursor
@@ -176,7 +195,7 @@ export const updatePlant = async (req: Request, res: Response) => {
 
     if (nameAr !== undefined) {
       plant.nameAr = nameAr;
-      plant.normalizedNameAr = nameAr.replace(/[\u0600-\u06ff]/g, '');
+      plant.normalizedNameAr = nameAr.replace(/[\u064B-\u065F\u0670]/g, '').trim();
     }
     if (nameEn !== undefined) {
       plant.nameEn = nameEn;
@@ -341,6 +360,31 @@ export const exportPlants = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: error.message || "Failed to export plants" });
   }
 };
+
+// @desc    Get counts of plants per category
+// @route   GET /api/plant-library/plants/categories/stats
+// @access  Public
+export const getCategoryStats = async (req: Request, res: Response) => {
+  try {
+    const stats = await Plant.aggregate([
+      { $match: { isLibraryItem: true, status: 'PUBLISHED' } },
+      { $group: { _id: "$category", count: { $sum: 1 } } }
+    ]);
+    
+    // Format to a nice key-value object
+    const categoryCounts: Record<string, number> = {};
+    stats.forEach((item) => {
+      if (item._id) {
+        categoryCounts[item._id] = item.count;
+      }
+    });
+
+    res.status(200).json({ success: true, data: categoryCounts });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || "Failed to fetch category stats" });
+  }
+};
+
 
 // ==========================================
 // Diseases Controllers
