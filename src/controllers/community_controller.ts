@@ -277,6 +277,7 @@ export const getTrendingPosts = async (req: Request, res: Response) => {
 // @route   POST /api/community/posts
 // @access  Private
 export const createPost = async (req: Request, res: Response) => {
+  let uploadedImagePublicIds: string[] = [];
   try {
     const userId = (req as any).user.id;
     const username = (req as any).user.name;
@@ -299,11 +300,23 @@ export const createPost = async (req: Request, res: Response) => {
     let imageUrl = "";
     let imagePublicId = "";
     const imageUrls: string[] = [];
-    if (req.file) {
+    
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      for (const file of req.files) {
+        const uploadResult = await uploadToCloudinary(file.buffer, "community_posts");
+        imageUrls.push(uploadResult.url);
+        uploadedImagePublicIds.push(uploadResult.public_id);
+      }
+      if (imageUrls.length > 0) {
+        imageUrl = imageUrls[0];
+        imagePublicId = uploadedImagePublicIds[0];
+      }
+    } else if (req.file) {
       const uploadResult = await uploadToCloudinary(req.file.buffer, "community_posts");
       imageUrl = uploadResult.url;
       imagePublicId = uploadResult.public_id;
       imageUrls.push(imageUrl);
+      uploadedImagePublicIds.push(imagePublicId);
     }
 
     const post = await CommunityPost.create({
@@ -319,14 +332,18 @@ export const createPost = async (req: Request, res: Response) => {
       linkedDiagnosis: linkedDiagnosisId || undefined,
     });
 
-    await CommunityAuditService.logAction(userId, 'CREATE_POST', 'CommunityPost', post._id.toString(), { title: post.title.substring(0, 50), plantTag });
-    logger.info('Created community post', {
-      event: 'community_feed_and_moderation.create_post',
-      requestId: (req as any).id,
-      actorId: userId,
-      targetId: post._id,
-      payload: { title: post.title.substring(0, 50), plantTag }
-    });
+    try {
+      await CommunityAuditService.logAction(userId, 'CREATE_POST', 'CommunityPost', post._id.toString(), { title: post.title.substring(0, 50), plantTag });
+      logger.info('Created community post', {
+        event: 'community_feed_and_moderation.create_post',
+        requestId: (req as any).id,
+        actorId: userId,
+        targetId: post._id,
+        payload: { title: post.title.substring(0, 50), plantTag }
+      });
+    } catch (auditErr) {
+      logger.error('Failed to log audit action for CREATE_POST', { error: auditErr, postId: post._id });
+    }
 
     const populatedPost = await CommunityPost.findById(post._id)
         .populate("author", "name role")
@@ -339,6 +356,11 @@ export const createPost = async (req: Request, res: Response) => {
       data: { post: dto }
     });
   } catch (error: any) {
+    // Cloudinary Cleanup on Failure
+    for (const pubId of uploadedImagePublicIds) {
+      await cloudinary.uploader.destroy(pubId).catch(err => logger.error('Cloudinary cleanup failed', err));
+    }
+
     if (error.code === 11000) {
       return res.status(409).json({ success: false, message: 'Conflict on create', code: 'CONFLICT' });
     }
@@ -642,6 +664,7 @@ export const deletePost = async (req: Request, res: Response, next: NextFunction
 // @route   PUT /api/community/posts/:id
 // @access  Private
 export const updatePost = async (req: Request, res: Response, next: NextFunction) => {
+  let uploadedImagePublicIds: string[] = [];
   try {
     const userId = (req as any).user.id;
     const postId = req.params.id;
@@ -661,22 +684,40 @@ export const updatePost = async (req: Request, res: Response, next: NextFunction
     if (plantTag) post.plantTag = plantTag;
     post.lastEditedAt = new Date();
 
-    if (req.file) {
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      const urls: string[] = [];
+      for (const file of req.files) {
+        const uploadResult = await uploadToCloudinary(file.buffer, "community_posts");
+        urls.push(uploadResult.url);
+        uploadedImagePublicIds.push(uploadResult.public_id);
+      }
+      if (urls.length > 0) {
+        post.imagePath = urls[0];
+        post.imageUrls = urls;
+        // Should we update imagePublicId too? If there's multiple, maybe just the first one?
+        post.imagePublicId = uploadedImagePublicIds[0];
+      }
+    } else if (req.file) {
       const uploadResult = await uploadToCloudinary(req.file.buffer, "community_posts");
       post.imagePath = uploadResult.url;
       post.imagePublicId = uploadResult.public_id;
       post.imageUrls = [uploadResult.url];
+      uploadedImagePublicIds.push(uploadResult.public_id);
     }
 
     await post.save();
 
-    await CommunityAuditService.logAction(userId, 'UPDATE_POST', 'CommunityPost', postId as string, { plantTag: post.plantTag });
-    logger.info('User updated community post', {
-      event: 'community_feed_and_moderation.update_post',
-      requestId: (req as any).id,
-      actorId: userId,
-      targetId: postId,
-    });
+    try {
+      await CommunityAuditService.logAction(userId, 'UPDATE_POST', 'CommunityPost', postId as string, { plantTag: post.plantTag });
+      logger.info('User updated community post', {
+        event: 'community_feed_and_moderation.update_post',
+        requestId: (req as any).id,
+        actorId: userId,
+        targetId: postId,
+      });
+    } catch (auditErr) {
+      logger.error('Failed to log audit action for UPDATE_POST', { error: auditErr, postId });
+    }
 
     const populatedPost = await CommunityPost.findById(post._id)
       .populate("author", "name role")
@@ -688,6 +729,11 @@ export const updatePost = async (req: Request, res: Response, next: NextFunction
       data: { post: dto }
     });
   } catch (error: any) {
+    // Cloudinary Cleanup on Failure
+    for (const pubId of uploadedImagePublicIds) {
+      await cloudinary.uploader.destroy(pubId).catch(err => logger.error('Cloudinary cleanup failed', err));
+    }
+
     logger.error('Failed to update post', { event: 'community_feed_and_moderation.update_post.error', error });
     res.status(500).json({ message: "Failed to update post" });
   }

@@ -1,11 +1,12 @@
-const admin = require('firebase-admin');
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { getMessaging } from 'firebase-admin/messaging';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import NotificationModel, { NotificationType } from '../models/notification_model';
 
 // Initialize Firebase Admin lazily if the project provides credentials
 try {
-  if (!admin.apps || !admin.apps.length) {
+  if (!getApps().length) {
     if (env.FIREBASE_CREDENTIALS) {
       let creds;
       try {
@@ -13,8 +14,8 @@ try {
       } catch (parseErr) {
         throw new Error("FIREBASE_CREDENTIALS is not valid JSON.");
       }
-      admin.initializeApp({
-        credential: admin.credential.cert(creds)
+      initializeApp({
+        credential: cert(creds)
       });
     } else {
       // FIX [TASK-0.5]: Warn loudly if FCM is unconfigured
@@ -62,13 +63,13 @@ export class NotificationService {
     }
 
     // Send FCM push if Firebase is configured
-    if (!admin.apps.length) {
+    if (!getApps().length) {
       logger.warn('FCM not configured — notification saved to DB only. Token: ' + fcmToken.substring(0, 20) + '...');
       return;
     }
 
     try {
-      const response = await admin.messaging().send({
+      const response = await getMessaging().send({
         token: fcmToken,
         data: payload.data || {},
         notification: payload.notification
@@ -80,5 +81,31 @@ export class NotificationService {
       // Don't throw — DB record already saved
     }
   }
-}
 
+  /**
+   * Send multicast notification to multiple devices.
+   */
+  async sendMulticast(
+    fcmTokens: string[],
+    payload: { notification: { title: string; body: string; titleAr?: string; titleEn?: string; bodyAr?: string; bodyEn?: string }; data?: Record<string, string> }
+  ) {
+    if (!fcmTokens || fcmTokens.length === 0) return;
+
+    if (!getApps().length) {
+      logger.warn('FCM not configured — multicast skipped.');
+      return;
+    }
+
+    try {
+      const response = await getMessaging().sendEachForMulticast({
+        tokens: fcmTokens,
+        data: payload.data || {},
+        notification: payload.notification
+      });
+      logger.info(`Successfully sent multicast FCM messages. Success count: ${response.successCount}, Failure count: ${response.failureCount}`);
+      return response;
+    } catch (error) {
+      logger.error('Error sending multicast FCM messages:', error);
+    }
+  }
+}

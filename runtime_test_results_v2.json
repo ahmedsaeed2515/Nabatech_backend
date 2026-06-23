@@ -1,0 +1,634 @@
+[
+  {
+    "name": "MongoDB Atlas connection",
+    "status": "PASS",
+    "response": "Connected to cluster, DB: test",
+    "ts": "2026-06-23T08:31:02.906Z"
+  },
+  {
+    "name": "db.stats() — real database metrics",
+    "status": "PASS",
+    "response": {
+      "dataSize_bytes": 536283,
+      "storageSize_bytes": 1994752,
+      "collections": 100,
+      "objects": 950,
+      "indexes": 303
+    },
+    "ts": "2026-06-23T08:31:03.056Z"
+  },
+  {
+    "name": "listCollections() — enumerate all collections",
+    "status": "PASS",
+    "response": "100 collections found: orders, refreshsessions, weatheralerts, planthealthlogs, homesections, homeanalytics, tasks, expertprofiles ...",
+    "ts": "2026-06-23T08:31:03.333Z"
+  },
+  {
+    "name": "users collection document count",
+    "status": "PASS",
+    "response": "59 users in database",
+    "ts": "2026-06-23T08:31:03.473Z"
+  },
+  {
+    "name": "collStats(users) — size + indexes",
+    "status": "PASS",
+    "response": {
+      "size_bytes": 20934,
+      "count": 59,
+      "nindexes": 6,
+      "storageSize_bytes": 53248
+    },
+    "ts": "2026-06-23T08:31:03.924Z"
+  },
+  {
+    "name": "Verify super_admin user exists in DB",
+    "status": "PASS",
+    "response": {
+      "email": "ahmed@gmail.com",
+      "role": "super_admin"
+    },
+    "ts": "2026-06-23T08:31:04.062Z"
+  },
+  {
+    "name": "Insert test document into nabatech_test_runtime",
+    "status": "PASS",
+    "response": {
+      "_id": "6a3a444813ce55de28a27f03",
+      "collection": "nabatech_test_runtime"
+    },
+    "ts": "2026-06-23T08:31:04.200Z"
+  },
+  {
+    "name": "Read-back test document (verify write)",
+    "status": "PASS",
+    "response": {
+      "_marker": "RUNTIME_VERIFICATION",
+      "_id": "6a3a444813ce55de28a27f03"
+    },
+    "ts": "2026-06-23T08:31:04.339Z"
+  },
+  {
+    "name": "Delete test document",
+    "status": "PASS",
+    "response": {
+      "deletedCount": 1
+    },
+    "ts": "2026-06-23T08:31:04.478Z"
+  },
+  {
+    "name": "Verify test document permanently deleted",
+    "status": "PASS",
+    "response": "Confirmed — document does not exist",
+    "ts": "2026-06-23T08:31:04.613Z"
+  },
+  {
+    "name": "Cleanup simulation — delete 30-day-old notifications",
+    "status": "PASS",
+    "response": {
+      "deleted": 1,
+      "query": "{ createdAt: { $lt: 30 days ago } }"
+    },
+    "ts": "2026-06-23T08:31:04.892Z"
+  },
+  {
+    "name": "soft_deleted_users query (fixed: isDeleted:true)",
+    "status": "PASS",
+    "response": {
+      "count": 0,
+      "note": "No deleted users currently — query is syntactically correct"
+    },
+    "ts": "2026-06-23T08:31:05.029Z"
+  },
+  {
+    "name": "GET Cloudinary /usage — real storage stats",
+    "status": "PASS",
+    "response": {
+      "storage_used_bytes": 239440903,
+      "storage_used_MB": "228.35",
+      "bandwidth_bytes": 10292182,
+      "total_assets": 225,
+      "plan": "Free"
+    },
+    "ts": "2026-06-23T08:31:05.717Z"
+  },
+  {
+    "name": "GET /resources/image — list real assets",
+    "status": "PASS",
+    "response": {
+      "returned": 5,
+      "first_public_id": "diagnoses/l5hsncxldicemur5sdwx",
+      "first_bytes": 11082,
+      "has_more": true
+    },
+    "ts": "2026-06-23T08:31:05.962Z"
+  },
+  {
+    "name": "Upload test image to Cloudinary",
+    "status": "PASS",
+    "response": {
+      "public_id": "nabatech_tests/runtime_test_1782203465962",
+      "secure_url": "https://res.cloudinary.com/dlgzjfjlb/image/upload/v1782203467/nabatech_tests/runtime_test_1782203465962.svg",
+      "bytes": 195,
+      "format": "svg"
+    },
+    "ts": "2026-06-23T08:31:07.309Z"
+  },
+  {
+    "name": "Verify uploaded asset exists (GET by public_id)",
+    "status": "PASS",
+    "response": {
+      "public_id": "nabatech_tests/runtime_test_1782203465962",
+      "bytes": 195,
+      "created_at": "2026-06-23T08:31:07Z"
+    },
+    "ts": "2026-06-23T08:31:07.612Z"
+  },
+  {
+    "name": "Delete test image from Cloudinary",
+    "status": "PASS",
+    "response": {
+      "deleted": {
+        "nabatech_tests/runtime_test_1782203465962": "deleted"
+      },
+      "deleted_counts": {
+        "nabatech_tests/runtime_test_1782203465962": {
+          "original": 1,
+          "derived": 0
+        }
+      },
+      "partial": false
+    },
+    "ts": "2026-06-23T08:31:08.222Z"
+  },
+  {
+    "name": "Verify deletion — asset returns 404",
+    "status": "PASS",
+    "response": "Confirmed 404 — permanently removed",
+    "ts": "2026-06-23T08:31:08.431Z"
+  },
+  {
+    "name": "Cloudinary bandwidth usage reading",
+    "status": "PASS",
+    "response": {
+      "bandwidth_used_bytes": 10292182,
+      "bandwidth_used_MB": "9.82"
+    },
+    "ts": "2026-06-23T08:31:08.694Z"
+  },
+  {
+    "name": "Backend GET / — health check",
+    "status": "PASS",
+    "response": {
+      "success": true,
+      "data": {
+        "message": "Express + TypeScript is working"
+      }
+    },
+    "ts": "2026-06-23T08:31:08.936Z"
+  },
+  {
+    "name": "Unauthenticated request → 401",
+    "status": "PASS",
+    "response": {
+      "status": 401,
+      "code": "AUTH_REQUIRED"
+    },
+    "ts": "2026-06-23T08:31:08.946Z"
+  },
+  {
+    "name": "GET /api/admin/database/stats",
+    "status": "PASS",
+    "response": {
+      "totalDatabaseSize_bytes": 536283,
+      "totalStorageSize_bytes": 1994752,
+      "totalCollections": 100,
+      "totalDocuments": 950,
+      "indexesCount": 303,
+      "largestCollections": [
+        {
+          "name": "diagnosishistories",
+          "size": 172444
+        },
+        {
+          "name": "messages",
+          "size": 113415
+        },
+        {
+          "name": "aicalllogs",
+          "size": 85818
+        }
+      ]
+    },
+    "ts": "2026-06-23T08:31:11.781Z"
+  },
+  {
+    "name": "GET /api/admin/database/collections",
+    "status": "PASS",
+    "response": {
+      "count": 100,
+      "sample": [
+        {
+          "name": "orders",
+          "count": 0,
+          "size_bytes": 0,
+          "indexes": 1
+        },
+        {
+          "name": "refreshsessions",
+          "count": 162,
+          "size_bytes": 47042,
+          "indexes": 6
+        },
+        {
+          "name": "weatheralerts",
+          "count": 0,
+          "size_bytes": 0,
+          "indexes": 2
+        },
+        {
+          "name": "planthealthlogs",
+          "count": 0,
+          "size_bytes": 0,
+          "indexes": 3
+        },
+        {
+          "name": "homesections",
+          "count": 0,
+          "size_bytes": 0,
+          "indexes": 2
+        }
+      ]
+    },
+    "ts": "2026-06-23T08:31:14.652Z"
+  },
+  {
+    "name": "GET /api/admin/database/collections/users?page=1&limit=3",
+    "status": "PASS",
+    "response": {
+      "totalDocuments": 59,
+      "totalPages": 20,
+      "page": 1,
+      "indexesCount": 6,
+      "documentsReturned": 3,
+      "firstDocId": "6a3a2d4d38fc517ede691954"
+    },
+    "ts": "2026-06-23T08:31:15.515Z"
+  },
+  {
+    "name": "GET /collections/users?page=2 — pagination",
+    "status": "PASS",
+    "response": {
+      "page": 2,
+      "documentsReturned": 3
+    },
+    "ts": "2026-06-23T08:31:16.386Z"
+  },
+  {
+    "name": "GET /api/admin/database/storage-analyzer",
+    "status": "PASS",
+    "response": {
+      "topCollections": [
+        {
+          "name": "diagnosishistories",
+          "size_bytes": 172444,
+          "count": 53
+        },
+        {
+          "name": "messages",
+          "size_bytes": 113415,
+          "count": 200
+        },
+        {
+          "name": "aicalllogs",
+          "size_bytes": 85818,
+          "count": 190
+        },
+        {
+          "name": "refreshsessions",
+          "size_bytes": 47042,
+          "count": 162
+        },
+        {
+          "name": "outboxjobs",
+          "size_bytes": 21496,
+          "count": 33
+        }
+      ]
+    },
+    "ts": "2026-06-23T08:31:18.604Z"
+  },
+  {
+    "name": "POST /api/admin/database/cleanup (old_notifications)",
+    "status": "PASS",
+    "response": {
+      "type": "old_notifications",
+      "deletedCount": 0,
+      "message": "Successfully cleaned up 0 records."
+    },
+    "ts": "2026-06-23T08:31:19.040Z"
+  },
+  {
+    "name": "POST /api/admin/database/cleanup (old_diagnosis)",
+    "status": "PASS",
+    "response": {
+      "type": "old_diagnosis",
+      "deletedCount": 0,
+      "message": "Successfully cleaned up 0 records."
+    },
+    "ts": "2026-06-23T08:31:19.318Z"
+  },
+  {
+    "name": "POST /api/admin/database/cleanup (soft_deleted_users — fixed query)",
+    "status": "PASS",
+    "response": {
+      "type": "soft_deleted_users",
+      "deletedCount": 0,
+      "message": "Successfully cleaned up 0 records."
+    },
+    "ts": "2026-06-23T08:31:19.602Z"
+  },
+  {
+    "name": "POST /cleanup invalid type → 400",
+    "status": "PASS",
+    "response": {
+      "status": 400,
+      "error": "Invalid cleanup type"
+    },
+    "ts": "2026-06-23T08:31:19.743Z"
+  },
+  {
+    "name": "RBAC: admin role → DROP endpoint → 403",
+    "status": "PASS",
+    "response": {
+      "status": 403,
+      "message": "Access denied: Requires one of [super_admin]"
+    },
+    "ts": "2026-06-23T08:31:19.889Z"
+  },
+  {
+    "name": "RBAC: admin role → PURGE endpoint → 403",
+    "status": "PASS",
+    "response": {
+      "status": 403,
+      "message": "Access denied: Requires one of [super_admin]"
+    },
+    "ts": "2026-06-23T08:31:20.053Z"
+  },
+  {
+    "name": "RBAC: super_admin → DROP endpoint → passes RBAC (gets 500 not 403)",
+    "status": "PASS",
+    "response": {
+      "status": 200,
+      "note": {
+        "success": true,
+        "message": "Collection nabatech_dummy_zzz_nonexistent dropped successfully."
+      }
+    },
+    "ts": "2026-06-23T08:31:20.334Z"
+  },
+  {
+    "name": "GET /api/admin/cloudinary/stats",
+    "status": "PASS",
+    "response": {
+      "totalStorageUsed_bytes": 239440903,
+      "totalStorageUsed_MB": "228.35",
+      "totalBandwidth_bytes": 10292182,
+      "totalAssets": 225,
+      "imagesCount": 0,
+      "videosCount": 0,
+      "documentsCount": 0
+    },
+    "ts": "2026-06-23T08:31:21.835Z"
+  },
+  {
+    "name": "GET /api/admin/cloudinary/assets",
+    "status": "PASS",
+    "response": {
+      "assetsReturned": 10,
+      "firstAsset": "diagnoses/l5hsncxldicemur5sdwx",
+      "hasNextCursor": true
+    },
+    "ts": "2026-06-23T08:31:22.273Z"
+  },
+  {
+    "name": "GET /api/admin/cloudinary/assets (sort_by=bytes) — Storage Analyzer",
+    "status": "PASS",
+    "response": {
+      "largestFiles": [
+        {
+          "public_id": "samples/elephants",
+          "bytes": 38855178,
+          "format": "mp4"
+        },
+        {
+          "public_id": "samples/cld-sample-video",
+          "bytes": 35988643,
+          "format": "mp4"
+        },
+        {
+          "public_id": "samples/sea-turtle",
+          "bytes": 27932506,
+          "format": "mp4"
+        },
+        {
+          "public_id": "samples/dance-2",
+          "bytes": 22373558,
+          "format": "mp4"
+        },
+        {
+          "public_id": "samples/landscapes/landscape-panorama",
+          "bytes": 7858062,
+          "format": "jpg"
+        }
+      ]
+    },
+    "ts": "2026-06-23T08:31:22.838Z"
+  },
+  {
+    "name": "GET /api/admin/cloudinary/assets — cursor pagination (page 2)",
+    "status": "PASS",
+    "response": {
+      "page2Assets": 5,
+      "firstAsset": "diagnoses/pnhhjwvpvxl2l6yvzr0o"
+    },
+    "ts": "2026-06-23T08:31:23.667Z"
+  },
+  {
+    "name": "GET /api/admin/cloudinary/folders",
+    "status": "PASS",
+    "response": {
+      "folders": [
+        {
+          "folder": "assistant_images",
+          "assetCount": 5,
+          "storageUsed": 1190075
+        },
+        {
+          "folder": "diagnoses",
+          "assetCount": 51,
+          "storageUsed": 5420134
+        },
+        {
+          "folder": "my_plants",
+          "assetCount": 1,
+          "storageUsed": 326166
+        },
+        {
+          "folder": "users",
+          "assetCount": 5,
+          "storageUsed": 5373103
+        }
+      ]
+    },
+    "ts": "2026-06-23T08:31:25.174Z"
+  },
+  {
+    "name": "GET /api/admin/cloudinary/orphans",
+    "status": "PASS",
+    "response": {
+      "totalChecked": 50,
+      "orphansFound": 7,
+      "hasNextCursor": true
+    },
+    "ts": "2026-06-23T08:31:27.106Z"
+  },
+  {
+    "name": "RBAC: admin role → bulk-delete → 403",
+    "status": "PASS",
+    "response": {
+      "status": 403,
+      "message": "Access denied: Requires one of [super_admin]"
+    },
+    "ts": "2026-06-23T08:31:27.251Z"
+  },
+  {
+    "name": "RBAC: admin role → orphan cleanup → 403",
+    "status": "PASS",
+    "response": {
+      "status": 403,
+      "message": "Access denied: Requires one of [super_admin]"
+    },
+    "ts": "2026-06-23T08:31:27.393Z"
+  },
+  {
+    "name": "POST /assets/delete with no public_id → 400",
+    "status": "PASS",
+    "response": {
+      "status": 400,
+      "error": "Missing public_id"
+    },
+    "ts": "2026-06-23T08:31:27.539Z"
+  },
+  {
+    "name": "Orphan E2E: Upload unreferenced asset (no MongoDB reference)",
+    "status": "PASS",
+    "response": {
+      "public_id": "nabatech_tests/orphan_e2e_test_1782203487540",
+      "secure_url": "https://res.cloudinary.com/dlgzjfjlb/image/upload/v1782203489/nabatech_tests/orphan_e2e_test_1782203487540.svg",
+      "bytes": 195
+    },
+    "ts": "2026-06-23T08:31:29.226Z"
+  },
+  {
+    "name": "Orphan E2E: Confirm asset NOT in any MongoDB collection",
+    "status": "PASS",
+    "response": {
+      "communityPosts": 0,
+      "diagnosisHistory": 0,
+      "note": "Asset is deliberately unreferenced"
+    },
+    "ts": "2026-06-23T08:31:30.739Z"
+  },
+  {
+    "name": "Orphan E2E: Orphan Detector finds the unreferenced asset",
+    "status": "PASS",
+    "response": {
+      "totalAssetsChecked": 200,
+      "orphansDetected": 148,
+      "targetFound": true,
+      "targetPublicId": "nabatech_tests/orphan_e2e_test_1782203487540"
+    },
+    "ts": "2026-06-23T08:31:39.965Z"
+  },
+  {
+    "name": "Orphan E2E: Cleanup orphan via /orphans/cleanup API",
+    "status": "PASS",
+    "response": {
+      "status": 200,
+      "message": "Successfully deleted 1 orphans.",
+      "result": {
+        "deleted": {
+          "nabatech_tests/orphan_e2e_test_1782203487540": "deleted"
+        },
+        "deleted_counts": {
+          "nabatech_tests/orphan_e2e_test_1782203487540": {
+            "original": 1,
+            "derived": 0
+          }
+        },
+        "partial": false,
+        "rate_limit_allowed": 500,
+        "rate_limit_reset_at": "2026-06-23T09:00:00.000Z",
+        "rate_limit_remaining": 453
+      }
+    },
+    "ts": "2026-06-23T08:31:40.873Z"
+  },
+  {
+    "name": "Orphan E2E: Verify cleanup removed asset from Cloudinary (404)",
+    "status": "PASS",
+    "response": "Confirmed 404 — asset permanently deleted",
+    "ts": "2026-06-23T08:31:41.336Z"
+  },
+  {
+    "name": "Create test collection for RBAC test",
+    "status": "PASS",
+    "response": {
+      "collection": "nabatech_rbac_test_1782203501336"
+    },
+    "ts": "2026-06-23T08:31:41.639Z"
+  },
+  {
+    "name": "RBAC: admin CANNOT purge nabatech_rbac_test_1782203501336 (→ 403)",
+    "status": "PASS",
+    "response": {
+      "status": 403,
+      "message": "Access denied: Requires one of [super_admin]"
+    },
+    "ts": "2026-06-23T08:31:41.783Z"
+  },
+  {
+    "name": "RBAC: admin CANNOT drop nabatech_rbac_test_1782203501336 (→ 403)",
+    "status": "PASS",
+    "response": {
+      "status": 403,
+      "message": "Access denied: Requires one of [super_admin]"
+    },
+    "ts": "2026-06-23T08:31:41.921Z"
+  },
+  {
+    "name": "RBAC: super_admin CAN purge nabatech_rbac_test_1782203501336",
+    "status": "PASS",
+    "response": {
+      "status": 200,
+      "message": "Purged 1 documents from nabatech_rbac_test_1782203501336.",
+      "docsRemaining": 0
+    },
+    "ts": "2026-06-23T08:31:42.339Z"
+  },
+  {
+    "name": "RBAC: super_admin CAN drop nabatech_rbac_test_1782203501336",
+    "status": "PASS",
+    "response": {
+      "status": 200,
+      "message": "Collection nabatech_rbac_test_1782203501336 dropped successfully."
+    },
+    "ts": "2026-06-23T08:31:42.617Z"
+  },
+  {
+    "name": "Verify nabatech_rbac_test_1782203501336 completely dropped from MongoDB",
+    "status": "PASS",
+    "response": "Collection no longer exists",
+    "ts": "2026-06-23T08:31:42.752Z"
+  }
+]

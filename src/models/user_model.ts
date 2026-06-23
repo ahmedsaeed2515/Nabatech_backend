@@ -14,10 +14,17 @@ export enum UserRole {
   SUPER_ADMIN = 'super_admin'
 }
 
+export enum ExpertStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED'
+}
+
 export interface User extends Document {
   email: string;
   passwordHash: string;
   role: UserRole;
+  expertStatus?: ExpertStatus;
   fcmToken?: string;
   level: UserLevel;
   pushEnabled: boolean;
@@ -41,6 +48,8 @@ export interface User extends Document {
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date | null;
+  isDeleted: boolean;
+  deletedBy?: mongoose.Types.ObjectId | null;
 }
 
 const userSchema = new mongoose.Schema<User>({
@@ -60,6 +69,7 @@ const userSchema = new mongoose.Schema<User>({
 
   // ── Role / Level / Settings ───────────────────────────────────────────────
   role:          { type: String, enum: Object.values(UserRole),  default: UserRole.USER },
+  expertStatus:  { type: String, enum: Object.values(ExpertStatus) },
   level:         { type: String, enum: Object.values(UserLevel), default: UserLevel.SPROUT },
   pushEnabled:    { type: Boolean, default: true },
   autoAddEnabled: { type: Boolean, default: true },
@@ -85,6 +95,8 @@ const userSchema = new mongoose.Schema<User>({
 
   // ── Soft-delete ───────────────────────────────────────────────────────────
   deletedAt: { type: Date, default: null },
+  isDeleted: { type: Boolean, default: false },
+  deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 }, {
   timestamps: true
 });
@@ -95,12 +107,12 @@ userSchema.index({ email: 1, status: 1 });
 // Admin role-filter queries
 userSchema.index({ role: 1 });
 // Soft-delete filter used in the global pre-find hook
-userSchema.index({ deletedAt: 1 });
+userSchema.index({ isDeleted: 1 });
 
 // ── Global pre-find hook: exclude soft-deleted users from all queries ──────────
 userSchema.pre(/^find/, function (next) {
   const query = this as mongoose.Query<any, any>;
-  query.find({ deletedAt: { $eq: null } });
+  query.find({ isDeleted: { $ne: true } });
   next();
 });
 

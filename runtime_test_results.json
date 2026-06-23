@@ -1,0 +1,294 @@
+[
+  {
+    "name": "MongoDB Direct Connection",
+    "status": "PASS",
+    "response": "Connected to nabatech.jpiebma.mongodb.net",
+    "timestamp": "2026-06-23T08:22:52.304Z"
+  },
+  {
+    "name": "db.stats() execution",
+    "status": "PASS",
+    "response": {
+      "dataSize": 0,
+      "storageSize": 0,
+      "collections": 0,
+      "objects": 0,
+      "indexes": 0
+    },
+    "timestamp": "2026-06-23T08:22:52.445Z"
+  },
+  {
+    "name": "listCollections()",
+    "status": "PASS",
+    "response": "0 collections:  ...",
+    "timestamp": "2026-06-23T08:22:52.607Z"
+  },
+  {
+    "name": "Verify users collection count",
+    "status": "PASS",
+    "response": "users collection has 0 documents",
+    "timestamp": "2026-06-23T08:22:52.744Z"
+  },
+  {
+    "name": "collStats on users collection",
+    "status": "PASS",
+    "response": {
+      "size": 0,
+      "count": 0,
+      "nindexes": 0
+    },
+    "timestamp": "2026-06-23T08:22:52.879Z"
+  },
+  {
+    "name": "Create test document in MongoDB",
+    "status": "PASS",
+    "response": {
+      "insertedId": "6a3a425c4d5e58515914cd05",
+      "collection": "nabatech_test_runtime"
+    },
+    "timestamp": "2026-06-23T08:22:53.050Z"
+  },
+  {
+    "name": "Verify test document exists",
+    "status": "PASS",
+    "response": "Found: NABATECH_RUNTIME_TEST",
+    "timestamp": "2026-06-23T08:22:53.189Z"
+  },
+  {
+    "name": "Delete test document from MongoDB",
+    "status": "PASS",
+    "response": {
+      "deletedCount": 1
+    },
+    "timestamp": "2026-06-23T08:22:53.327Z"
+  },
+  {
+    "name": "Verify test document deleted",
+    "status": "PASS",
+    "response": "Confirmed deleted",
+    "timestamp": "2026-06-23T08:22:53.463Z"
+  },
+  {
+    "name": "Cleanup simulation (old_notifications)",
+    "status": "PASS",
+    "response": {
+      "inserted": "6a3a425d4d5e58515914cd06",
+      "deleted": 1
+    },
+    "timestamp": "2026-06-23T08:22:53.771Z"
+  },
+  {
+    "name": "Cloudinary usage API",
+    "status": "PASS",
+    "response": {
+      "storage_usage_bytes": 239440903,
+      "bandwidth_usage_bytes": 10292182,
+      "resources": 225,
+      "plan": "Free"
+    },
+    "timestamp": "2026-06-23T08:22:54.577Z"
+  },
+  {
+    "name": "Cloudinary list assets (GET /resources/image)",
+    "status": "PASS",
+    "response": {
+      "assets_returned": 10,
+      "first_asset": "diagnoses/l5hsncxldicemur5sdwx",
+      "next_cursor": "d8b6f8a907fd6aceefc999394b37f36a868a764fd30d889e84a8c4c80883cc4c"
+    },
+    "timestamp": "2026-06-23T08:22:54.899Z"
+  },
+  {
+    "name": "Upload test image to Cloudinary",
+    "status": "PASS",
+    "response": {
+      "public_id": "nabatech_tests/nabatech_runtime_test_image",
+      "secure_url": "https://res.cloudinary.com/dlgzjfjlb/image/upload/v1782202976/nabatech_tests/nabatech_runtime_test_image.svg",
+      "bytes": 207,
+      "format": "svg"
+    },
+    "timestamp": "2026-06-23T08:22:56.336Z"
+  },
+  {
+    "name": "Verify test image exists in Cloudinary",
+    "status": "PASS",
+    "response": {
+      "public_id": "nabatech_tests/nabatech_runtime_test_image",
+      "bytes": 207,
+      "url": "https://res.cloudinary.com/dlgzjfjlb/image/upload/v1782202976/nabatech_tests/nabatech_runtime_test_image.svg"
+    },
+    "timestamp": "2026-06-23T08:22:56.633Z"
+  },
+  {
+    "name": "Delete test image from Cloudinary",
+    "status": "PASS",
+    "response": {
+      "deleted": {
+        "nabatech_tests/nabatech_runtime_test_image": "deleted"
+      },
+      "deleted_counts": {
+        "nabatech_tests/nabatech_runtime_test_image": {
+          "original": 1,
+          "derived": 0
+        }
+      },
+      "partial": false
+    },
+    "timestamp": "2026-06-23T08:22:57.327Z"
+  },
+  {
+    "name": "Verify test image removed from Cloudinary",
+    "status": "PASS",
+    "response": "Confirmed 404 - asset deleted",
+    "timestamp": "2026-06-23T08:22:57.502Z"
+  },
+  {
+    "name": "Backend server health check GET /",
+    "status": "PASS",
+    "response": {
+      "success": true,
+      "data": {
+        "message": "Express + TypeScript is working"
+      }
+    },
+    "timestamp": "2026-06-23T08:22:57.522Z"
+  },
+  {
+    "name": "Unauthenticated GET /api/admin/database/stats → 401",
+    "status": "PASS",
+    "response": {
+      "status": 401,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTH_REQUIRED",
+          "status": 401,
+          "message": "Not authorized, missing or invalid token format"
+        },
+        "requestId": "7f3b430a-b8f7-4f81-b2ac-ea428d5d89a6",
+        "message": "Not authorized, missing or invalid token format"
+      }
+    },
+    "timestamp": "2026-06-23T08:22:57.536Z"
+  },
+  {
+    "name": "Login as super_admin",
+    "status": "FAIL",
+    "error": "No super_admin user found in database",
+    "timestamp": "2026-06-23T08:22:57.682Z"
+  },
+  {
+    "name": "Generate admin JWT",
+    "status": "FAIL",
+    "error": "No admin user found",
+    "timestamp": "2026-06-23T08:22:57.817Z"
+  },
+  {
+    "name": "GET /api/admin/database/stats",
+    "status": "FAIL",
+    "response": {
+      "status": 401
+    },
+    "timestamp": "2026-06-23T08:22:57.823Z"
+  },
+  {
+    "name": "GET /api/admin/database/collections",
+    "status": "FAIL",
+    "response": {
+      "status": 401,
+      "count": 0
+    },
+    "timestamp": "2026-06-23T08:22:57.827Z"
+  },
+  {
+    "name": "GET /api/admin/database/collections/users",
+    "status": "FAIL",
+    "response": {
+      "status": 401
+    },
+    "timestamp": "2026-06-23T08:22:57.831Z"
+  },
+  {
+    "name": "GET /api/admin/database/storage-analyzer",
+    "status": "FAIL",
+    "response": {
+      "status": 401
+    },
+    "timestamp": "2026-06-23T08:22:57.836Z"
+  },
+  {
+    "name": "POST /api/admin/database/cleanup (old_notifications)",
+    "status": "FAIL",
+    "response": {
+      "status": 401
+    },
+    "timestamp": "2026-06-23T08:22:57.988Z"
+  },
+  {
+    "name": "POST /api/admin/database/cleanup (invalid type → 400)",
+    "status": "FAIL",
+    "response": {
+      "status": 401,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTH_REQUIRED",
+          "status": 401,
+          "message": "Not authorized, missing or invalid token format"
+        },
+        "requestId": "2643ef2c-c119-41ec-8fa5-9c11762c39b1",
+        "message": "Not authorized, missing or invalid token format"
+      }
+    },
+    "timestamp": "2026-06-23T08:22:57.993Z"
+  },
+  {
+    "name": "GET /api/admin/cloudinary/stats",
+    "status": "FAIL",
+    "response": {
+      "status": 401
+    },
+    "timestamp": "2026-06-23T08:22:57.997Z"
+  },
+  {
+    "name": "GET /api/admin/cloudinary/assets",
+    "status": "FAIL",
+    "response": {
+      "status": 401,
+      "firstAsset": "none",
+      "hasNextCursor": false
+    },
+    "timestamp": "2026-06-23T08:22:58.001Z"
+  },
+  {
+    "name": "GET /api/admin/cloudinary/assets (sorted by bytes)",
+    "status": "FAIL",
+    "response": {
+      "status": 401
+    },
+    "timestamp": "2026-06-23T08:22:58.003Z"
+  },
+  {
+    "name": "GET /api/admin/cloudinary/folders",
+    "status": "FAIL",
+    "response": {
+      "status": 401
+    },
+    "timestamp": "2026-06-23T08:22:58.007Z"
+  },
+  {
+    "name": "GET /api/admin/cloudinary/orphans",
+    "status": "FAIL",
+    "response": {
+      "status": 401,
+      "hasNextCursor": false
+    },
+    "timestamp": "2026-06-23T08:22:58.012Z"
+  },
+  {
+    "name": "Orphan E2E: Upload test orphan asset",
+    "status": "FAIL",
+    "error": "No super_admin token available",
+    "timestamp": "2026-06-23T08:22:58.013Z"
+  }
+]
