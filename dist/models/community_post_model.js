@@ -58,6 +58,7 @@ const communityPostSchema = new mongoose_1.Schema({
     linkedDiagnosis: { type: mongoose_1.Schema.Types.ObjectId, ref: "DiagnosisHistory" },
     version: { type: Number, default: 0 },
     lastEditedAt: { type: Date },
+    createdByAI: { type: Boolean, default: false },
 }, { timestamps: true });
 // Indexes for feed and idempotency
 communityPostSchema.index({ status: 1, createdAt: -1, _id: -1 });

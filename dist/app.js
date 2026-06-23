@@ -32,6 +32,7 @@ const admin_diagnosis_router_1 = __importDefault(require("./routers/admin_diagno
 const upload_routes_1 = __importDefault(require("./routers/upload_routes"));
 const user_router_1 = __importDefault(require("./routers/user_router"));
 const internal_jobs_router_1 = __importDefault(require("./routers/internal_jobs_router"));
+const admin_users_router_1 = __importDefault(require("./routers/admin_users_router"));
 const admin_plant_library_router_1 = __importDefault(require("./routers/admin_plant_library_router"));
 const admin_specialist_offers_router_1 = __importDefault(require("./routers/admin_specialist_offers_router"));
 const admin_community_router_1 = __importDefault(require("./routers/admin_community_router"));
@@ -39,6 +40,7 @@ const admin_home_tools_router_1 = __importDefault(require("./routers/admin_home_
 const admin_my_plants_router_1 = __importDefault(require("./routers/admin_my_plants_router"));
 const admin_user_plants_router_1 = __importDefault(require("./routers/admin_user_plants_router"));
 const admin_gardens_router_1 = __importDefault(require("./routers/admin_gardens_router"));
+const admin_notifications_router_1 = __importDefault(require("./routers/admin_notifications_router"));
 const article_router_1 = __importDefault(require("./routers/article_router"));
 const admin_article_router_1 = __importDefault(require("./routers/admin_article_router"));
 const expert_router_1 = __importDefault(require("./routers/expert_router"));
@@ -51,6 +53,11 @@ const admin_ai_os_router_1 = __importDefault(require("./routers/admin_ai_os_rout
 const admin_home_experience_router_1 = __importDefault(require("./routers/admin_home_experience_router"));
 const admin_chat_logs_router_1 = __importDefault(require("./routes/admin_chat_logs_router"));
 const admin_ai_providers_router_1 = __importDefault(require("./routers/admin_ai_providers_router"));
+const expert_chat_routes_1 = __importDefault(require("./routers/expert_chat_routes"));
+const store_router_1 = __importDefault(require("./routers/store_router"));
+const admin_store_router_1 = __importDefault(require("./routers/admin_store_router"));
+const admin_database_router_1 = __importDefault(require("./routers/admin_database_router"));
+const admin_cloudinary_router_1 = __importDefault(require("./routers/admin_cloudinary_router"));
 const app = (0, express_1.default)();
 // CORS Middleware - Strict allowed origins
 app.use((req, res, next) => {
@@ -135,6 +142,7 @@ app.use("/api/explore", explore_router_1.default);
 app.use("/api/diagnosis", diagnosis_router_1.default);
 app.use("/api/history", history_router_1.default);
 app.use("/api/plant-library", plant_library_router_1.default);
+app.use("/api/admin/users", admin_users_router_1.default);
 app.use("/api/admin/plant-library", admin_plant_library_router_1.default);
 app.use("/api/home-tools", home_tools_router_1.default);
 app.use("/api/ai-models", ai_models_router_1.default);
@@ -147,10 +155,12 @@ app.use("/api/admin/home-tools", admin_home_tools_router_1.default);
 app.use("/api/admin/my-plants", admin_my_plants_router_1.default);
 app.use("/api/admin/user-plants", admin_user_plants_router_1.default);
 app.use("/api/admin/gardens", admin_gardens_router_1.default);
+app.use("/api/admin/notifications", admin_notifications_router_1.default);
 app.use("/api/ai", ai_assistant_router_1.default);
 app.use("/api/articles", article_router_1.default);
 app.use("/api/admin/articles", admin_article_router_1.default);
 app.use("/api/experts", expert_router_1.default);
+app.use("/api/experts/chat", expert_chat_routes_1.default);
 app.use("/api/internal/jobs", internal_jobs_router_1.default);
 app.use("/api/admin/tickets", admin_tickets_router_1.default);
 app.use("/api/tickets", user_tickets_router_1.default);
@@ -161,6 +171,10 @@ app.use("/api/admin/ai-os", admin_ai_os_router_1.default);
 app.use("/api/admin/home", admin_home_experience_router_1.default);
 app.use("/api/admin/chat-logs", admin_chat_logs_router_1.default);
 app.use("/api/admin/ai-providers", admin_ai_providers_router_1.default);
+app.use("/api/store", store_router_1.default);
+app.use("/api/admin/store", admin_store_router_1.default);
+app.use("/api/admin/database", admin_database_router_1.default);
+app.use("/api/admin/cloudinary", admin_cloudinary_router_1.default);
 app.get("/", (req, res) => {
     res.status(200).json({ success: true, data: { message: "Express + TypeScript is working" } });
 });

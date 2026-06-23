@@ -94,7 +94,7 @@ export const getUsers = async (req: Request, res: Response) => {
 // @access  Private (Admin/SuperAdmin)
 export const getUserById = async (req: Request, res: Response) => {
   try {
-    const userId = req.params.id;
+    const userId = req.params.id as string;
     // Attempt aggregate to bypass soft-delete filter in case they view a deleted user
     const userObj = await User.collection.findOne({ _id: new mongoose.Types.ObjectId(userId) });
     
@@ -129,9 +129,9 @@ export const getUserById = async (req: Request, res: Response) => {
 // @access  Private (Admin/SuperAdmin)
 export const updateUserRole = async (req: Request, res: Response) => {
   try {
-    const targetUserId = req.params.id;
+    const targetUserId = req.params.id as string;
     const { role } = req.body;
-    const adminId = (req as any).user.id;
+    const adminId = (req as any).user.id as string;
     const adminRole = (req as any).user.role;
 
     if (!Object.values(UserRole).includes(role)) {
@@ -169,9 +169,9 @@ export const updateUserRole = async (req: Request, res: Response) => {
 // @access  Private (Admin/SuperAdmin)
 export const updateUserStatus = async (req: Request, res: Response) => {
   try {
-    const targetUserId = req.params.id;
+    const targetUserId = req.params.id as string;
     const { status, expertStatus } = req.body;
-    const adminId = (req as any).user.id;
+    const adminId = (req as any).user.id as string;
 
     const updates: any = { updatedAt: new Date() };
     if (status) updates.status = status;
@@ -205,8 +205,8 @@ export const updateUserStatus = async (req: Request, res: Response) => {
 // @access  Private (Admin/SuperAdmin)
 export const softDeleteUser = async (req: Request, res: Response) => {
   try {
-    const targetUserId = req.params.id;
-    const adminId = (req as any).user.id;
+    const targetUserId = req.params.id as string;
+    const adminId = (req as any).user.id as string;
 
     await User.collection.updateOne(
       { _id: new mongoose.Types.ObjectId(targetUserId) },
@@ -226,8 +226,8 @@ export const softDeleteUser = async (req: Request, res: Response) => {
 // @access  Private (Admin/SuperAdmin)
 export const restoreUser = async (req: Request, res: Response) => {
   try {
-    const targetUserId = req.params.id;
-    const adminId = (req as any).user.id;
+    const targetUserId = req.params.id as string;
+    const adminId = (req as any).user.id as string;
 
     await User.collection.updateOne(
       { _id: new mongoose.Types.ObjectId(targetUserId) },
@@ -248,7 +248,7 @@ export const restoreUser = async (req: Request, res: Response) => {
 export const bulkAction = async (req: Request, res: Response) => {
   try {
     const { action, userIds, payload } = req.body;
-    const adminId = (req as any).user.id;
+    const adminId = (req as any).user.id as string;
 
     if (!Array.isArray(userIds) || userIds.length === 0) {
       return res.status(400).json({ message: "No users selected" });

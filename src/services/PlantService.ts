@@ -9,15 +9,28 @@ export class PlantService {
     this.plantRepo = new PlantRepository();
   }
 
-  async createPlant(userId: string, zoneId: string, dnaId: string, name: string): Promise<Plant> {
-    return this.plantRepo.create({
+  async createPlant(userId: string, zoneId: string, dnaId: string, name: string, imageUrl?: string): Promise<Plant> {
+    const dna = await mongoose.model('PlantDna').findById(dnaId);
+    
+    const plantData = {
       user: new mongoose.Types.ObjectId(userId) as any,
       zone: new mongoose.Types.ObjectId(zoneId) as any,
       dna: new mongoose.Types.ObjectId(dnaId) as any,
       name,
+      scientificName: dna?.scientificName,
+      imageUrl: imageUrl || '',
+      lightRequirements: dna?.lightReq,
+      wateringFrequency: dna?.waterFrequencyDays ? `Every ${dna.waterFrequencyDays} days` : undefined,
       stage: PlantStage.SEED,
       healthScore: 100
-    });
+    };
+    
+    console.log("\n[DEBUG_RUNTIME] Plant object before save:", JSON.stringify(plantData, null, 2));
+    
+    const createdPlant = await this.plantRepo.create(plantData);
+    console.log("\n[DEBUG_RUNTIME] Mongo document after save:", JSON.stringify(createdPlant.toObject(), null, 2));
+    
+    return createdPlant;
   }
 
   async getPlantDetails(plantId: string, userId: string): Promise<Plant | null> {

@@ -74,6 +74,7 @@ exports.AGENT_TOOLS = [
             type: "object",
             properties: {
                 plantName: { type: "string" },
+                imageUrl: { type: "string", description: "Optional image URL of the plant" },
                 zoneId: { type: "string", description: "Optional zone ID to place the plant in" }
             },
             required: ["plantName"]
@@ -205,17 +206,65 @@ class AgentToolRegistry {
                 case "add_plant_to_garden":
                     if (onProgress)
                         onProgress("SAVING_GARDEN_ITEM");
-                    // Validate existence
-                    const foundDna = await plant_dna_model_1.default.findOne({
+                    console.log("\n[DEBUG_RUNTIME] Tool Input:", JSON.stringify(args, null, 2));
+                    // Validate existence - using strict exact match or strict prefix match
+                    const lookupQuery = {
                         $or: [
                             { species: { $regex: `^${args.plantName}$`, $options: "i" } },
-                            { species: { $regex: args.plantName, $options: "i" } }
+                            { species: { $regex: `^${args.plantName}\\b`, $options: "i" } }
                         ]
-                    });
+                    };
+                    console.log("\n[DEBUG_RUNTIME] PlantDna lookup query:", JSON.stringify(lookupQuery, null, 2));
+                    let foundDna = await plant_dna_model_1.default.findOne(lookupQuery);
+                    console.log("\n[DEBUG_RUNTIME] Plant DNA Found:", foundDna ? foundDna.toObject() : "NONE - Triggering Fallback");
+                    let isGenerated = false;
                     if (!foundDna) {
-                        const suggestions = await plant_dna_model_1.default.find().limit(3);
-                        const sugNames = suggestions.map(s => s.species).join(", ");
-                        return `Error: Plant '${args.plantName}' is not recognized in the library. Try a known plant like: ${sugNames}.`;
+                        console.warn(`[AGENT_TOOL] PlantDNA for ${args.plantName} not found in database. Generating dynamically via LLM...`);
+                        try {
+                            const { getAiSettings } = await Promise.resolve().then(() => __importStar(require("./ai_config_service")));
+                            const { askLlm } = await Promise.resolve().then(() => __importStar(require("./llm_provider")));
+                            const settings = await getAiSettings();
+                            const prompt = `You are a botanical expert. The user wants to add "${args.plantName}" to their garden, but we don't have its profile.
+Generate a complete JSON profile for this plant. 
+DO NOT INCLUDE ANY MARKDOWN formatting like \`\`\`json. ONLY RETURN RAW VALID JSON.
+The JSON must strictly match this structure:
+{
+  "scientificName": "Scientific name here",
+  "lightRequirements": "e.g., Full Sun, Partial Shade",
+  "waterFrequencyDays": 7,
+  "minTemp": 10,
+  "maxTemp": 30,
+  "soilType": "e.g., Well-draining loamy soil",
+  "humidity": "e.g., High humidity 60-80%",
+  "description": "A short 1-2 sentence description of the plant."
+}`;
+                            const llmResponse = await askLlm(settings, prompt, "llm", [], "search");
+                            const match = llmResponse.message.match(/\{[\s\S]*\}/);
+                            if (!match)
+                                throw new Error("LLM did not return a JSON object.");
+                            const parsedData = JSON.parse(match[0]);
+                            console.log("[AGENT_TOOL] Successfully generated profile via LLM:", parsedData);
+                            foundDna = await plant_dna_model_1.default.create({
+                                species: args.plantName,
+                                scientificName: parsedData.scientificName || args.plantName,
+                                toxicity: false,
+                                minTemp: parsedData.minTemp || 15,
+                                maxTemp: parsedData.maxTemp || 30,
+                                lightReq: parsedData.lightRequirements || "Partial Sun",
+                                waterFrequencyDays: parsedData.waterFrequencyDays || 7,
+                                soilType: parsedData.soilType,
+                                humidity: parsedData.humidity,
+                                description: parsedData.description,
+                                source: "AI_GENERATED",
+                                verified: false,
+                                generatedAt: new Date()
+                            });
+                            isGenerated = true;
+                        }
+                        catch (err) {
+                            console.error("[AGENT_TOOL] Failed to generate profile via LLM:", err.message);
+                            return JSON.stringify({ error: `Plant species '${args.plantName}' not found and AI fallback failed. Cannot add to garden.` });
+                        }
                     }
                     // ✅ FIX: Auto-find or create real garden + zone for this user
                     const GardenModel = (await Promise.resolve().then(() => __importStar(require("../../models/garden_model")))).default;
@@ -239,8 +288,9 @@ class AgentToolRegistry {
                         });
                         console.log(`[AGENT_TOOL] Auto-created zone ${zone._id} in garden ${garden._id}`);
                     }
-                    await this.plantService.createPlant(userId, zone._id.toString(), foundDna.id, foundDna.species);
-                    return `Successfully added ${foundDna.species} to your garden (zone: ${zone.name}).`;
+                    await this.plantService.createPlant(userId, zone._id.toString(), foundDna.id, foundDna.species, args.imageUrl);
+                    const metaString = isGenerated ? "[Source: AI Generated Profile (Unverified)]" : "[Source: Verified Dictionary]";
+                    return `Successfully added ${foundDna.species} to your garden (zone: ${zone.name}). ${metaString}`;
                 case "remove_plant_from_garden":
                     if (onProgress)
                         onProgress("REMOVING_FROM_GARDEN");
@@ -291,8 +341,47 @@ class AgentToolRegistry {
                 case "create_community_post":
                     if (onProgress)
                         onProgress("CREATING_POST");
-                    const post = await this.communityService.createPost(userId, args.content, args.imageUrl, args.plantTag, args.title);
-                    return `Post created successfully with ID: ${post.id}`;
+                    // Safety Layer: Check if intent is real or hypothetical
+                    if (!args.title || !args.content) {
+                        throw new Error("Missing required fields for community post.");
+                    }
+                    const { createPostSchema } = await Promise.resolve().then(() => __importStar(require("../../validation/community_schemas")));
+                    const CommunityPost = (await Promise.resolve().then(() => __importStar(require("../../models/community_post_model")))).default;
+                    const CommunityAudit = (await Promise.resolve().then(() => __importStar(require("../../models/community_audit_model")))).default;
+                    // Validation Consistency: reuse REST schema (strip clientOperationId since AI doesn't have it)
+                    const validArgs = createPostSchema.shape.body.omit({ clientOperationId: true }).parse({
+                        title: args.title,
+                        content: args.content,
+                        plantTag: args.plantTag || "General"
+                    });
+                    // Rate Limiting: max 10 AI posts per day per user
+                    const startOfDay = new Date();
+                    startOfDay.setHours(0, 0, 0, 0);
+                    const aiPostCount = await CommunityPost.countDocuments({
+                        author: new mongoose_1.default.Types.ObjectId(userId),
+                        createdByAI: true,
+                        createdAt: { $gte: startOfDay }
+                    });
+                    if (aiPostCount >= 10) {
+                        throw new Error("You have reached the daily limit of 10 AI-generated community posts.");
+                    }
+                    const post = await this.communityService.createPost(userId, validArgs.content, args.imageUrl, validArgs.plantTag, validArgs.title, true // createdByAI = true
+                    );
+                    // Audit Logging
+                    await CommunityAudit.create({
+                        actor: new mongoose_1.default.Types.ObjectId(userId),
+                        action: "CREATE_POST_AI",
+                        targetType: "CommunityPost",
+                        targetId: post._id,
+                        metadata: { source: "AI", toolCall: true }
+                    });
+                    // Deep Link Return
+                    return JSON.stringify({
+                        success: true,
+                        message: "Post created successfully",
+                        postId: post._id,
+                        deepLink: `/community/post/${post._id}`
+                    });
                 case "schedule_reminders":
                     if (onProgress)
                         onProgress("SCHEDULING_REMINDERS");

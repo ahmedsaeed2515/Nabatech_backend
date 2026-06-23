@@ -8,4 +8,7 @@ router.get("/", auth_middleware_1.protect, auth_middleware_1.admin, ai_settings_
 router.put("/", auth_middleware_1.protect, auth_middleware_1.admin, ai_settings_controller_1.putAdminAiSettings);
 router.post("/test", auth_middleware_1.protect, auth_middleware_1.admin, ai_settings_controller_1.testAdminAiSettings);
 router.get("/logs", auth_middleware_1.protect, auth_middleware_1.admin, ai_settings_controller_1.getAdminAiLogs);
+// ── AI Mode Switching ──────────────────────────────────────────────────────────
+router.patch("/mode", auth_middleware_1.protect, auth_middleware_1.admin, ai_settings_controller_1.patchAiMode); // تبديل الوضع فوراً
+router.post("/test-mode", auth_middleware_1.protect, auth_middleware_1.admin, ai_settings_controller_1.testAiMode); // اختبار وضع بدون تبديل
 exports.default = router;

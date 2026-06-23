@@ -75,6 +75,15 @@ export type AiSettingsShape = {
     cnnApiKey: string;
   };
   updatedBy?: string;
+  // ── AI Mode Switching ───────────────────────────────────────────────────────────
+  aiModePriority: Array<"rag_openai" | "hf_grok" | "hf_v8" | "hf_v62">;
+  hfIntegrated: {
+    grokEndpointUrl: string;
+    v8EndpointUrl: string;
+    v62EndpointUrl: string;
+    timeoutMs: number;
+    autoFallback: boolean;
+  };
 };
 
 export type AiSettingsUpdatePayload = {
@@ -200,6 +209,15 @@ const envDefaults = (): AiSettingsShape => ({
     ragApiKey: "",
     cnnApiKey: "",
   },
+  // ── AI Mode Switching defaults ─────────────────────────────────────────────
+  aiModePriority: ["rag_openai", "hf_v8", "hf_v62"],
+  hfIntegrated: {
+    grokEndpointUrl: "https://abdulrhmanhelmy-llm-grok.hf.space/query",
+    v8EndpointUrl:   "https://ahmedsaeed111-rag-only.hf.space/ask",
+    v62EndpointUrl:  "https://ahmedsaeed111-agrirag-pro.hf.space/ask",
+    timeoutMs: 40_000,
+    autoFallback: true,
+  },
 });
 
 const mergeSettings = (defaults: AiSettingsShape, db: Partial<IAiSettings> | null): AiSettingsShape => {
@@ -248,6 +266,17 @@ const mergeSettings = (defaults: AiSettingsShape, db: Partial<IAiSettings> | nul
       openaiApiKey: decryptSecret(plain?.secrets?.openaiApiKeyEnc || ""),
       ragApiKey: decryptSecret(plain?.secrets?.ragApiKeyEnc || ""),
       cnnApiKey: decryptSecret(plain?.secrets?.cnnApiKeyEnc || ""),
+    },
+    // ── AI Mode Switching ───────────────────────────────────────────────────────────
+    aiModePriority: Array.isArray(plain?.aiModePriority) 
+      ? plain.aiModePriority.filter((m: any) => ["rag_openai", "hf_grok", "hf_v8", "hf_v62"].includes(m))
+      : ["rag_openai"],
+    hfIntegrated: {
+      grokEndpointUrl: String(plain?.hfIntegrated?.grokEndpointUrl || "https://abdulrhmanhelmy-llm-grok.hf.space/query").trim(),
+      v8EndpointUrl:   String(plain?.hfIntegrated?.v8EndpointUrl   || "https://ahmedsaeed111-rag-only.hf.space/ask").trim(),
+      v62EndpointUrl:  String(plain?.hfIntegrated?.v62EndpointUrl  || "https://ahmedsaeed111-agrirag-pro.hf.space/ask").trim(),
+      timeoutMs:       Number.isFinite(Number(plain?.hfIntegrated?.timeoutMs)) ? Number(plain.hfIntegrated.timeoutMs) : 40000,
+      autoFallback:    plain?.hfIntegrated?.autoFallback !== false,
     },
   };
 };
@@ -336,7 +365,7 @@ export const getAiSettings = async (): Promise<AiSettingsShape> => {
 };
 
 const assertAllowedTopKeys = (payload: Record<string, unknown>) => {
-  const allowed = new Set(["cnn", "rag", "ragFallback", "llm", "fallback", "features", "pipeline", "secrets"]);
+  const allowed = new Set(["cnn", "rag", "ragFallback", "llm", "fallback", "features", "pipeline", "secrets", "aiModePriority", "hfIntegrated"]);
   const disallowed = Object.keys(payload).filter((k) => !allowed.has(k));
   if (disallowed.length) {
     throw new Error(`Unknown fields are not allowed: ${disallowed.join(", ")}`);

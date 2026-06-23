@@ -117,5 +117,29 @@ const aiSettingsSchema = new mongoose_1.Schema({
         cnnApiKeyEnc: { type: String, default: "" },
     },
     updatedBy: { type: String, default: "" },
+    // ── AI Mode Switching ──────────────────────────────────────────────────────
+    aiModePriority: {
+        type: [String],
+        default: ["rag_openai"],
+    },
+    hfIntegrated: {
+        grokEndpointUrl: {
+            type: String,
+            default: "https://abdulrhmanhelmy-llm-grok.hf.space/query",
+            trim: true,
+        },
+        v8EndpointUrl: {
+            type: String,
+            default: "https://ahmedsaeed111-rag-only.hf.space/ask",
+            trim: true,
+        },
+        v62EndpointUrl: {
+            type: String,
+            default: "https://ahmedsaeed111-agrirag-pro.hf.space/ask",
+            trim: true,
+        },
+        timeoutMs: { type: Number, default: 40000, min: 5000, max: 120000 },
+        autoFallback: { type: Boolean, default: true },
+    },
 }, { timestamps: true });
 exports.default = mongoose_1.default.model("AiSettings", aiSettingsSchema);

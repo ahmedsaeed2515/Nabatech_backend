@@ -72,7 +72,9 @@ router.put('/tasks/:id/complete', auth_v2_1.protectV2, idempotency_1.Idempotency
 router.post('/plants/:id/growth', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, upload_middleware_1.default.single('image'), growthController.logMeasurement);
 router.get('/plants/:id/growth/timeline', auth_v2_1.protectV2, growthController.getTimeline);
 // AI Chat
+const chat_controller_1 = require("../../controllers/chat_controller");
 router.post('/chat', auth_v2_1.protectV2, chatController.processChat);
+router.post('/chat/tool/approve', auth_v2_1.protectV2, chat_controller_1.approveToolCall);
 // Analytics & Reports
 router.post('/analytics/snapshot', auth_v2_1.protectV2, idempotency_1.IdempotencyCheck, analyticsController.generateSnapshot);
 router.get('/analytics/snapshot', auth_v2_1.protectV2, analyticsController.getSnapshots);

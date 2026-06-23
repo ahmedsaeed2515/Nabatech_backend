@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UserRole = exports.UserLevel = void 0;
+exports.ExpertStatus = exports.UserRole = exports.UserLevel = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 var UserLevel;
 (function (UserLevel) {
@@ -19,6 +19,12 @@ var UserRole;
     UserRole["ADMIN"] = "admin";
     UserRole["SUPER_ADMIN"] = "super_admin";
 })(UserRole || (exports.UserRole = UserRole = {}));
+var ExpertStatus;
+(function (ExpertStatus) {
+    ExpertStatus["PENDING"] = "PENDING";
+    ExpertStatus["APPROVED"] = "APPROVED";
+    ExpertStatus["REJECTED"] = "REJECTED";
+})(ExpertStatus || (exports.ExpertStatus = ExpertStatus = {}));
 const userSchema = new mongoose_1.default.Schema({
     // ── Core credentials ──────────────────────────────────────────────────────
     email: { type: String, required: true, unique: true, trim: true, lowercase: true },
@@ -34,6 +40,7 @@ const userSchema = new mongoose_1.default.Schema({
     interests: [{ type: String }],
     // ── Role / Level / Settings ───────────────────────────────────────────────
     role: { type: String, enum: Object.values(UserRole), default: UserRole.USER },
+    expertStatus: { type: String, enum: Object.values(ExpertStatus) },
     level: { type: String, enum: Object.values(UserLevel), default: UserLevel.SPROUT },
     pushEnabled: { type: Boolean, default: true },
     autoAddEnabled: { type: Boolean, default: true },
@@ -54,6 +61,8 @@ const userSchema = new mongoose_1.default.Schema({
     refreshToken: { type: String, select: false },
     // ── Soft-delete ───────────────────────────────────────────────────────────
     deletedAt: { type: Date, default: null },
+    isDeleted: { type: Boolean, default: false },
+    deletedBy: { type: mongoose_1.default.Schema.Types.ObjectId, ref: 'User', default: null },
 }, {
     timestamps: true
 });
@@ -63,11 +72,11 @@ userSchema.index({ email: 1, status: 1 });
 // Admin role-filter queries
 userSchema.index({ role: 1 });
 // Soft-delete filter used in the global pre-find hook
-userSchema.index({ deletedAt: 1 });
+userSchema.index({ isDeleted: 1 });
 // ── Global pre-find hook: exclude soft-deleted users from all queries ──────────
 userSchema.pre(/^find/, function (next) {
     const query = this;
-    query.find({ deletedAt: { $eq: null } });
+    query.find({ isDeleted: { $ne: true } });
     next();
 });
 exports.default = mongoose_1.default.model('User', userSchema);

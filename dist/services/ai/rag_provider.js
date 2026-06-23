@@ -26,34 +26,50 @@ const retrieveRagChunks = async (settings, diseaseName, question, topK, language
     // FIX [TASK-0.1]: Append ragApiKey to Bearer token — was always empty before
     if (ragApiKey)
         console.log(`[RAG] Auth configured: Bearer ***${ragApiKey.slice(-4)}`);
-    const rawEndpoint = process.env.NEW_RAG_URL || settings.rag.endpointUrl;
-    const baseUrl = rawEndpoint
-        .replace(/\/ask(\/stream)?$/, "")
-        .replace(/\/$/, "");
-    const retrieveUrl = `${baseUrl}/retrieve`;
     const sanitizedDisease = diseaseName.trim().substring(0, 200) || "General";
     const skipPhrases = ["please analyze", "analyze this", "analyze my", "please check"];
     const lowerQ = (question || "").toLowerCase();
-    const usefulQuestion = question && !skipPhrases.some((p) => lowerQ.includes(p))
-        ? question.substring(0, 500)
-        : "";
+    const usefulQuestion = question && !skipPhrases.some((p) => lowerQ.includes(p)) ? question.substring(0, 500) : "";
+    const payload = {
+        disease_name: sanitizedDisease,
+        question: usefulQuestion,
+        top_k: topK || settings.rag.topK || 8,
+        language: language,
+        crop: crop,
+    };
+    // ── RAG Priority Chain ──────────────────────────────────────────────────────────
+    const endpointsToTry = [];
+    if (settings.rag.endpointUrl)
+        endpointsToTry.push(settings.rag.endpointUrl);
+    if (settings.hfIntegrated?.v8EndpointUrl)
+        endpointsToTry.push(settings.hfIntegrated.v8EndpointUrl);
+    if (settings.hfIntegrated?.v62EndpointUrl)
+        endpointsToTry.push(settings.hfIntegrated.v62EndpointUrl);
+    // Remove duplicates
+    const uniqueEndpoints = [...new Set(endpointsToTry)];
     let response;
-    try {
-        const payload = {
-            disease_name: sanitizedDisease,
-            question: usefulQuestion,
-            top_k: topK || settings.rag.topK || 8,
-            language: language,
-            crop: crop,
-        };
-        console.log("RAG PAYLOAD SENT:", JSON.stringify(payload, null, 2));
-        response = await axios_1.default.post(retrieveUrl, payload, {
-            timeout: settings.rag.timeoutMs,
-            headers: ragApiKey ? { Authorization: `Bearer ${ragApiKey}` } : undefined,
-        });
+    let lastError;
+    let successUrl = "";
+    for (const rawEndpoint of uniqueEndpoints) {
+        const baseUrl = rawEndpoint.replace(/\/ask(\/stream)?$/, "").replace(/\/$/, "");
+        const retrieveUrl = `${baseUrl}/retrieve`;
+        try {
+            console.log(`[RAG_RETRIEVE] Attempting: ${retrieveUrl} for "${sanitizedDisease}"`);
+            response = await axios_1.default.post(retrieveUrl, payload, {
+                timeout: Math.max(settings.rag.timeoutMs || 40000, 45000), // Give at least 45s for cold boot
+                headers: ragApiKey ? { Authorization: `Bearer ${ragApiKey}` } : undefined,
+            });
+            successUrl = retrieveUrl;
+            lastError = null;
+            break; // Success!
+        }
+        catch (error) {
+            console.warn(`[RAG_RETRIEVE] Failed at ${retrieveUrl}: ${error.message}`);
+            lastError = error;
+        }
     }
-    catch (error) {
-        throw (0, ai_errors_1.toProviderError)(error, "RAG /retrieve request failed for disease: ", "RAG_UPSTREAM_FAILED");
+    if (lastError || !response) {
+        throw (0, ai_errors_1.toProviderError)(lastError, "RAG /retrieve request failed on all endpoints for disease: ", "RAG_UPSTREAM_FAILED");
     }
     const data = (response.data || {});
     const rawChunks = Array.isArray(data.chunks) ? data.chunks : [];

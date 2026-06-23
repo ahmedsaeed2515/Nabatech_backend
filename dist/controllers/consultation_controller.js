@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bookConsultation = void 0;
+exports.getMyConsultations = exports.bookConsultation = void 0;
 const consultation_model_1 = __importDefault(require("../models/consultation_model"));
 const user_model_1 = __importDefault(require("../models/user_model"));
 const logger_1 = require("../utils/logger");
@@ -73,3 +73,35 @@ const bookConsultation = async (req, res) => {
     }
 };
 exports.bookConsultation = bookConsultation;
+// @desc    Get my consultations
+// @route   GET /api/community/consultations/me
+// @access  Private
+const getMyConsultations = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const consultations = await consultation_model_1.default.find({
+            $or: [{ farmer: userId }, { expert: userId }]
+        })
+            .populate('expert', 'name')
+            .sort({ scheduledAt: 1 });
+        const items = consultations.map(consultation => ({
+            id: consultation._id.toString(),
+            expertId: consultation.expert?._id?.toString() || consultation.expert,
+            expertName: consultation.expert?.name || "Unknown",
+            scheduledAt: consultation.scheduledAt.toISOString(),
+            status: consultation.status,
+            createdAt: consultation.createdAt.toISOString()
+        }));
+        res.status(200).json({
+            success: true,
+            data: {
+                items
+            }
+        });
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to fetch consultations', { error });
+        res.status(500).json({ error: "Failed to fetch consultations" });
+    }
+};
+exports.getMyConsultations = getMyConsultations;

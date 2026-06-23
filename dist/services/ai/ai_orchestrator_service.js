@@ -51,6 +51,7 @@ const agent_llm_provider_1 = require("./agent_llm_provider");
 const agent_tool_registry_1 = require("./agent_tool_registry");
 const memory_manager_1 = require("./memory_manager");
 const expert_escalation_service_1 = require("../expert_escalation_service");
+const hf_integrated_provider_1 = require("./hf_integrated_provider");
 const ai_sanitizer_1 = require("../../utils/ai_sanitizer");
 const sanitizeLlmResponse = (text) => {
     if (!text)
@@ -137,6 +138,59 @@ const orchestrateChat = async (args) => {
     const started = Date.now();
     const reqId = args.requestId || crypto_1.default.randomUUID();
     const sanitizedHistory = args.history.filter(msg => msg.role !== "system");
+    // ── AI Priority Routing ───────────────────────────────────────────────────────────
+    const priorityList = Array.isArray(settings.aiModePriority) && settings.aiModePriority.length > 0
+        ? settings.aiModePriority
+        : ["rag_openai"];
+    let shouldRunRagOpenai = false;
+    for (const mode of priorityList) {
+        if (mode === "rag_openai") {
+            shouldRunRagOpenai = true;
+            console.log(`[MODE_ROUTING] Priority reached rag_openai, breaking to main pipeline...`);
+            break;
+        }
+        const hfMode = mode;
+        const hf = settings.hfIntegrated || {};
+        const endpointMap = {
+            hf_grok: hf.grokEndpointUrl || "",
+            hf_v8: hf.v8EndpointUrl || "",
+            hf_v62: hf.v62EndpointUrl || "",
+        };
+        const hfTimeout = hf.timeoutMs || 40000;
+        console.log(`[MODE_ROUTING] Attempting mode: ${hfMode} | question: "${args.question.slice(0, 60)}..."`);
+        const hfResult = await (0, hf_integrated_provider_1.askHuggingFaceIntegrated)(hfMode, endpointMap[hfMode], args.question, sanitizedHistory, hfTimeout);
+        if (hfResult.success) {
+            await logAiCall({
+                userId: args.userId,
+                requestId: reqId,
+                feature: "chat",
+                provider: hfMode,
+                status: "success",
+                latencyMs: hfResult.latencyMs,
+                inputMeta: { mode: hfMode, questionLength: args.question.length },
+                outputMeta: { responseLength: hfResult.answer.length },
+            });
+            return {
+                message: sanitizeLlmResponse(hfResult.answer),
+                source: hfMode,
+                provider: hfMode,
+                ragContext: undefined,
+                communityContext: undefined,
+            };
+        }
+        console.warn(`[MODE_ROUTING] ${hfMode} failed: ${hfResult.error}. Moving to next priority...`);
+    }
+    if (!shouldRunRagOpenai) {
+        // Exhausted the list and rag_openai was not in it.
+        return {
+            message: `All selected AI modes failed to respond. Please try again later or adjust your AI priorities in the dashboard.`,
+            source: "fallback",
+            provider: priorityList[0] || "unknown",
+            ragContext: undefined,
+            communityContext: undefined,
+        };
+    }
+    // ── End AI Priority Routing ───────────────────────────────────────────────────────
     const isGreeting = /^(hello|hi|hey|greetings|good morning|good afternoon|good evening|howdy|what'?s up)\b/i.test(args.question.trim());
     const isSmallTalk = /^(how are you|who are you|thanks|thank you|bye|goodbye)\b/i.test(args.question.trim());
     const shouldSkipRag = isGreeting || isSmallTalk;
@@ -251,7 +305,7 @@ User message: "${args.question.substring(0, 300)}"`;
                     }
                 }
             }
-            chatResult = { message: agentResult.message, source: "llm", provider: "agent_llm", toolCalls: agentResult.toolCalls };
+            chatResult = { message: agentResult.message, source: "llm", provider: "agent_llm", toolCalls: agentResult.toolCalls, pendingToolCall: agentResult.pendingToolCall };
         }
         catch (agentErr) {
             console.warn("[AGENT_FAILED] Falling back to standard LLM flow. Error:", agentErr.message);
@@ -293,7 +347,7 @@ User message: "${args.question.substring(0, 300)}"`;
         errorMessage: chatResult.source === "fallback" ? "No AI provider succeeded" : undefined,
         toolCalls: chatResult.toolCalls,
     });
-    return { message: sanitizeLlmResponse(chatResult.message), source: chatResult.source, provider: chatResult.provider, ragContext, communityContext };
+    return { message: sanitizeLlmResponse(chatResult.message), source: chatResult.source, provider: chatResult.provider, ragContext, communityContext, pendingToolCall: chatResult.pendingToolCall };
 };
 exports.orchestrateChat = orchestrateChat;
 const orchestrateAssistantRequest = async (args) => {
@@ -319,6 +373,7 @@ const orchestrateAssistantRequest = async (args) => {
             formData.append("file", args.fileBuffer, { filename: args.originalName || "image.jpg" });
             const rawCnn = await (0, cnn_provider_1.runCnnDiagnosis)(settings, formData, formData.getHeaders());
             cnnResult = validateProviderOutput(rawCnn);
+            console.log("\n[DEBUG_RUNTIME] CNN Diagnosis Result:", JSON.stringify(cnnResult, null, 2));
             providerChain.push("cnn");
             console.log("[CNN_SUCCESS]");
         }
@@ -378,19 +433,26 @@ const orchestrateAssistantRequest = async (args) => {
         }
         // [CRITICAL FIX] HARD ABORT ON LOW CONFIDENCE
         let abortMessage = "";
+        const isArabic = /[\\u0600-\\u06FF]/.test(args.question || "") || args.language === "ar";
         if (isHealthy) {
-            abortMessage = `Result:\nInconclusive\n\nRecommendation:\nThe image analysis is uncertain. Please upload a clearer image of the affected plant parts.`;
+            abortMessage = isArabic
+                ? `النتيجة:\nغير حاسمة\n\nالتوصية:\nتحليل الصورة غير مؤكد. يرجى رفع صورة أوضح للأجزاء المصابة من النبات.`
+                : `Result:\nInconclusive\n\nRecommendation:\nThe image analysis is uncertain. Please upload a clearer image of the affected plant parts.`;
         }
         else {
             const formattedDisease = cnnResult.prediction.replace(/___/g, " - ").replace(/_/g, " ");
-            abortMessage = `Disease:\n${formattedDisease}\n\nConfidence:\n${(conf * 100).toFixed(0)}%\n\nResult:\nLow confidence diagnosis\n\nRecommendation:\nPlease upload a clearer image showing affected leaves.`;
+            abortMessage = isArabic
+                ? `المرض:\n${formattedDisease}\n\nنسبة الثقة:\n${(conf * 100).toFixed(0)}%\n\nالنتيجة:\nتشخيص بنسبة ثقة منخفضة\n\nالتوصية:\nيرجى رفع صورة أوضح تظهر الأوراق المصابة.`
+                : `Disease:\n${formattedDisease}\n\nConfidence:\n${(conf * 100).toFixed(0)}%\n\nResult:\nLow confidence diagnosis\n\nRecommendation:\nPlease upload a clearer image showing affected leaves.`;
         }
         let communityDraft = null;
         if (args.userId && args.originalName) {
             try {
                 const formattedDisease = cnnResult.prediction.replace(/___/g, " - ").replace(/_/g, " ");
+                const langInstruction = isArabic ? "CRITICAL: You MUST write the title and content in Arabic." : "You MUST write the title and content in the user's language.";
                 const draftPrompt = `You are a helpful plant expert assistant. The user uploaded an image of a plant that our AI diagnosed as "${formattedDisease}" with only ${(conf * 100).toFixed(0)}% confidence. This is too low to be certain.
 Please generate a draft for a community post so the user can ask human experts for help.
+${langInstruction}
 Output valid JSON in this exact format:
 {
   "title": "Short descriptive title",
@@ -517,7 +579,9 @@ Output valid JSON in this exact format:
             try {
                 const agentProvider = new agent_llm_provider_1.AgentLlmProvider();
                 const targetPlantName = predictedCrop || predictedDisease.replace(/_/g, " ").split(" ")[0];
-                const systemPrompt = prompt + `\n\nCRITICAL INSTRUCTION: Since the diagnosis is completed, you MUST automatically add this plant to the user's garden using the add_plant_to_garden tool. Pass plantName: "${targetPlantName}". After adding, briefly summarize the care advice. Do not ask for confirmation.`;
+                console.log("\n[DEBUG_RUNTIME] targetPlantName extracted for tool:", targetPlantName);
+                const imageUrlParam = args.originalName ? ` and pass imageUrl "${args.originalName}"` : "";
+                const systemPrompt = prompt + `\n\nINSTRUCTION: Try to use the add_plant_to_garden tool to add "${targetPlantName}" to the user's garden${imageUrlParam}. If the tool returns an error, IGNORE the error entirely and DO NOT mention it to the user. Proceed to summarize the diagnosis and care advice in the user's language.`;
                 const agentResult = await agentProvider.runAgentLoop(settings, args.userId, systemPrompt, sanitizedHistory, agent_tool_registry_1.AGENT_TOOLS, 5, args.onProgress);
                 chatResult = { message: agentResult.message, source: "llm", provider: "agent_llm", toolCalls: agentResult.toolCalls };
             }
@@ -539,23 +603,31 @@ Output valid JSON in this exact format:
         }
         // Cascade logic
         if (chatResult.source === "fallback") {
+            const isArabic = /[\\u0600-\\u06FF]/.test(args.question || "") || args.language === "ar";
             if (cnnResult) {
                 console.log("[FINAL_RESPONSE_SOURCE] cnn");
                 const confStr = typeof cnnResult.confidence === "number" ? (cnnResult.confidence * 100).toFixed(2) + "%" : "Unknown";
-                let cnnMessage = `Disease Detected: **${cnnResult.prediction.replace(/_/g, " ")}**\n\nConfidence: ${confStr}\n`;
-                if (kbSeverity)
-                    cnnMessage += `Severity: ${kbSeverity}\n`;
+                let cnnMessage = isArabic
+                    ? `المرض المكتشف: **${cnnResult.prediction.replace(/_/g, " ")}**\n\nنسبة الثقة: ${confStr}\n`
+                    : `Disease Detected: **${cnnResult.prediction.replace(/_/g, " ")}**\n\nConfidence: ${confStr}\n`;
+                if (kbSeverity) {
+                    cnnMessage += isArabic ? `الخطورة: ${kbSeverity}\n` : `Severity: ${kbSeverity}\n`;
+                }
                 if (kbAdvice) {
-                    cnnMessage += `\nRecommended Actions:\n${kbAdvice}`;
+                    cnnMessage += isArabic ? `\nالإجراءات الموصى بها:\n${kbAdvice}` : `\nRecommended Actions:\n${kbAdvice}`;
                 }
                 else {
-                    cnnMessage += `\nPlease monitor your plant carefully and ensure proper watering and light conditions.`;
+                    cnnMessage += isArabic
+                        ? `\nيرجى مراقبة نباتك بعناية وتوفير ظروف الري والضوء المناسبة.`
+                        : `\nPlease monitor your plant carefully and ensure proper watering and light conditions.`;
                 }
                 chatResult = { message: cnnMessage, source: "cnn", provider: cnnResult.provider || "cnn" };
             }
             else {
                 console.log("[FINAL_RESPONSE_SOURCE] fallback");
-                chatResult.message = "I am currently experiencing high traffic and cannot generate a detailed response. Please try again later.";
+                chatResult.message = isArabic
+                    ? "أواجه حاليًا ضغطًا كبيرًا ولا يمكنني إنشاء رد مفصل. يرجى المحاولة مرة أخرى لاحقًا."
+                    : "I am currently experiencing high traffic and cannot generate a detailed response. Please try again later.";
             }
         }
         else {
@@ -568,7 +640,10 @@ Output valid JSON in this exact format:
         toolCalls = chatResult.toolCalls;
     }
     if (isLowConfidence && settings.pipeline.lowConfidenceBehavior === "ask_for_new_image") {
-        const suffix = "Please upload a clearer image of the plant for a more accurate analysis.";
+        const isArabic = /[\\u0600-\\u06FF]/.test(args.question || "") || args.language === "ar";
+        const suffix = isArabic
+            ? "يرجى رفع صورة أوضح للنبات للحصول على تحليل أكثر دقة."
+            : "Please upload a clearer image of the plant for a more accurate analysis.";
         if (message) {
             if (!message.endsWith(suffix)) {
                 message += `\n\n${suffix}`;
@@ -599,6 +674,23 @@ Output valid JSON in this exact format:
             ragContextLength: ragContext?.length || 0,
         },
     });
+    let gardenExtraction = undefined;
+    if (message && message.includes("```json")) {
+        try {
+            const match = message.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+            if (match && match[1]) {
+                const parsed = JSON.parse(match[1]);
+                if (parsed.gardenExtraction) {
+                    gardenExtraction = parsed.gardenExtraction;
+                    // Clean the message by removing the extraction block
+                    message = message.replace(/```json\s*\{[\s\S]*?\}\s*```/g, "").trim();
+                }
+            }
+        }
+        catch (e) {
+            console.warn("Failed to parse gardenExtraction from message", e);
+        }
+    }
     const responsePayload = {
         mode: hasFile ? "image_chat" : "chat",
         diagnosis: cnnResult
@@ -625,6 +717,7 @@ Output valid JSON in this exact format:
         kbAdvice,
         kbSeverity,
         toolCalls,
+        gardenExtraction,
     };
     try {
         const { evaluateRecommendation } = await Promise.resolve().then(() => __importStar(require("./decision_engine")));

@@ -63,6 +63,15 @@ export interface IAiSettings extends Document {
   updatedBy?: string;
   createdAt: Date;
   updatedAt: Date;
+  // ── AI Mode Switching ───────────────────────────────────────────────────────────
+  aiModePriority?: Array<"rag_openai" | "hf_grok" | "hf_v8" | "hf_v62">;
+  hfIntegrated?: {
+    grokEndpointUrl: string;   // https://abdulrhmanhelmy-llm-grok.hf.space/query
+    v8EndpointUrl: string;     // https://ahmedsaeed111-rag-only.hf.space/ask  (v8)
+    v62EndpointUrl: string;    // https://ahmedsaeed111-agrirag-pro.hf.space/ask (v6.2)
+    timeoutMs: number;
+    autoFallback: boolean;     // لو وضع فشل يرجع تلقائياً للأساسي
+  };
 }
 
 const aiSettingsSchema = new Schema<IAiSettings>(
@@ -149,6 +158,30 @@ const aiSettingsSchema = new Schema<IAiSettings>(
       cnnApiKeyEnc: { type: String, default: "" },
     },
     updatedBy: { type: String, default: "" },
+    // ── AI Mode Switching ──────────────────────────────────────────────────────
+    aiModePriority: {
+      type: [String],
+      default: ["rag_openai"],
+    },
+    hfIntegrated: {
+      grokEndpointUrl: {
+        type: String,
+        default: "https://abdulrhmanhelmy-llm-grok.hf.space/query",
+        trim: true,
+      },
+      v8EndpointUrl: {
+        type: String,
+        default: "https://ahmedsaeed111-rag-only.hf.space/ask",
+        trim: true,
+      },
+      v62EndpointUrl: {
+        type: String,
+        default: "https://ahmedsaeed111-agrirag-pro.hf.space/ask",
+        trim: true,
+      },
+      timeoutMs: { type: Number, default: 40000, min: 5000, max: 120000 },
+      autoFallback: { type: Boolean, default: true },
+    },
   },
   { timestamps: true }
 );

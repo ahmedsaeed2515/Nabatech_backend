@@ -3,11 +3,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAdminAiLogs = exports.testAdminAiSettings = exports.putAdminAiSettings = exports.getAdminAiSettings = void 0;
+exports.testAiMode = exports.patchAiMode = exports.getAdminAiLogs = exports.testAdminAiSettings = exports.putAdminAiSettings = exports.getAdminAiSettings = void 0;
 const ai_call_log_model_1 = __importDefault(require("../models/ai_call_log_model"));
 const ai_config_service_1 = require("../services/ai/ai_config_service");
 const llm_provider_1 = require("../services/ai/llm_provider");
 const rag_provider_1 = require("../services/ai/rag_provider");
+const hf_integrated_provider_1 = require("../services/ai/hf_integrated_provider");
 const ai_orchestrator_service_1 = require("../services/ai/ai_orchestrator_service");
 const ai_errors_1 = require("../services/ai/ai_errors");
 const getAdminAiSettings = async (_req, res) => {
@@ -113,3 +114,123 @@ const getAdminAiLogs = async (req, res) => {
     }
 };
 exports.getAdminAiLogs = getAdminAiLogs;
+// ─── AI Mode Switching ────────────────────────────────────────────────────────
+const VALID_MODES = ["rag_openai", "hf_grok", "hf_v8", "hf_v62"];
+/**
+ * PATCH /api/admin/ai-settings/mode
+ * تحديث ترتيب وأولوية أوضاع الذكاء الاصطناعي بشكل فوري
+ * Body: { aiModePriority: ["rag_openai", "hf_grok", ...] }
+ */
+const patchAiMode = async (req, res) => {
+    try {
+        const { aiModePriority } = req.body || {};
+        if (!Array.isArray(aiModePriority) || aiModePriority.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: `aiModePriority must be a non-empty array of valid modes.`,
+            });
+        }
+        const invalidModes = aiModePriority.filter(m => !VALID_MODES.includes(m));
+        if (invalidModes.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid modes in priority list: ${invalidModes.join(", ")}. Must be one of: ${VALID_MODES.join(", ")}`,
+            });
+        }
+        // تحديث في قاعدة البيانات
+        await (0, ai_config_service_1.updateAiSettings)({ aiModePriority }, req?.user?.id);
+        // مسح الـ Cache الفوري لضمان قراءة الوضع الجديد في الطلب القادم
+        (0, ai_config_service_1.clearSettingsCache)();
+        console.log(`[AI_MODE] Priority updated to: [${aiModePriority.join(", ")}] by user: ${req?.user?.id || "admin"}`);
+        return res.status(200).json({
+            success: true,
+            message: `AI mode priority updated successfully`,
+            aiModePriority,
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: (0, ai_errors_1.sanitizeErrorMessage)(error) || "Failed to update AI mode priority",
+        });
+    }
+};
+exports.patchAiMode = patchAiMode;
+/**
+ * POST /api/admin/ai-settings/test-mode
+ * اختبار أي وضع بدون تغيير الوضع الحالي للنظام
+ * Body: { mode: AiMode, question: string }
+ */
+const testAiMode = async (req, res) => {
+    const t0 = Date.now();
+    try {
+        const { mode, question = "What are the symptoms of tomato early blight?" } = req.body || {};
+        if (!VALID_MODES.includes(mode)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid mode. Must be one of: ${VALID_MODES.join(", ")}`,
+            });
+        }
+        if (typeof question !== "string" || question.trim().length === 0 || question.length > 1000) {
+            return res.status(400).json({ success: false, message: "Question must be 1–1000 characters" });
+        }
+        const settings = await (0, ai_config_service_1.getAiSettings)();
+        // rag_openai: اختبار الـ RAG + LLM بشكل مباشر
+        if (mode === "rag_openai") {
+            let ragChunks = 0;
+            let llmAnswer = "";
+            let ragError = "";
+            let llmError = "";
+            try {
+                const ragResult = await (0, rag_provider_1.retrieveRagChunks)(settings, "early blight", question, 3);
+                ragChunks = ragResult.chunks.length;
+                const llmResult = await (0, llm_provider_1.askLlm)(settings, question, "llm", []);
+                llmAnswer = llmResult.message.slice(0, 500);
+            }
+            catch (e) {
+                ragError = (0, ai_errors_1.sanitizeErrorMessage)(e) || "RAG/LLM failed";
+            }
+            return res.status(200).json({
+                success: !ragError && !llmError,
+                mode,
+                answer: llmAnswer || ragError || llmError,
+                ragChunks,
+                latencyMs: Date.now() - t0,
+                error: ragError || llmError || undefined,
+            });
+        }
+        // HF modes: اختبار الـ HF endpoint مباشرة
+        const hfMode = mode;
+        const hf = settings.hfIntegrated || {};
+        const endpointMap = {
+            hf_grok: hf.grokEndpointUrl || "",
+            hf_v8: hf.v8EndpointUrl || "",
+            hf_v62: hf.v62EndpointUrl || "",
+        };
+        const result = await (0, hf_integrated_provider_1.askHuggingFaceIntegrated)(hfMode, endpointMap[hfMode], question, [], hf.timeoutMs || 40000);
+        if (result.success) {
+            return res.status(200).json({
+                success: true,
+                mode,
+                answer: result.answer,
+                latencyMs: result.latencyMs,
+                provider: result.provider,
+            });
+        }
+        return res.status(200).json({
+            success: false,
+            mode,
+            error: result.error,
+            latencyMs: result.latencyMs,
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            success: false,
+            mode: req.body?.mode,
+            error: (0, ai_errors_1.sanitizeErrorMessage)(error) || "Test failed",
+            latencyMs: Date.now() - t0,
+        });
+    }
+};
+exports.testAiMode = testAiMode;

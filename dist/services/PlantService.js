@@ -11,15 +11,24 @@ class PlantService {
     constructor() {
         this.plantRepo = new PlantRepository_1.PlantRepository();
     }
-    async createPlant(userId, zoneId, dnaId, name) {
-        return this.plantRepo.create({
+    async createPlant(userId, zoneId, dnaId, name, imageUrl) {
+        const dna = await mongoose_1.default.model('PlantDna').findById(dnaId);
+        const plantData = {
             user: new mongoose_1.default.Types.ObjectId(userId),
             zone: new mongoose_1.default.Types.ObjectId(zoneId),
             dna: new mongoose_1.default.Types.ObjectId(dnaId),
             name,
+            scientificName: dna?.scientificName,
+            imageUrl: imageUrl || '',
+            lightRequirements: dna?.lightReq,
+            wateringFrequency: dna?.waterFrequencyDays ? `Every ${dna.waterFrequencyDays} days` : undefined,
             stage: plant_model_1.PlantStage.SEED,
             healthScore: 100
-        });
+        };
+        console.log("\n[DEBUG_RUNTIME] Plant object before save:", JSON.stringify(plantData, null, 2));
+        const createdPlant = await this.plantRepo.create(plantData);
+        console.log("\n[DEBUG_RUNTIME] Mongo document after save:", JSON.stringify(createdPlant.toObject(), null, 2));
+        return createdPlant;
     }
     async getPlantDetails(plantId, userId) {
         return this.plantRepo.findOne({ _id: plantId, user: userId });

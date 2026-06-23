@@ -43,6 +43,7 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
       type: "object",
       properties: {
         plantName: { type: "string" },
+        imageUrl: { type: "string", description: "Optional image URL of the plant" },
         zoneId: { type: "string", description: "Optional zone ID to place the plant in" }
       },
       required: ["plantName"]
@@ -172,25 +173,68 @@ export class AgentToolRegistry {
         
         case "add_plant_to_garden":
           if (onProgress) onProgress("SAVING_GARDEN_ITEM");
-          // Validate existence
-          let foundDna = await PlantDnaModel.findOne({
+          console.log("\n[DEBUG_RUNTIME] Tool Input:", JSON.stringify(args, null, 2));
+          // Validate existence - using strict exact match or strict prefix match
+          const lookupQuery = {
             $or: [
               { species: { $regex: `^${args.plantName}$`, $options: "i" } },
-              { species: { $regex: args.plantName, $options: "i" } }
+              { species: { $regex: `^${args.plantName}\\b`, $options: "i" } }
             ]
-          });
+          };
+          console.log("\n[DEBUG_RUNTIME] PlantDna lookup query:", JSON.stringify(lookupQuery, null, 2));
+          let foundDna = await PlantDnaModel.findOne(lookupQuery);
+          console.log("\n[DEBUG_RUNTIME] Plant DNA Found:", foundDna ? foundDna.toObject() : "NONE - Triggering Fallback");
           
+          let isGenerated = false;
           if (!foundDna) {
-            console.log(`[AGENT_TOOL] Auto-creating missing PlantDNA for ${args.plantName}`);
-            foundDna = await PlantDnaModel.create({
-              species: args.plantName,
-              scientificName: args.plantName,
-              toxicity: false,
-              minTemp: 15,
-              maxTemp: 30,
-              lightReq: "Partial Sun",
-              waterFrequencyDays: 3
-            });
+            console.warn(`[AGENT_TOOL] PlantDNA for ${args.plantName} not found in database. Generating dynamically via LLM...`);
+            try {
+              const { getAiSettings } = await import("./ai_config_service");
+              const { askLlm } = await import("./llm_provider");
+              const settings = await getAiSettings();
+
+              const prompt = `You are a botanical expert. The user wants to add "${args.plantName}" to their garden, but we don't have its profile.
+Generate a complete JSON profile for this plant. 
+DO NOT INCLUDE ANY MARKDOWN formatting like \`\`\`json. ONLY RETURN RAW VALID JSON.
+The JSON must strictly match this structure:
+{
+  "scientificName": "Scientific name here",
+  "lightRequirements": "e.g., Full Sun, Partial Shade",
+  "waterFrequencyDays": 7,
+  "minTemp": 10,
+  "maxTemp": 30,
+  "soilType": "e.g., Well-draining loamy soil",
+  "humidity": "e.g., High humidity 60-80%",
+  "description": "A short 1-2 sentence description of the plant."
+}`;
+              const llmResponse = await askLlm(settings, prompt, "llm", [], "search");
+              
+              const match = llmResponse.message.match(/\{[\s\S]*\}/);
+              if (!match) throw new Error("LLM did not return a JSON object.");
+              const parsedData = JSON.parse(match[0]);
+
+              console.log("[AGENT_TOOL] Successfully generated profile via LLM:", parsedData);
+
+              foundDna = await PlantDnaModel.create({
+                species: args.plantName,
+                scientificName: parsedData.scientificName || args.plantName,
+                toxicity: false,
+                minTemp: parsedData.minTemp || 15,
+                maxTemp: parsedData.maxTemp || 30,
+                lightReq: parsedData.lightRequirements || "Partial Sun",
+                waterFrequencyDays: parsedData.waterFrequencyDays || 7,
+                soilType: parsedData.soilType,
+                humidity: parsedData.humidity,
+                description: parsedData.description,
+                source: "AI_GENERATED",
+                verified: false,
+                generatedAt: new Date()
+              });
+              isGenerated = true;
+            } catch (err: any) {
+              console.error("[AGENT_TOOL] Failed to generate profile via LLM:", err.message);
+              return JSON.stringify({ error: `Plant species '${args.plantName}' not found and AI fallback failed. Cannot add to garden.` });
+            }
           }
 
           // ✅ FIX: Auto-find or create real garden + zone for this user
@@ -218,8 +262,9 @@ export class AgentToolRegistry {
             console.log(`[AGENT_TOOL] Auto-created zone ${zone._id} in garden ${garden._id}`);
           }
 
-          await this.plantService.createPlant(userId, zone._id.toString(), foundDna.id, foundDna.species);
-          return `Successfully added ${foundDna.species} to your garden (zone: ${zone.name}).`;
+          await this.plantService.createPlant(userId, zone._id.toString(), foundDna.id, foundDna.species, args.imageUrl);
+          const metaString = isGenerated ? "[Source: AI Generated Profile (Unverified)]" : "[Source: Verified Dictionary]";
+          return `Successfully added ${foundDna.species} to your garden (zone: ${zone.name}). ${metaString}`;
 
         case "remove_plant_from_garden":
           if (onProgress) onProgress("REMOVING_FROM_GARDEN");

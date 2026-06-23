@@ -23,16 +23,17 @@ router.get("/activity", auth_middleware_1.protect, community_controller_1.getAct
 // Saved Posts
 router.get("/saved", auth_middleware_1.protect, community_controller_1.getSavedPosts);
 router.post("/posts/:id/save", auth_middleware_1.protect, community_controller_1.toggleSave);
+router.post("/posts/:id/view", auth_middleware_1.protect, community_controller_1.incrementPostView);
 router.get("/posts", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.feedQuerySchema), community_controller_1.getCommunityPosts);
 router.get("/search", auth_middleware_1.protect, rate_limit_middleware_1.communitySearchLimiter, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.searchQuerySchema), community_controller_1.searchPosts);
 router.get("/trending", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.trendingQuerySchema), community_controller_1.getTrendingPosts);
-router.post("/posts", auth_middleware_1.protect, rate_limit_middleware_1.communityPostLimiter, upload_middleware_1.default.single("file"), (0, validate_request_middleware_1.validateRequest)(community_schemas_1.createPostSchema), community_controller_1.createPost);
+router.post("/posts", auth_middleware_1.protect, rate_limit_middleware_1.communityPostLimiter, upload_middleware_1.default.array("files", 10), (0, validate_request_middleware_1.validateRequest)(community_schemas_1.createPostSchema), community_controller_1.createPost);
 router.post("/posts/:id/like", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.toggleLikeSchema), community_controller_1.toggleLike);
 router.get("/posts/:id/comments", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.commentsQuerySchema), community_controller_1.getComments);
 router.post("/posts/:id/comments", auth_middleware_1.protect, rate_limit_middleware_1.communityCommentLimiter, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.createCommentSchema), community_controller_1.createComment);
 router.put("/posts/:id/comments/:commentId", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.updateCommentSchema), community_controller_1.updateComment);
 router.delete("/posts/:id/comments/:commentId", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.deleteCommentSchema), community_controller_1.deleteComment);
-router.put("/posts/:id", auth_middleware_1.protect, upload_middleware_1.default.single("file"), (0, validate_request_middleware_1.validateRequest)(community_schemas_1.updatePostSchema), community_controller_1.updatePost);
+router.put("/posts/:id", auth_middleware_1.protect, upload_middleware_1.default.array("files", 10), (0, validate_request_middleware_1.validateRequest)(community_schemas_1.updatePostSchema), community_controller_1.updatePost);
 router.delete("/posts/:id", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.deletePostSchema), community_controller_1.deletePost);
 router.post('/offers', auth_middleware_1.protect, (0, auth_middleware_1.authorizeRoles)('expert'), (0, validate_request_middleware_1.validateRequest)(specialist_offer_schemas_1.createOfferSchema), specialist_offers_controller_1.createSpecialistOffer);
 router.get("/offers/sent", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(specialist_offer_schemas_1.offersQuerySchema), specialist_offers_controller_1.getSentSpecialistOffers);
@@ -54,4 +55,5 @@ router.patch('/notifications/:id/read', auth_middleware_1.protect, community_not
 router.post('/polls/:pollId/vote', auth_middleware_1.protect, poll_controller_1.voteOnPoll);
 // Consultations
 router.post('/consultations', auth_middleware_1.protect, consultation_controller_1.bookConsultation);
+router.get('/consultations/me', auth_middleware_1.protect, consultation_controller_1.getMyConsultations);
 exports.default = router;

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.submitFeedback = exports.getAllChatLogs = exports.getChatSessions = exports.getChatHistory = exports.chatWithAI = void 0;
+exports.submitFeedback = exports.getAllChatLogs = exports.getChatSessions = exports.getChatHistory = exports.approveToolCall = exports.chatWithAI = void 0;
 const message_model_1 = __importDefault(require("../models/message_model"));
 const ai_orchestrator_service_1 = require("../services/ai/ai_orchestrator_service");
 const ai_errors_1 = require("../services/ai/ai_errors");
@@ -163,7 +163,8 @@ const chatWithAI = async (req, res) => {
             messageId: assistantMsg._id,
             source: chatResult.source,
             provider: { name: chatResult.provider },
-            sourceIds: assistantMsg.sourceIds
+            sourceIds: assistantMsg.sourceIds,
+            pendingToolCall: chatResult.pendingToolCall
         };
         if (isSSE) {
             res.write(`data: ${JSON.stringify({ type: "result", data: finalResponse })}\n\n`);
@@ -178,6 +179,28 @@ const chatWithAI = async (req, res) => {
     }
 };
 exports.chatWithAI = chatWithAI;
+const agent_tool_registry_1 = require("../services/ai/agent_tool_registry");
+const ai_config_service_1 = require("../services/ai/ai_config_service");
+const approveToolCall = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { toolName, args } = req.body;
+        if (!toolName || !args) {
+            return res.status(400).json({ success: false, message: "toolName and args are required" });
+        }
+        const settings = await (0, ai_config_service_1.getAiSettings)();
+        const registry = new agent_tool_registry_1.AgentToolRegistry();
+        // Execute tool directly now that user has approved it
+        const result = await registry.executeTool(toolName, args, userId, undefined, settings);
+        // We expect the tool to return a JSON string with postId and deepLink for create_community_post
+        return res.status(200).json({ success: true, result });
+    }
+    catch (error) {
+        console.error("Tool approval failed:", error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.approveToolCall = approveToolCall;
 const getChatHistory = async (req, res) => {
     try {
         const userId = req.user.id;

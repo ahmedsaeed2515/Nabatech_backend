@@ -15,7 +15,7 @@ import upload from "../middlewares/upload_middleware";
 import { communityPostLimiter, communityCommentLimiter, communitySearchLimiter, communityFollowLimiter } from "../middlewares/rate_limit_middleware";
 import { CommunityNotificationController } from "../controllers/community_notification_controller";
 import { voteOnPoll } from "../controllers/poll_controller";
-import { bookConsultation } from "../controllers/consultation_controller";
+import { bookConsultation, getMyConsultations } from "../controllers/consultation_controller";
 
 import { getCommunityPosts, createPost, toggleLike, getComments, createComment, deletePost, updatePost, updateComment, deleteComment, searchPosts, getTrendingPosts, toggleSave, getSavedPosts, getActivityCenter, incrementPostView } from "../controllers/community_controller";
 
@@ -66,5 +66,6 @@ router.post('/polls/:pollId/vote', protect, voteOnPoll);
 
 // Consultations
 router.post('/consultations', protect, bookConsultation);
+router.get('/consultations/me', protect, getMyConsultations);
 
 export default router;

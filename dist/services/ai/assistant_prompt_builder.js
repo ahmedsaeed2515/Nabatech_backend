@@ -45,27 +45,29 @@ const buildAssistantPrompt = (ctx) => {
         const isHealthy = ctx.cnn.prediction.toLowerCase().includes("healthy");
         if (isHealthy) {
             diagnosisFormatInstruction = `\n[FORMAT REQUIREMENT]
-Since the user uploaded an image for diagnosis and the CNN predicted healthy, you MUST format your response EXACTLY like this:
+Since the user uploaded an image for diagnosis and the CNN predicted healthy, you MUST structure your response with the following sections.
+CRITICAL: You MUST translate the section titles and all content into the SAME LANGUAGE as the user's question. For example, if the user asks in Arabic, use Arabic titles like (المرض:, نسبة الثقة:, الوصف:, العلاج:, الوقاية:).
 
-Disease: ${ctx.cnn.prediction.replace(/_/g, " ")}
-Confidence: [Confidence %]
-Description: [Short assessment that the plant appears healthy]
-Treatment: None required.
-Prevention: Maintain current healthy care routines.
+[Translated 'Disease']: ${ctx.cnn.prediction.replace(/_/g, " ")}
+[Translated 'Confidence']: [Confidence %]
+[Translated 'Description']: [Short assessment that the plant appears healthy]
+[Translated 'Treatment']: None required.
+[Translated 'Prevention']: Maintain current healthy care routines.
 
 Do NOT provide specific disease treatments or hallucinate diseases.`;
         }
         else {
             diagnosisFormatInstruction = `\n[FORMAT REQUIREMENT]
-Since the user uploaded an image for diagnosis, you MUST format your response EXACTLY like this:
+Since the user uploaded an image for diagnosis, you MUST structure your response with the following sections.
+CRITICAL: You MUST translate the section titles and all content into the SAME LANGUAGE as the user's question. For example, if the user asks in Arabic, use Arabic titles like (المرض:, نسبة الثقة:, الوصف:, العلاج:, الوقاية:).
 
-Disease: [Clean Disease Name, e.g. Apple Scab]
-Confidence: [Confidence %]
-Description: [Short description]
-Treatment:
+[Translated 'Disease']: [Clean Disease Name, e.g. Apple Scab]
+[Translated 'Confidence']: [Confidence %]
+[Translated 'Description']: [Short description]
+[Translated 'Treatment']:
 • [Step 1]
 • [Step 2]
-Prevention:
+[Translated 'Prevention']:
 • [Step 1]
 • [Step 2]
 
@@ -88,8 +90,22 @@ Do NOT use underscores in disease names (use "Apple Scab", not "Apple_Scab").`;
         ctx.lowConfidenceWarning ? `Warning: ${ctx.lowConfidenceWarning}` : "",
         ctx.ragContext ? `\nRetrieved Knowledge Context:\n${ctx.ragContext}` : "",
         ctx.communityContext ? `\nRetrieved Community Context:\n${ctx.communityContext}` : "",
-        `\n[CRITICAL INSTRUCTION]: You MUST write your final response entirely in ${languageName}. Never use Hindi, Chinese, or any other unrelated language unless explicitly requested. Do NOT include any source metadata, document IDs, relevance scores, or raw chunk text in your response.`,
-        diagnosisFormatInstruction
+        `\n[CRITICAL INSTRUCTION]: You MUST write your final response entirely in the SAME LANGUAGE as the user's question (e.g., if the user asks in Arabic, you MUST reply in Arabic). If the user's language is unclear, default to ${languageName}. Never use Hindi, Chinese, or any other unrelated language unless explicitly requested. Do NOT include any source metadata, document IDs, relevance scores, or raw chunk text in your response.`,
+        diagnosisFormatInstruction,
+        `\n[GARDEN EXTRACTION REQUIREMENT]
+If the user's query or the uploaded image indicates they are interacting with a plant (and NOT a disease), you MUST extract the plant's parameters into a JSON block at the very end of your response. Use the exact format below, ensuring the block is wrapped in \`\`\`json ... \`\`\`
+\`\`\`json
+{
+  "gardenExtraction": {
+    "name": "Suggest a friendly nickname or use the prediction",
+    "species": "The scientific name or prediction",
+    "location": "Suggest the best location (e.g., Indoor, Outdoor, Balcony, Living Room)",
+    "waterFrequencyDays": <number of days between watering, e.g. 3>,
+    "healthStatus": "Healthy or Needs Care"
+  }
+}
+\`\`\`
+Do NOT omit this JSON block if the mode is plant identification.`
     ]
         .filter(Boolean)
         .join("\n");

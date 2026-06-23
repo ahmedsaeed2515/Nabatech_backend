@@ -1,8 +1,9 @@
 import { Request, Response } from "express";
 import AiCallLog from "../models/ai_call_log_model";
-import { getAiSettings, redactAiSettings, updateAiSettings } from "../services/ai/ai_config_service";
+import { getAiSettings, redactAiSettings, updateAiSettings, clearSettingsCache } from "../services/ai/ai_config_service";
 import { askLlm } from "../services/ai/llm_provider";
 import { retrieveRagChunks } from "../services/ai/rag_provider";
+import { askHuggingFaceIntegrated, HfMode } from "../services/ai/hf_integrated_provider";
 import { orchestrateDiagnosis } from "../services/ai/ai_orchestrator_service";
 import { sanitizeErrorMessage } from "../services/ai/ai_errors";
 
@@ -107,4 +108,146 @@ export const getAdminAiLogs = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: "Failed to fetch AI logs" });
   }
 };
+
+// ─── AI Mode Switching ────────────────────────────────────────────────────────
+
+const VALID_MODES = ["rag_openai", "hf_grok", "hf_v8", "hf_v62"] as const;
+type AiMode = typeof VALID_MODES[number];
+
+/**
+ * PATCH /api/admin/ai-settings/mode
+ * تحديث ترتيب وأولوية أوضاع الذكاء الاصطناعي بشكل فوري
+ * Body: { aiModePriority: ["rag_openai", "hf_grok", ...] }
+ */
+export const patchAiMode = async (req: Request, res: Response) => {
+  try {
+    const { aiModePriority } = req.body || {};
+    if (!Array.isArray(aiModePriority) || aiModePriority.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: `aiModePriority must be a non-empty array of valid modes.`,
+      });
+    }
+
+    const invalidModes = aiModePriority.filter(m => !VALID_MODES.includes(m as AiMode));
+    if (invalidModes.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid modes in priority list: ${invalidModes.join(", ")}. Must be one of: ${VALID_MODES.join(", ")}`,
+      });
+    }
+
+    // تحديث في قاعدة البيانات
+    await updateAiSettings({ aiModePriority } as any, (req as any)?.user?.id);
+
+    // مسح الـ Cache الفوري لضمان قراءة الوضع الجديد في الطلب القادم
+    clearSettingsCache();
+
+    console.log(`[AI_MODE] Priority updated to: [${aiModePriority.join(", ")}] by user: ${(req as any)?.user?.id || "admin"}`);
+
+    return res.status(200).json({
+      success: true,
+      message: `AI mode priority updated successfully`,
+      aiModePriority,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: sanitizeErrorMessage(error) || "Failed to update AI mode priority",
+    });
+  }
+};
+
+/**
+ * POST /api/admin/ai-settings/test-mode
+ * اختبار أي وضع بدون تغيير الوضع الحالي للنظام
+ * Body: { mode: AiMode, question: string }
+ */
+export const testAiMode = async (req: Request, res: Response) => {
+  const t0 = Date.now();
+  try {
+    const { mode, question = "What are the symptoms of tomato early blight?" } = req.body || {};
+
+    if (!VALID_MODES.includes(mode as AiMode)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid mode. Must be one of: ${VALID_MODES.join(", ")}`,
+      });
+    }
+
+    if (typeof question !== "string" || question.trim().length === 0 || question.length > 1000) {
+      return res.status(400).json({ success: false, message: "Question must be 1–1000 characters" });
+    }
+
+    const settings = await getAiSettings();
+
+    // rag_openai: اختبار الـ RAG + LLM بشكل مباشر
+    if (mode === "rag_openai") {
+      let ragChunks = 0;
+      let llmAnswer = "";
+      let ragError = "";
+      let llmError = "";
+
+      try {
+        const ragResult = await retrieveRagChunks(settings, "early blight", question, 3);
+        ragChunks = ragResult.chunks.length;
+        const llmResult = await askLlm(settings, question, "llm", []);
+        llmAnswer = llmResult.message.slice(0, 500);
+      } catch (e) {
+        ragError = sanitizeErrorMessage(e) || "RAG/LLM failed";
+      }
+
+      return res.status(200).json({
+        success: !ragError && !llmError,
+        mode,
+        answer: llmAnswer || ragError || llmError,
+        ragChunks,
+        latencyMs: Date.now() - t0,
+        error: ragError || llmError || undefined,
+      });
+    }
+
+    // HF modes: اختبار الـ HF endpoint مباشرة
+    const hfMode = mode as HfMode;
+    const hf = (settings as any).hfIntegrated || {};
+    const endpointMap: Record<HfMode, string> = {
+      hf_grok: hf.grokEndpointUrl || "",
+      hf_v8:   hf.v8EndpointUrl   || "",
+      hf_v62:  hf.v62EndpointUrl  || "",
+    };
+
+    const result = await askHuggingFaceIntegrated(
+      hfMode,
+      endpointMap[hfMode],
+      question,
+      [],
+      hf.timeoutMs || 40_000
+    );
+
+    if (result.success) {
+      return res.status(200).json({
+        success: true,
+        mode,
+        answer: result.answer,
+        latencyMs: result.latencyMs,
+        provider: result.provider,
+      });
+    }
+
+    return res.status(200).json({
+      success: false,
+      mode,
+      error: result.error,
+      latencyMs: result.latencyMs,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      mode: req.body?.mode,
+      error: sanitizeErrorMessage(error) || "Test failed",
+      latencyMs: Date.now() - t0,
+    });
+  }
+};
+
 

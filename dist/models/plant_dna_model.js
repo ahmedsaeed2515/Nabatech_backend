@@ -12,7 +12,13 @@ const plantDnaSchema = new mongoose_1.default.Schema({
     maxTemp: { type: Number, required: true },
     lightReq: { type: String, required: true },
     waterFrequencyDays: { type: Number, required: true, default: 7 },
-    deletedAt: { type: Date, default: null }
+    deletedAt: { type: Date, default: null },
+    soilType: { type: String },
+    humidity: { type: String },
+    description: { type: String },
+    source: { type: String, default: 'MANUAL' },
+    verified: { type: Boolean, default: true },
+    generatedAt: { type: Date }
 }, {
     timestamps: true
 });

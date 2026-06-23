@@ -13,6 +13,7 @@ import { AGENT_TOOLS } from "./agent_tool_registry";
 import { MemoryManager } from "./memory_manager";
 import { getProviderManager } from "./ai_provider_manager";
 import { ExpertEscalationService } from "../expert_escalation_service";
+import { askHuggingFaceIntegrated, HfMode } from "./hf_integrated_provider";
 
 import { sanitizeModelOutput } from "../../utils/ai_sanitizer";
 
@@ -131,7 +132,75 @@ export const orchestrateChat = async (args: {
   const started = Date.now();
   const reqId = args.requestId || crypto.randomUUID();
   const sanitizedHistory = args.history.filter(msg => msg.role !== "system");
-  
+
+  // ── AI Priority Routing ───────────────────────────────────────────────────────────
+  const priorityList = Array.isArray((settings as any).aiModePriority) && (settings as any).aiModePriority.length > 0
+    ? (settings as any).aiModePriority
+    : ["rag_openai"];
+
+  let shouldRunRagOpenai = false;
+
+  for (const mode of priorityList) {
+    if (mode === "rag_openai") {
+      shouldRunRagOpenai = true;
+      console.log(`[MODE_ROUTING] Priority reached rag_openai, breaking to main pipeline...`);
+      break;
+    }
+
+    const hfMode = mode as HfMode;
+    const hf = (settings as any).hfIntegrated || {};
+    const endpointMap: Record<HfMode, string> = {
+      hf_grok: hf.grokEndpointUrl || "",
+      hf_v8:   hf.v8EndpointUrl   || "",
+      hf_v62:  hf.v62EndpointUrl  || "",
+    };
+    const hfTimeout = hf.timeoutMs || 40_000;
+
+    console.log(`[MODE_ROUTING] Attempting mode: ${hfMode} | question: "${args.question.slice(0, 60)}..."`);
+
+    const hfResult = await askHuggingFaceIntegrated(
+      hfMode,
+      endpointMap[hfMode],
+      args.question,
+      sanitizedHistory as any,
+      hfTimeout
+    );
+
+    if (hfResult.success) {
+      await logAiCall({
+        userId: args.userId,
+        requestId: reqId,
+        feature: "chat",
+        provider: hfMode,
+        status: "success",
+        latencyMs: hfResult.latencyMs,
+        inputMeta: { mode: hfMode, questionLength: args.question.length },
+        outputMeta: { responseLength: hfResult.answer.length },
+      });
+      return {
+        message: sanitizeLlmResponse(hfResult.answer),
+        source: hfMode as any,
+        provider: hfMode,
+        ragContext: undefined,
+        communityContext: undefined,
+      };
+    }
+
+    console.warn(`[MODE_ROUTING] ${hfMode} failed: ${hfResult.error}. Moving to next priority...`);
+  }
+
+  if (!shouldRunRagOpenai) {
+    // Exhausted the list and rag_openai was not in it.
+    return {
+      message: `All selected AI modes failed to respond. Please try again later or adjust your AI priorities in the dashboard.`,
+      source: "fallback" as any,
+      provider: priorityList[0] || "unknown",
+      ragContext: undefined,
+      communityContext: undefined,
+    };
+  }
+  // ── End AI Priority Routing ───────────────────────────────────────────────────────
+
   const isGreeting = /^(hello|hi|hey|greetings|good morning|good afternoon|good evening|howdy|what'?s up)\b/i.test(args.question.trim());
   const isSmallTalk = /^(how are you|who are you|thanks|thank you|bye|goodbye)\b/i.test(args.question.trim());
   const shouldSkipRag = isGreeting || isSmallTalk;
@@ -337,6 +406,7 @@ export const orchestrateAssistantRequest = async (args: {
       formData.append("file", args.fileBuffer!, { filename: args.originalName || "image.jpg" });
       const rawCnn = await runCnnDiagnosis(settings, formData, formData.getHeaders() as Record<string, string>);
       cnnResult = validateProviderOutput(rawCnn);
+      console.log("\n[DEBUG_RUNTIME] CNN Diagnosis Result:", JSON.stringify(cnnResult, null, 2));
       providerChain.push("cnn");
       console.log("[CNN_SUCCESS]");
     } catch (error) {
@@ -563,7 +633,9 @@ Output valid JSON in this exact format:
        try {
          const agentProvider = new AgentLlmProvider();
          const targetPlantName = predictedCrop || predictedDisease.replace(/_/g, " ").split(" ")[0];
-         const systemPrompt = prompt + `\n\nINSTRUCTION: Try to use the add_plant_to_garden tool to add "${targetPlantName}" to the user's garden. If the tool returns an error, IGNORE the error entirely and DO NOT mention it to the user. Proceed to summarize the diagnosis and care advice in the user's language.`;
+         console.log("\n[DEBUG_RUNTIME] targetPlantName extracted for tool:", targetPlantName);
+         const imageUrlParam = args.originalName ? ` and pass imageUrl "${args.originalName}"` : "";
+         const systemPrompt = prompt + `\n\nINSTRUCTION: Try to use the add_plant_to_garden tool to add "${targetPlantName}" to the user's garden${imageUrlParam}. If the tool returns an error, IGNORE the error entirely and DO NOT mention it to the user. Proceed to summarize the diagnosis and care advice in the user's language.`;
          
          const agentResult = await agentProvider.runAgentLoop(
            settings,

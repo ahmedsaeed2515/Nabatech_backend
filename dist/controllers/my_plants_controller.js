@@ -110,7 +110,7 @@ exports.getPlantById = getPlantById;
 const addPlant = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const { name, species, imageUrl, location, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications, clientOperationId } = req.body;
+        const { name, species, scientificName, imageUrl, location, room, notes, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications, confidenceScore, aiVerified, userApproved, clientOperationId, libraryProfile } = req.body;
         if (!name || !species || !location || waterFrequencyDays === undefined) {
             throw new app_error_1.AppError({ code: 'VALIDATION_FAILED', statusCode: 400, message: 'Name, species, location and water frequency are required' });
         }
@@ -134,11 +134,17 @@ const addPlant = async (req, res, next) => {
                                 id: plant._id,
                                 name: plant.name,
                                 species: plant.species,
+                                scientificName: plant.scientificName,
                                 imageUrl: plant.imageUrl,
                                 location: plant.location,
+                                room: plant.room,
+                                notes: plant.notes,
                                 waterFrequencyDays: plant.waterFrequencyDays,
                                 lastWatered: plant.lastWatered,
                                 plantLibraryId: plant.plantLibraryId,
+                                confidenceScore: plant.confidenceScore,
+                                aiVerified: plant.aiVerified,
+                                userApproved: plant.userApproved,
                                 enableNotifications: plant.enableNotifications,
                                 healthStatus: plant.healthStatus,
                                 createdAt: plant.createdAt,
@@ -166,16 +172,38 @@ const addPlant = async (req, res, next) => {
             user: userId,
             name: name.trim(),
             species: species.trim(),
+            scientificName: scientificName?.trim(),
             imageUrl: imageUrl || "",
             location,
+            room,
+            notes,
             waterFrequencyDays: Number(waterFrequencyDays),
             lastWatered: lastWatered ? new Date(lastWatered) : undefined,
             plantLibraryId: plantLibraryId || undefined,
+            confidenceScore,
+            aiVerified,
+            userApproved,
             enableNotifications: enableNotifications !== undefined ? enableNotifications : true,
             healthStatus: healthStatus || "excellent",
         });
+        const { TaskService } = require('../services/TaskService');
+        const taskService = new TaskService();
+        // Helper to parse frequency string like "Every 2 weeks" to days
+        const parseFrequencyDays = (freqStr, defaultDays) => {
+            if (!freqStr)
+                return defaultDays;
+            const str = freqStr.toLowerCase();
+            if (str.includes('week'))
+                return (parseInt(str.match(/\d+/)?.toString() || '1') * 7) || defaultDays;
+            if (str.includes('month'))
+                return (parseInt(str.match(/\d+/)?.toString() || '1') * 30) || defaultDays;
+            if (str.includes('day'))
+                return parseInt(str.match(/\d+/)?.toString() || '1') || defaultDays;
+            return defaultDays;
+        };
         if (plant.enableNotifications) {
             const nextDate = new Date(plant.lastWatered.getTime() + plant.waterFrequencyDays * 24 * 60 * 60 * 1000);
+            await taskService.createTask(userId, `Water ${plant.name}`, nextDate, plant._id.toString());
             await reminder_model_1.default.create({
                 user: userId,
                 plantId: plant._id,
@@ -184,16 +212,51 @@ const addPlant = async (req, res, next) => {
                 scheduledAt: nextDate,
                 enabled: true,
             });
+            // Auto-generate other tasks if libraryProfile exists
+            if (libraryProfile) {
+                if (libraryProfile.fertilizerRequirements) {
+                    const fertDays = parseFrequencyDays(libraryProfile.fertilizerRequirements, 30);
+                    const nextFertDate = new Date(Date.now() + fertDays * 24 * 60 * 60 * 1000);
+                    await taskService.createTask(userId, `Fertilize ${plant.name}`, nextFertDate, plant._id.toString());
+                    await reminder_model_1.default.create({
+                        user: userId, plantId: plant._id, title: `Fertilize ${plant.name}`, timeLabel: 'Auto', scheduledAt: nextFertDate, enabled: true
+                    });
+                }
+                if (libraryProfile.pruningFrequency) {
+                    const pruneDays = parseFrequencyDays(libraryProfile.pruningFrequency, 90);
+                    const nextPruneDate = new Date(Date.now() + pruneDays * 24 * 60 * 60 * 1000);
+                    await taskService.createTask(userId, `Prune ${plant.name}`, nextPruneDate, plant._id.toString());
+                    await reminder_model_1.default.create({
+                        user: userId, plantId: plant._id, title: `Prune ${plant.name}`, timeLabel: 'Auto', scheduledAt: nextPruneDate, enabled: true
+                    });
+                }
+                if (libraryProfile.harvestTime) {
+                    const harvestDays = parseFrequencyDays(libraryProfile.harvestTime, 120);
+                    const nextHarvestDate = new Date(Date.now() + harvestDays * 24 * 60 * 60 * 1000);
+                    await taskService.createTask(userId, `Harvest ${plant.name}`, nextHarvestDate, plant._id.toString());
+                    await reminder_model_1.default.create({
+                        user: userId, plantId: plant._id, title: `Harvest ${plant.name}`, timeLabel: 'Auto', scheduledAt: nextHarvestDate, enabled: true
+                    });
+                }
+            }
         }
         const result = {
             plant: {
                 id: plant._id,
                 name: plant.name,
                 species: plant.species,
+                scientificName: plant.scientificName,
                 imageUrl: plant.imageUrl,
                 location: plant.location,
+                room: plant.room,
+                notes: plant.notes,
                 waterFrequencyDays: plant.waterFrequencyDays,
                 lastWatered: plant.lastWatered,
+                plantLibraryId: plant.plantLibraryId,
+                confidenceScore: plant.confidenceScore,
+                aiVerified: plant.aiVerified,
+                userApproved: plant.userApproved,
+                enableNotifications: plant.enableNotifications,
                 healthStatus: plant.healthStatus,
                 createdAt: plant.createdAt,
             }

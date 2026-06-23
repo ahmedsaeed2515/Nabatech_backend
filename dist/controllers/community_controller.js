@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getActivityCenter = exports.getSavedPosts = exports.toggleSave = exports.deleteComment = exports.updateComment = exports.updatePost = exports.deletePost = exports.createComment = exports.getComments = exports.toggleLike = exports.createPost = exports.getTrendingPosts = exports.searchPosts = exports.getCommunityPosts = exports.formatRelativeTime = void 0;
+exports.getActivityCenter = exports.incrementPostView = exports.getSavedPosts = exports.toggleSave = exports.deleteComment = exports.updateComment = exports.updatePost = exports.deletePost = exports.createComment = exports.getComments = exports.toggleLike = exports.createPost = exports.getTrendingPosts = exports.searchPosts = exports.getCommunityPosts = exports.formatRelativeTime = void 0;
 const community_post_model_1 = __importDefault(require("../models/community_post_model"));
 const comment_model_1 = __importDefault(require("../models/comment_model"));
 const cloudinary_1 = __importDefault(require("../config/cloudinary"));
@@ -256,6 +256,7 @@ exports.getTrendingPosts = getTrendingPosts;
 // @route   POST /api/community/posts
 // @access  Private
 const createPost = async (req, res) => {
+    let uploadedImagePublicIds = [];
     try {
         const userId = req.user.id;
         const username = req.user.name;
@@ -276,11 +277,23 @@ const createPost = async (req, res) => {
         let imageUrl = "";
         let imagePublicId = "";
         const imageUrls = [];
-        if (req.file) {
+        if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+            for (const file of req.files) {
+                const uploadResult = await uploadToCloudinary(file.buffer, "community_posts");
+                imageUrls.push(uploadResult.url);
+                uploadedImagePublicIds.push(uploadResult.public_id);
+            }
+            if (imageUrls.length > 0) {
+                imageUrl = imageUrls[0];
+                imagePublicId = uploadedImagePublicIds[0];
+            }
+        }
+        else if (req.file) {
             const uploadResult = await uploadToCloudinary(req.file.buffer, "community_posts");
             imageUrl = uploadResult.url;
             imagePublicId = uploadResult.public_id;
             imageUrls.push(imageUrl);
+            uploadedImagePublicIds.push(imagePublicId);
         }
         const post = await community_post_model_1.default.create({
             author: userId,
@@ -294,14 +307,19 @@ const createPost = async (req, res) => {
             clientOperationId,
             linkedDiagnosis: linkedDiagnosisId || undefined,
         });
-        await community_audit_service_1.CommunityAuditService.logAction(userId, 'CREATE_POST', 'CommunityPost', post._id.toString(), { title: post.title.substring(0, 50), plantTag });
-        logger_1.logger.info('Created community post', {
-            event: 'community_feed_and_moderation.create_post',
-            requestId: req.id,
-            actorId: userId,
-            targetId: post._id,
-            payload: { title: post.title.substring(0, 50), plantTag }
-        });
+        try {
+            await community_audit_service_1.CommunityAuditService.logAction(userId, 'CREATE_POST', 'CommunityPost', post._id.toString(), { title: post.title.substring(0, 50), plantTag });
+            logger_1.logger.info('Created community post', {
+                event: 'community_feed_and_moderation.create_post',
+                requestId: req.id,
+                actorId: userId,
+                targetId: post._id,
+                payload: { title: post.title.substring(0, 50), plantTag }
+            });
+        }
+        catch (auditErr) {
+            logger_1.logger.error('Failed to log audit action for CREATE_POST', { error: auditErr, postId: post._id });
+        }
         const populatedPost = await community_post_model_1.default.findById(post._id)
             .populate("author", "name role")
             .populate("linkedDiagnosis", "diseaseNameEn confidence severity");
@@ -312,6 +330,10 @@ const createPost = async (req, res) => {
         });
     }
     catch (error) {
+        // Cloudinary Cleanup on Failure
+        for (const pubId of uploadedImagePublicIds) {
+            await cloudinary_1.default.uploader.destroy(pubId).catch(err => logger_1.logger.error('Cloudinary cleanup failed', err));
+        }
         if (error.code === 11000) {
             return res.status(409).json({ success: false, message: 'Conflict on create', code: 'CONFLICT' });
         }
@@ -586,6 +608,7 @@ exports.deletePost = deletePost;
 // @route   PUT /api/community/posts/:id
 // @access  Private
 const updatePost = async (req, res, next) => {
+    let uploadedImagePublicIds = [];
     try {
         const userId = req.user.id;
         const postId = req.params.id;
@@ -604,20 +627,40 @@ const updatePost = async (req, res, next) => {
         if (plantTag)
             post.plantTag = plantTag;
         post.lastEditedAt = new Date();
-        if (req.file) {
+        if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+            const urls = [];
+            for (const file of req.files) {
+                const uploadResult = await uploadToCloudinary(file.buffer, "community_posts");
+                urls.push(uploadResult.url);
+                uploadedImagePublicIds.push(uploadResult.public_id);
+            }
+            if (urls.length > 0) {
+                post.imagePath = urls[0];
+                post.imageUrls = urls;
+                // Should we update imagePublicId too? If there's multiple, maybe just the first one?
+                post.imagePublicId = uploadedImagePublicIds[0];
+            }
+        }
+        else if (req.file) {
             const uploadResult = await uploadToCloudinary(req.file.buffer, "community_posts");
             post.imagePath = uploadResult.url;
             post.imagePublicId = uploadResult.public_id;
             post.imageUrls = [uploadResult.url];
+            uploadedImagePublicIds.push(uploadResult.public_id);
         }
         await post.save();
-        await community_audit_service_1.CommunityAuditService.logAction(userId, 'UPDATE_POST', 'CommunityPost', postId, { plantTag: post.plantTag });
-        logger_1.logger.info('User updated community post', {
-            event: 'community_feed_and_moderation.update_post',
-            requestId: req.id,
-            actorId: userId,
-            targetId: postId,
-        });
+        try {
+            await community_audit_service_1.CommunityAuditService.logAction(userId, 'UPDATE_POST', 'CommunityPost', postId, { plantTag: post.plantTag });
+            logger_1.logger.info('User updated community post', {
+                event: 'community_feed_and_moderation.update_post',
+                requestId: req.id,
+                actorId: userId,
+                targetId: postId,
+            });
+        }
+        catch (auditErr) {
+            logger_1.logger.error('Failed to log audit action for UPDATE_POST', { error: auditErr, postId });
+        }
         const populatedPost = await community_post_model_1.default.findById(post._id)
             .populate("author", "name role")
             .populate("linkedDiagnosis", "diseaseNameEn confidence severity");
@@ -628,6 +671,10 @@ const updatePost = async (req, res, next) => {
         });
     }
     catch (error) {
+        // Cloudinary Cleanup on Failure
+        for (const pubId of uploadedImagePublicIds) {
+            await cloudinary_1.default.uploader.destroy(pubId).catch(err => logger_1.logger.error('Cloudinary cleanup failed', err));
+        }
         logger_1.logger.error('Failed to update post', { event: 'community_feed_and_moderation.update_post.error', error });
         res.status(500).json({ message: "Failed to update post" });
     }
@@ -820,6 +867,26 @@ const getSavedPosts = async (req, res) => {
     }
 };
 exports.getSavedPosts = getSavedPosts;
+// @desc    Increment post view count
+// @route   POST /api/community/posts/:id/view
+// @access  Private
+const incrementPostView = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const post = await community_post_model_1.default.findById(id);
+        if (!post) {
+            return res.status(404).json({ success: false, message: "Post not found" });
+        }
+        post.viewsCount = (post.viewsCount || 0) + 1;
+        await post.save();
+        res.status(200).json({ success: true, viewsCount: post.viewsCount });
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to increment view count', { error });
+        res.status(500).json({ message: "Failed to increment view count" });
+    }
+};
+exports.incrementPostView = incrementPostView;
 // @desc    Get user activity center timeline
 // @route   GET /api/community/activity
 // @access  Private

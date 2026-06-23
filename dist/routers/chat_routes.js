@@ -6,6 +6,7 @@ const chat_controller_1 = require("../controllers/chat_controller");
 const rate_limit_middleware_1 = require("../middlewares/rate_limit_middleware");
 const router = (0, express_1.Router)();
 router.post("/", rate_limit_middleware_1.aiRateLimiter, auth_middleware_1.protect, chat_controller_1.chatWithAI);
+router.post("/tool/approve", auth_middleware_1.protect, chat_controller_1.approveToolCall);
 router.post("/feedback", auth_middleware_1.protect, chat_controller_1.submitFeedback);
 router.get("/history", auth_middleware_1.protect, chat_controller_1.getChatHistory);
 router.get("/sessions", auth_middleware_1.protect, chat_controller_1.getChatSessions);

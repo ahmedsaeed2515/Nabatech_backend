@@ -61,7 +61,7 @@ export const broadcastNotification = async (req: Request, res: Response): Promis
     const users = await User.find(userQuery).select('_id fcmToken');
     
     if (!users || users.length === 0) {
-      res.status(404).json({ success: false, message: 'No users found for this audience' });
+      res.status(400).json({ success: false, message: 'No users found for this audience (or no users have push enabled)' });
       return;
     }
 
@@ -82,7 +82,7 @@ export const broadcastNotification = async (req: Request, res: Response): Promis
     }
 
     // 2. Filter tokens for push
-    const tokens = users.map(u => u.fcmToken).filter(token => token && token.trim() !== '');
+    const tokens = users.map(u => u.fcmToken).filter((token): token is string => typeof token === 'string' && token.trim() !== '');
 
     let successCount = 0;
     let failureCount = 0;

@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bulkImport = exports.deleteDisease = exports.updateDisease = exports.addDisease = exports.getDiseases = exports.exportPlants = exports.getPlantStats = exports.searchPlants = exports.publishPlant = exports.archivePlant = exports.getPlantById = exports.deletePlant = exports.updatePlant = exports.addPlant = exports.adminSearchPlants = exports.getPlants = void 0;
+exports.bulkImport = exports.deleteDisease = exports.updateDisease = exports.addDisease = exports.getDiseases = exports.getCategoryStats = exports.exportPlants = exports.getPlantStats = exports.searchPlants = exports.publishPlant = exports.archivePlant = exports.getPlantById = exports.deletePlant = exports.updatePlant = exports.addPlant = exports.adminSearchPlants = exports.getPlants = void 0;
 const plant_model_1 = __importDefault(require("../models/plant_model"));
 const disease_model_1 = __importDefault(require("../models/disease_model"));
 const logger_1 = __importDefault(require("../logger"));
@@ -65,7 +65,34 @@ const getPlants = async (req, res) => {
             ];
         }
         if (category) {
-            query.category = category;
+            const normalizedCat = category.toLowerCase().trim();
+            if (normalizedCat === "easy care" || normalizedCat === "easy_care" || normalizedCat === "سهولة العناية" || normalizedCat === "سهلة العناية") {
+                query.careLevel = "easy";
+            }
+            else if (normalizedCat === "indoor plants" || normalizedCat === "indoor plant" || normalizedCat === "indoor" || normalizedCat === "نباتات داخلية") {
+                query.category = "Indoor Plant";
+            }
+            else if (normalizedCat === "outdoor plants" || normalizedCat === "outdoor plant" || normalizedCat === "outdoor" || normalizedCat === "نباتات خارجية") {
+                query.category = "Outdoor Plant";
+            }
+            else if (normalizedCat === "flowering plants" || normalizedCat === "flowering" || normalizedCat === "flower" || normalizedCat === "flowers" || normalizedCat === "نباتات مزهرة") {
+                query.category = "Flower";
+            }
+            else if (normalizedCat === "herbs" || normalizedCat === "أعشاب" || normalizedCat === "مأكولات") {
+                query.category = "Herbs";
+            }
+            else if (normalizedCat === "succulent" || normalizedCat === "succulents") {
+                query.category = "Succulent";
+            }
+            else if (normalizedCat === "crops" || normalizedCat === "محاصيل") {
+                query.category = "Crops";
+            }
+            else if (normalizedCat === "all" || normalizedCat === "الكل") {
+                // do nothing
+            }
+            else {
+                query.category = category;
+            }
         }
         // Cursor pagination using ObjectId as opaque cursor
         let cursorQuery = {};
@@ -193,15 +220,20 @@ const updatePlant = async (req, res) => {
     try {
         logger_1.default.info({ event: "plant_library.updatePlant", params: req.params, body: req.body, user: req.user?.id });
         const { id } = req.params;
-        const { nameAr, nameEn, scientificName, imageUrl, category, careLevel, descriptionAr, descriptionEn, waterRequirements, lightRequirements, humidityRequirements, soilRequirements, fertilizerRequirements, growthRate, matureSize, temperatureRange, toxicityLevel, wateringFrequency, careInstructions, commonProblems, propagationMethod, nativeRegion, plantBenefits } = req.body;
+        const { nameAr, nameEn, scientificName, imageUrl, category, careLevel, descriptionAr, descriptionEn, waterRequirements, lightRequirements, humidityRequirements, soilRequirements, fertilizerRequirements, growthRate, matureSize, temperatureRange, toxicityLevel, wateringFrequency, careInstructions, commonProblems, propagationMethod, nativeRegion, plantBenefits, status } = req.body;
         const plant = await plant_model_1.default.findById(id);
         if (!plant) {
             return res.status(404).json({ success: false, message: "Plant not found" });
         }
-        if (nameAr !== undefined)
+        if (nameAr !== undefined) {
             plant.nameAr = nameAr;
-        if (nameEn !== undefined)
+            plant.normalizedNameAr = nameAr.replace(/[\u064B-\u065F\u0670]/g, '').trim();
+        }
+        if (nameEn !== undefined) {
             plant.nameEn = nameEn;
+            plant.slug = nameEn.toLowerCase().replace(/\s+/g, '-');
+            plant.normalizedNameEn = nameEn.toLowerCase();
+        }
         if (scientificName !== undefined)
             plant.scientificName = scientificName;
         if (imageUrl !== undefined)
@@ -244,6 +276,8 @@ const updatePlant = async (req, res) => {
             plant.nativeRegion = nativeRegion;
         if (plantBenefits !== undefined)
             plant.plantBenefits = plantBenefits;
+        if (status !== undefined)
+            plant.status = status;
         await plant.save();
         res.status(200).json({ success: true, data: plant });
     }
@@ -382,6 +416,29 @@ const exportPlants = async (req, res) => {
     }
 };
 exports.exportPlants = exportPlants;
+// @desc    Get counts of plants per category
+// @route   GET /api/plant-library/plants/categories/stats
+// @access  Public
+const getCategoryStats = async (req, res) => {
+    try {
+        const stats = await plant_model_1.default.aggregate([
+            { $match: { isLibraryItem: true, status: 'PUBLISHED' } },
+            { $group: { _id: "$category", count: { $sum: 1 } } }
+        ]);
+        // Format to a nice key-value object
+        const categoryCounts = {};
+        stats.forEach((item) => {
+            if (item._id) {
+                categoryCounts[item._id] = item.count;
+            }
+        });
+        res.status(200).json({ success: true, data: categoryCounts });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message || "Failed to fetch category stats" });
+    }
+};
+exports.getCategoryStats = getCategoryStats;
 // ==========================================
 // Diseases Controllers
 // ==========================================
@@ -443,6 +500,11 @@ const addDisease = async (req, res) => {
         if (!nameAr || !nameEn) {
             return res.status(400).json({ success: false, message: "nameAr and nameEn are required fields" });
         }
+        const slug = nameEn.toLowerCase().replace(/\s+/g, '-');
+        const existing = await disease_model_1.default.findOne({ slug });
+        if (existing) {
+            return res.status(409).json({ success: false, message: "Disease with this slug already exists" });
+        }
         const disease = await disease_model_1.default.create({
             nameAr,
             nameEn,
@@ -452,6 +514,11 @@ const addDisease = async (req, res) => {
             affectedPlantsCount,
             descriptionAr,
             descriptionEn,
+            slug,
+            normalizedNameEn: nameEn.toLowerCase(),
+            normalizedNameAr: nameAr.replace(/[^\u0600-\u06FF]/g, ''),
+            active: true,
+            createdBy: req.user?.id || '',
         });
         res.status(201).json({ success: true, data: disease });
     }
@@ -466,15 +533,20 @@ exports.addDisease = addDisease;
 const updateDisease = async (req, res) => {
     try {
         const { id } = req.params;
-        const { nameAr, nameEn, imageUrl, severity, type, affectedPlantsCount, descriptionAr, descriptionEn } = req.body;
+        const { nameAr, nameEn, imageUrl, severity, type, affectedPlantsCount, descriptionAr, descriptionEn, active } = req.body;
         const disease = await disease_model_1.default.findById(id);
         if (!disease) {
             return res.status(404).json({ success: false, message: "Disease not found" });
         }
-        if (nameAr !== undefined)
+        if (nameAr !== undefined) {
             disease.nameAr = nameAr;
-        if (nameEn !== undefined)
+            disease.normalizedNameAr = nameAr.replace(/[^\u0600-\u06FF]/g, '');
+        }
+        if (nameEn !== undefined) {
             disease.nameEn = nameEn;
+            disease.slug = nameEn.toLowerCase().replace(/\s+/g, '-');
+            disease.normalizedNameEn = nameEn.toLowerCase();
+        }
         if (imageUrl !== undefined)
             disease.imageUrl = imageUrl;
         if (severity !== undefined)
@@ -487,6 +559,8 @@ const updateDisease = async (req, res) => {
             disease.descriptionAr = descriptionAr;
         if (descriptionEn !== undefined)
             disease.descriptionEn = descriptionEn;
+        if (active !== undefined)
+            disease.active = active;
         await disease.save();
         res.status(200).json({ success: true, data: disease });
     }

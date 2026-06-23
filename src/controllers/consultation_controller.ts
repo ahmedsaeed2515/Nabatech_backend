@@ -74,3 +74,37 @@ export const bookConsultation = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to book consultation" });
   }
 };
+
+// @desc    Get my consultations
+// @route   GET /api/community/consultations/me
+// @access  Private
+export const getMyConsultations = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    
+    const consultations = await Consultation.find({
+      $or: [{ farmer: userId }, { expert: userId }]
+    })
+    .populate('expert', 'name')
+    .sort({ scheduledAt: 1 });
+
+    const items = consultations.map(consultation => ({
+      id: consultation._id.toString(),
+      expertId: consultation.expert?._id?.toString() || consultation.expert,
+      expertName: (consultation.expert as any)?.name || "Unknown",
+      scheduledAt: consultation.scheduledAt.toISOString(),
+      status: consultation.status,
+      createdAt: consultation.createdAt.toISOString()
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        items
+      }
+    });
+  } catch (error) {
+    logger.error('Failed to fetch consultations', { error });
+    res.status(500).json({ error: "Failed to fetch consultations" });
+  }
+};

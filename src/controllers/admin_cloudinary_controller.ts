@@ -56,7 +56,7 @@ export const getAssets = async (req: Request, res: Response) => {
     if (sort_by === 'bytes') {
       result = await cloudinary.search
         .expression(`resource_type:image OR resource_type:video OR resource_type:raw`)
-        .sort_by('bytes', direction as string)
+        .sort_by('bytes', direction as 'asc' | 'desc')
         .max_results(Number(max_results))
         .next_cursor(next_cursor as string || undefined)
         .execute();

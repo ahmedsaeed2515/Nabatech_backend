@@ -19,7 +19,7 @@ class CommunityService {
         this.notificationService = new NotificationService_1.NotificationService();
         this.userRepo = new UserRepository_1.UserRepository();
     }
-    async createPost(userId, content, imageUrl, plantTag = 'General', title) {
+    async createPost(userId, content, imageUrl, plantTag = 'General', title, createdByAI = false) {
         const user = await this.userRepo.findById(userId);
         const authorName = user?.name || user?.email || 'Unknown';
         return this.postRepo.create({
@@ -32,7 +32,8 @@ class CommunityService {
             likes: 0,
             commentsCount: 0,
             likedBy: [],
-            status: 'visible'
+            status: 'visible',
+            createdByAI
         });
     }
     async getPosts(page = 1, limit = 10) {

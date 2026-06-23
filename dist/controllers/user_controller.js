@@ -12,6 +12,7 @@ const my_plant_model_1 = __importDefault(require("../models/my_plant_model"));
 const reminder_model_1 = __importDefault(require("../models/reminder_model"));
 const comment_model_1 = __importDefault(require("../models/comment_model"));
 const diary_entry_model_1 = __importDefault(require("../models/diary_entry_model"));
+const expert_profile_model_1 = __importDefault(require("../models/expert_profile_model"));
 // @desc    Get all users (Admin/Management only)
 // @route   GET /api/users/
 // @access  Private
@@ -168,6 +169,16 @@ const updateUserRole = async (req, res) => {
         }
         user.role = role;
         await user.save();
+        if (role === 'expert') {
+            const existingProfile = await expert_profile_model_1.default.findOne({ userId: user._id });
+            if (!existingProfile) {
+                await expert_profile_model_1.default.create({
+                    userId: user._id,
+                    specialization: 'Agriculture Expert',
+                    bio: 'Verified Expert on Nabatech',
+                });
+            }
+        }
         res.status(200).json({
             success: true,
             message: "User role updated successfully",

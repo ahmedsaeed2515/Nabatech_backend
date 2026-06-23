@@ -96,7 +96,7 @@ export const getCollectionDetails = async (req: Request, res: Response) => {
     const db = mongoose.connection.db;
     if (!db) return res.status(500).json({ success: false, error: "Database not connected" });
 
-    const collectionName = req.params.name;
+    const collectionName = req.params.name as string;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
@@ -239,7 +239,7 @@ export const dropCollection = async (req: Request, res: Response) => {
     const db = mongoose.connection.db;
     if (!db) return res.status(500).json({ success: false, error: "Database not connected" });
 
-    const collectionName = req.params.name;
+    const collectionName = req.params.name as string;
     // VERY DANGEROUS - SUPER_ADMIN ONLY expected
     await db.dropCollection(collectionName);
 
@@ -257,7 +257,7 @@ export const purgeCollection = async (req: Request, res: Response) => {
     const db = mongoose.connection.db;
     if (!db) return res.status(500).json({ success: false, error: "Database not connected" });
 
-    const collectionName = req.params.name;
+    const collectionName = req.params.name as string;
     // VERY DANGEROUS - SUPER_ADMIN ONLY expected
     const collection = db.collection(collectionName);
     const result = await collection.deleteMany({});
