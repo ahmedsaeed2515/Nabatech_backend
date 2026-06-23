@@ -167,15 +167,22 @@ export const updatePlant = async (req: Request, res: Response) => {
   try {
     logger.info({ event: "plant_library.updatePlant", params: req.params, body: req.body, user: (req as any).user?.id });
     const { id } = req.params;
-    const { nameAr, nameEn, scientificName, imageUrl, category, careLevel, descriptionAr, descriptionEn, waterRequirements, lightRequirements, humidityRequirements, soilRequirements, fertilizerRequirements, growthRate, matureSize, temperatureRange, toxicityLevel, wateringFrequency, careInstructions, commonProblems, propagationMethod, nativeRegion, plantBenefits } = req.body;
+    const { nameAr, nameEn, scientificName, imageUrl, category, careLevel, descriptionAr, descriptionEn, waterRequirements, lightRequirements, humidityRequirements, soilRequirements, fertilizerRequirements, growthRate, matureSize, temperatureRange, toxicityLevel, wateringFrequency, careInstructions, commonProblems, propagationMethod, nativeRegion, plantBenefits, status } = req.body;
 
     const plant = await Plant.findById(id);
     if (!plant) {
       return res.status(404).json({ success: false, message: "Plant not found" });
     }
 
-    if (nameAr !== undefined) plant.nameAr = nameAr;
-    if (nameEn !== undefined) plant.nameEn = nameEn;
+    if (nameAr !== undefined) {
+      plant.nameAr = nameAr;
+      plant.normalizedNameAr = nameAr.replace(/[\u0600-\u06ff]/g, '');
+    }
+    if (nameEn !== undefined) {
+      plant.nameEn = nameEn;
+      plant.slug = nameEn.toLowerCase().replace(/\s+/g, '-');
+      plant.normalizedNameEn = nameEn.toLowerCase();
+    }
     if (scientificName !== undefined) plant.scientificName = scientificName;
     if (imageUrl !== undefined) plant.imageUrl = imageUrl;
     if (category !== undefined) plant.category = category;
@@ -197,6 +204,7 @@ export const updatePlant = async (req: Request, res: Response) => {
     if (propagationMethod !== undefined) plant.propagationMethod = propagationMethod;
     if (nativeRegion !== undefined) plant.nativeRegion = nativeRegion;
     if (plantBenefits !== undefined) plant.plantBenefits = plantBenefits;
+    if (status !== undefined) plant.status = status;
 
     await plant.save();
 
@@ -402,6 +410,12 @@ export const addDisease = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "nameAr and nameEn are required fields" });
     }
 
+    const slug = nameEn.toLowerCase().replace(/\s+/g, '-');
+    const existing = await Disease.findOne({ slug });
+    if (existing) {
+      return res.status(409).json({ success: false, message: "Disease with this slug already exists" });
+    }
+
     const disease = await Disease.create({
       nameAr,
       nameEn,
@@ -411,6 +425,11 @@ export const addDisease = async (req: Request, res: Response) => {
       affectedPlantsCount,
       descriptionAr,
       descriptionEn,
+      slug,
+      normalizedNameEn: nameEn.toLowerCase(),
+      normalizedNameAr: nameAr.replace(/[^\u0600-\u06FF]/g, ''),
+      active: true,
+      createdBy: (req as any).user?.id || '',
     });
 
     res.status(201).json({ success: true, data: disease });
@@ -425,21 +444,29 @@ export const addDisease = async (req: Request, res: Response) => {
 export const updateDisease = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { nameAr, nameEn, imageUrl, severity, type, affectedPlantsCount, descriptionAr, descriptionEn } = req.body;
+    const { nameAr, nameEn, imageUrl, severity, type, affectedPlantsCount, descriptionAr, descriptionEn, active } = req.body;
 
     const disease = await Disease.findById(id);
     if (!disease) {
       return res.status(404).json({ success: false, message: "Disease not found" });
     }
 
-    if (nameAr !== undefined) disease.nameAr = nameAr;
-    if (nameEn !== undefined) disease.nameEn = nameEn;
+    if (nameAr !== undefined) {
+      disease.nameAr = nameAr;
+      disease.normalizedNameAr = nameAr.replace(/[^\u0600-\u06FF]/g, '');
+    }
+    if (nameEn !== undefined) {
+      disease.nameEn = nameEn;
+      disease.slug = nameEn.toLowerCase().replace(/\s+/g, '-');
+      disease.normalizedNameEn = nameEn.toLowerCase();
+    }
     if (imageUrl !== undefined) disease.imageUrl = imageUrl;
     if (severity !== undefined) disease.severity = severity;
     if (type !== undefined) disease.type = type;
     if (affectedPlantsCount !== undefined) disease.affectedPlantsCount = affectedPlantsCount;
     if (descriptionAr !== undefined) disease.descriptionAr = descriptionAr;
     if (descriptionEn !== undefined) disease.descriptionEn = descriptionEn;
+    if (active !== undefined) disease.active = active;
 
     await disease.save();
 
