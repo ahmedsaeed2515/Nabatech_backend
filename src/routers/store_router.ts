@@ -6,7 +6,6 @@ const router = express.Router();
 
 // Public Catalog
 router.get("/catalog", storeController.getCatalog);
-router.get("/home-sections", storeController.getHomeSections);
 router.get("/catalog/:id", storeController.getProductDetails);
 
 // Protected Cart & Checkout

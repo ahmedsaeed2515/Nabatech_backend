@@ -10,6 +10,7 @@ import Message from "../models/message_model";
 import Expert from "../models/expert_model";
 import Comment from "../models/comment_model";
 import DiaryEntry from "../models/diary_entry_model";
+import ExpertProfile from "../models/expert_profile_model";
 // @desc    Get all users (Admin/Management only)
 // @route   GET /api/users/
 // @access  Private
@@ -179,6 +180,17 @@ export const updateUserRole = async (req: Request, res: Response) => {
 
     user.role = role as UserRole;
     await user.save();
+
+    if (role === 'expert') {
+      const existingProfile = await ExpertProfile.findOne({ userId: user._id });
+      if (!existingProfile) {
+        await ExpertProfile.create({
+          userId: user._id,
+          specialization: 'Agriculture Expert',
+          bio: 'Verified Expert on Nabatech',
+        });
+      }
+    }
 
     res.status(200).json({
       success: true,
