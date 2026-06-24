@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminUpdatePost = exports.restoreAdminCommunityComment = exports.deleteAdminCommunityComment = exports.restoreAdminCommunityPost = exports.deleteAdminCommunityPost = exports.getCommunityReputationStats = exports.adminUpdateComment = exports.adminModerateComment = exports.adminGetComments = exports.adminResolvePost = exports.adminModeratePost = exports.adminGetPosts = exports.getCommunityAnalytics = void 0;
+exports.getAdminLogs = exports.adminUpdatePost = exports.restoreAdminCommunityComment = exports.deleteAdminCommunityComment = exports.restoreAdminCommunityPost = exports.deleteAdminCommunityPost = exports.getCommunityReputationStats = exports.adminUpdateComment = exports.adminModerateComment = exports.adminGetComments = exports.adminResolvePost = exports.adminModeratePost = exports.adminGetPosts = exports.getCommunityAnalytics = void 0;
 const community_post_model_1 = __importDefault(require("../models/community_post_model"));
 const comment_model_1 = __importDefault(require("../models/comment_model"));
 const logger_1 = require("../utils/logger");
@@ -527,3 +527,29 @@ const adminUpdatePost = async (req, res) => {
     }
 };
 exports.adminUpdatePost = adminUpdatePost;
+const getAdminLogs = async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const skip = (page - 1) * limit;
+        const AdminActivityLog = (await Promise.resolve().then(() => __importStar(require('../models/admin_activity_log_model')))).default;
+        const logs = await AdminActivityLog.find()
+            .populate('adminId', 'name email')
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit);
+        const total = await AdminActivityLog.countDocuments();
+        res.status(200).json({
+            success: true,
+            data: logs,
+            total,
+            page,
+            totalPages: Math.ceil(total / limit)
+        });
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to get admin logs', { error });
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+exports.getAdminLogs = getAdminLogs;

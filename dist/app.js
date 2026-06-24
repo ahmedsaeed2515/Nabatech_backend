@@ -80,6 +80,10 @@ app.use((req, res, next) => {
     }
     next();
 });
+app.use((req, res, next) => {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    next();
+});
 app.use(express_1.default.json());
 app.use((0, helmet_1.default)());
 // Sanitize data against NoSQL query injection
