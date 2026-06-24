@@ -13,6 +13,8 @@ const reminder_model_1 = __importDefault(require("../models/reminder_model"));
 const comment_model_1 = __importDefault(require("../models/comment_model"));
 const diary_entry_model_1 = __importDefault(require("../models/diary_entry_model"));
 const expert_profile_model_1 = __importDefault(require("../models/expert_profile_model"));
+const follow_model_1 = __importDefault(require("../models/follow_model"));
+const user_reputation_model_1 = __importDefault(require("../models/user_reputation_model"));
 // @desc    Get all users (Admin/Management only)
 // @route   GET /api/users/
 // @access  Private
@@ -41,6 +43,13 @@ const getCurrentUser = async (req, res) => {
         if (!user) {
             return res.status(401).json({ message: "Not authorized, user not found" });
         }
+        // Fetch stats
+        const [followersCount, followingCount, rep, postsCount] = await Promise.all([
+            follow_model_1.default.countDocuments({ following: user._id }),
+            follow_model_1.default.countDocuments({ follower: user._id }),
+            user_reputation_model_1.default.findOne({ userId: user._id }),
+            community_post_model_1.default.countDocuments({ author: user._id })
+        ]);
         res.status(200).json({
             success: true,
             user: {
@@ -50,6 +59,16 @@ const getCurrentUser = async (req, res) => {
                 role: user.role,
                 phoneNumber: user.phoneNumber,
                 avatarUrl: user.avatarUrl,
+                coverUrl: user.coverUrl,
+                bio: user.bio,
+                accountType: user.accountType,
+                selectedCountry: user.selectedCountry,
+                preferences: user.preferences,
+                followersCount,
+                followingCount,
+                postsCount,
+                reputationScore: rep?.points || 0,
+                userLevel: rep?.level || user.level,
                 createdAt: user.createdAt
             }
         });
@@ -65,7 +84,7 @@ exports.getCurrentUser = getCurrentUser;
 const updateProfile = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { fullName, phoneNumber, selectedCountry, avatarUrl, preferences } = req.body;
+        const { fullName, phoneNumber, selectedCountry, avatarUrl, coverUrl, bio, accountType, preferences } = req.body;
         const user = await user_model_1.default.findById(userId);
         if (!user) {
             return res.status(404).json({ message: "User not found" });
@@ -85,6 +104,15 @@ const updateProfile = async (req, res) => {
         if (avatarUrl !== undefined) {
             user.avatarUrl = avatarUrl.trim();
         }
+        if (coverUrl !== undefined) {
+            user.coverUrl = coverUrl.trim();
+        }
+        if (bio !== undefined) {
+            user.bio = bio.trim();
+        }
+        if (accountType !== undefined) {
+            user.accountType = accountType.trim();
+        }
         if (preferences !== undefined) {
             if (!user.preferences) {
                 user.preferences = { theme: 'system', language: 'en', notificationsEnabled: true };
@@ -100,6 +128,13 @@ const updateProfile = async (req, res) => {
             }
         }
         await user.save();
+        // Fetch stats
+        const [followersCount, followingCount, rep, postsCount] = await Promise.all([
+            follow_model_1.default.countDocuments({ following: user._id }),
+            follow_model_1.default.countDocuments({ follower: user._id }),
+            user_reputation_model_1.default.findOne({ userId: user._id }),
+            community_post_model_1.default.countDocuments({ author: user._id })
+        ]);
         res.status(200).json({
             success: true,
             user: {
@@ -109,8 +144,16 @@ const updateProfile = async (req, res) => {
                 role: user.role,
                 phoneNumber: user.phoneNumber,
                 avatarUrl: user.avatarUrl,
+                coverUrl: user.coverUrl,
+                bio: user.bio,
+                accountType: user.accountType,
                 selectedCountry: user.selectedCountry,
                 preferences: user.preferences,
+                followersCount,
+                followingCount,
+                postsCount,
+                reputationScore: rep?.points || 0,
+                userLevel: rep?.level || user.level,
                 createdAt: user.createdAt,
             }
         });

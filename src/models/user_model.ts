@@ -35,6 +35,9 @@ export interface User extends Document {
   phoneNumber?: string;
   selectedCountry?: string;
   avatarUrl?: string;
+  coverUrl?: string;
+  bio?: string;
+  accountType?: string;
   preferences?: any;
   interests?: string[];
   password?: string;
@@ -43,6 +46,11 @@ export interface User extends Document {
   emailVerified: boolean;
   emailVerificationToken?: string;
   refreshToken?: string;
+  isSuspended: boolean;
+  isMuted: boolean;
+  isBanned: boolean;
+  suspensionReason?: string;
+  banReason?: string;
   emailVerificationTokenHash?: string;
   emailVerificationExpiresAt?: Date;
   createdAt: Date;
@@ -64,6 +72,9 @@ const userSchema = new mongoose.Schema<User>({
   phoneNumber:     { type: String, trim: true },
   selectedCountry: { type: String, trim: true },
   avatarUrl:       { type: String, trim: true },
+  coverUrl:        { type: String, trim: true },
+  bio:             { type: String, trim: true },
+  accountType:     { type: String, trim: true },
   preferences:     { type: mongoose.Schema.Types.Mixed, default: {} },
   interests:       [{ type: String }],
 
@@ -86,6 +97,11 @@ const userSchema = new mongoose.Schema<User>({
 
   // ── Email verification ────────────────────────────────────────────────────
   emailVerified:              { type: Boolean, default: false },
+  isSuspended:                { type: Boolean, default: false },
+  isMuted:                    { type: Boolean, default: false },
+  isBanned:                   { type: Boolean, default: false },
+  suspensionReason:           { type: String },
+  banReason:                  { type: String },
   emailVerificationTokenHash: { type: String, select: false },
   emailVerificationToken:     { type: String, select: false }, // legacy
   emailVerificationExpiresAt: { type: Date },

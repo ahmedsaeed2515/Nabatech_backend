@@ -36,6 +36,9 @@ const userSchema = new mongoose_1.default.Schema({
     phoneNumber: { type: String, trim: true },
     selectedCountry: { type: String, trim: true },
     avatarUrl: { type: String, trim: true },
+    coverUrl: { type: String, trim: true },
+    bio: { type: String, trim: true },
+    accountType: { type: String, trim: true },
     preferences: { type: mongoose_1.default.Schema.Types.Mixed, default: {} },
     interests: [{ type: String }],
     // ── Role / Level / Settings ───────────────────────────────────────────────
@@ -54,6 +57,11 @@ const userSchema = new mongoose_1.default.Schema({
     tokenVersion: { type: Number, default: 0 },
     // ── Email verification ────────────────────────────────────────────────────
     emailVerified: { type: Boolean, default: false },
+    isSuspended: { type: Boolean, default: false },
+    isMuted: { type: Boolean, default: false },
+    isBanned: { type: Boolean, default: false },
+    suspensionReason: { type: String },
+    banReason: { type: String },
     emailVerificationTokenHash: { type: String, select: false },
     emailVerificationToken: { type: String, select: false }, // legacy
     emailVerificationExpiresAt: { type: Date },

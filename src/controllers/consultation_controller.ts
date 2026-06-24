@@ -53,6 +53,17 @@ export const bookConsultation = async (req: Request, res: Response) => {
       status: 'pending'
     });
 
+    const NotificationService = (await import("../services/notification_service")).NotificationService;
+    NotificationService.sendNotification({
+      userId: expertId,
+      actorId: farmerId,
+      type: 'CONSULTATION_REQUEST',
+      entityId: consultation._id.toString(),
+      entityType: 'Consultation',
+      title: 'Consultation Request',
+      message: `${(req as any).user.name || 'A user'} requested a consultation with you.`
+    }).catch(e => logger.error('Error sending consultation notification', { error: e }));
+
     res.status(201).json({
       data: {
         consultation: {

@@ -11,6 +11,8 @@ import Expert from "../models/expert_model";
 import Comment from "../models/comment_model";
 import DiaryEntry from "../models/diary_entry_model";
 import ExpertProfile from "../models/expert_profile_model";
+import Follow from "../models/follow_model";
+import UserReputation from "../models/user_reputation_model";
 // @desc    Get all users (Admin/Management only)
 // @route   GET /api/users/
 // @access  Private
@@ -39,6 +41,14 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Not authorized, user not found" });
     }
 
+    // Fetch stats
+    const [followersCount, followingCount, rep, postsCount] = await Promise.all([
+      Follow.countDocuments({ following: user._id }),
+      Follow.countDocuments({ follower: user._id }),
+      UserReputation.findOne({ userId: user._id }),
+      CommunityPost.countDocuments({ author: user._id })
+    ]);
+
     res.status(200).json({
       success: true,
       user: {
@@ -48,6 +58,16 @@ export const getCurrentUser = async (req: Request, res: Response) => {
         role: user.role,
         phoneNumber: user.phoneNumber,
         avatarUrl: user.avatarUrl,
+        coverUrl: user.coverUrl,
+        bio: user.bio,
+        accountType: user.accountType,
+        selectedCountry: user.selectedCountry,
+        preferences: user.preferences,
+        followersCount,
+        followingCount,
+        postsCount,
+        reputationScore: rep?.points || 0,
+        userLevel: rep?.level || user.level,
         createdAt: user.createdAt
       }
     });
@@ -62,7 +82,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
 export const updateProfile = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const { fullName, phoneNumber, selectedCountry, avatarUrl, preferences } = req.body;
+    const { fullName, phoneNumber, selectedCountry, avatarUrl, coverUrl, bio, accountType, preferences } = req.body;
 
     const user = await User.findById(userId);
     if (!user) {
@@ -87,6 +107,18 @@ export const updateProfile = async (req: Request, res: Response) => {
     if (avatarUrl !== undefined) {
       user.avatarUrl = avatarUrl.trim();
     }
+    
+    if (coverUrl !== undefined) {
+      user.coverUrl = coverUrl.trim();
+    }
+    
+    if (bio !== undefined) {
+      user.bio = bio.trim();
+    }
+    
+    if (accountType !== undefined) {
+      user.accountType = accountType.trim();
+    }
 
     if (preferences !== undefined) {
       if (!user.preferences) {
@@ -105,6 +137,14 @@ export const updateProfile = async (req: Request, res: Response) => {
 
     await user.save();
 
+    // Fetch stats
+    const [followersCount, followingCount, rep, postsCount] = await Promise.all([
+      Follow.countDocuments({ following: user._id }),
+      Follow.countDocuments({ follower: user._id }),
+      UserReputation.findOne({ userId: user._id }),
+      CommunityPost.countDocuments({ author: user._id })
+    ]);
+
     res.status(200).json({
       success: true,
       user: {
@@ -114,8 +154,16 @@ export const updateProfile = async (req: Request, res: Response) => {
         role: user.role,
         phoneNumber: user.phoneNumber,
         avatarUrl: user.avatarUrl,
+        coverUrl: user.coverUrl,
+        bio: user.bio,
+        accountType: user.accountType,
         selectedCountry: user.selectedCountry,
         preferences: user.preferences,
+        followersCount,
+        followingCount,
+        postsCount,
+        reputationScore: rep?.points || 0,
+        userLevel: rep?.level || user.level,
         createdAt: user.createdAt,
       }
     });

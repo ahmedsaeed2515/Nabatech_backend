@@ -17,9 +17,13 @@ import { CommunityNotificationController } from "../controllers/community_notifi
 import { voteOnPoll } from "../controllers/poll_controller";
 import { bookConsultation, getMyConsultations } from "../controllers/consultation_controller";
 
-import { getCommunityPosts, createPost, toggleLike, getComments, createComment, deletePost, updatePost, updateComment, deleteComment, searchPosts, getTrendingPosts, toggleSave, getSavedPosts, getActivityCenter, incrementPostView } from "../controllers/community_controller";
+import { getCommunityPosts, createPost, toggleLike, getComments, createComment, deletePost, updatePost, updateComment, deleteComment, searchPosts, getTrendingPosts, toggleSave, getSavedPosts, getActivityCenter } from "../controllers/community_controller";
+import { ReportController } from "../controllers/report_controller";
 
 const router = Router();
+
+// Reports
+router.post('/reports', protect, ReportController.createReport);
 
 // Activity Center
 router.get("/activity", protect, getActivityCenter);
@@ -27,7 +31,7 @@ router.get("/activity", protect, getActivityCenter);
 // Saved Posts
 router.get("/saved", protect, getSavedPosts);
 router.post("/posts/:id/save", protect, toggleSave);
-router.post("/posts/:id/view", protect, incrementPostView);
+
 
 
 

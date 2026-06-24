@@ -217,6 +217,34 @@ export const updateSpecialistOfferStatus = async (req: Request, res: Response) =
     offer.version += 1;
     await offer.save();
 
+    // Send notifications
+    try {
+      const NotificationService = (await import("../services/notification_service")).NotificationService;
+      if (status === 'accepted') {
+        await NotificationService.sendNotification({
+          userId: offer.specialist.toString(),
+          actorId: userId,
+          type: 'CONSULTATION_ACCEPTED',
+          entityId: offer._id.toString(),
+          entityType: 'Consultation', // General entity type, assuming SpecialistOffer falls under it
+          title: 'Offer Accepted',
+          message: `Your consultation offer has been accepted.`
+        });
+      } else if (status === 'rejected') {
+        await NotificationService.sendNotification({
+          userId: offer.specialist.toString(),
+          actorId: userId,
+          type: 'CONSULTATION_REJECTED',
+          entityId: offer._id.toString(),
+          entityType: 'Consultation',
+          title: 'Offer Rejected',
+          message: `Your consultation offer has been rejected.`
+        });
+      }
+    } catch (notifyErr) {
+      logger.error('Failed to send consultation accepted/rejected notification', { error: notifyErr });
+    }
+
     logger.info('Specialist offer status updated', {
       event: 'specialist_offers.update_status',
       requestId: (req as any).id,

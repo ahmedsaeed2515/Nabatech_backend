@@ -8,14 +8,19 @@ export interface ICommunityPost extends Document {
   content: string;
   likes: number;
   commentsCount: number;
+  sharesCount: number;
   imagePath?: string;
   imagePublicId?: string;
   imageUrls: string[];
-  viewsCount: number;
+  hashtags?: string[];
+  tags?: string[];
   isPinned: boolean;
   poll?: mongoose.Types.ObjectId;
   likedBy: mongoose.Types.ObjectId[];
   status: "visible" | "hidden" | "removed" | "resolved";
+  isHidden: boolean;
+  isLocked: boolean;
+  moderationStatus: "PENDING" | "UNDER_REVIEW" | "APPROVED" | "REMOVED";
   moderationReason?: string;
   moderationNotes?: string;
   moderatedBy?: mongoose.Types.ObjectId;
@@ -38,14 +43,19 @@ const communityPostSchema = new Schema<ICommunityPost>(
     content: { type: String, required: true },
     likes: { type: Number, default: 0 },
     commentsCount: { type: Number, default: 0 },
+    sharesCount: { type: Number, default: 0 },
     imagePath: { type: String, default: "" },
     imagePublicId: { type: String },
     imageUrls: [{ type: String }],
-    viewsCount: { type: Number, default: 0 },
+    hashtags: [{ type: String }],
+    tags: [{ type: String }],
     isPinned: { type: Boolean, default: false },
     poll: { type: Schema.Types.ObjectId, ref: "CommunityPoll" },
     likedBy: [{ type: Schema.Types.ObjectId, ref: "User" }],
     status: { type: String, enum: ["visible", "hidden", "removed", "resolved"], default: "visible" },
+    isHidden: { type: Boolean, default: false },
+    isLocked: { type: Boolean, default: false },
+    moderationStatus: { type: String, enum: ["PENDING", "UNDER_REVIEW", "APPROVED", "REMOVED"], default: "APPROVED" },
     moderationReason: { type: String },
     moderationNotes: { type: String },
     moderatedBy: { type: Schema.Types.ObjectId, ref: "User" },

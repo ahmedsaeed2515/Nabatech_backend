@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getActivityCenter = exports.incrementPostView = exports.getSavedPosts = exports.toggleSave = exports.deleteComment = exports.updateComment = exports.updatePost = exports.deletePost = exports.createComment = exports.getComments = exports.toggleLike = exports.createPost = exports.getTrendingPosts = exports.searchPosts = exports.getCommunityPosts = exports.formatRelativeTime = void 0;
+exports.getActivityCenter = exports.getSavedPosts = exports.toggleSave = exports.deleteComment = exports.updateComment = exports.updatePost = exports.deletePost = exports.createComment = exports.getComments = exports.toggleLike = exports.createPost = exports.getTrendingPosts = exports.searchPosts = exports.getCommunityPosts = exports.formatRelativeTime = void 0;
 const community_post_model_1 = __importDefault(require("../models/community_post_model"));
 const comment_model_1 = __importDefault(require("../models/comment_model"));
 const cloudinary_1 = __importDefault(require("../config/cloudinary"));
@@ -18,7 +18,7 @@ const saved_post_model_1 = __importDefault(require("../models/saved_post_model")
 // Helper function to upload buffer stream to Cloudinary
 const uploadToCloudinary = (fileBuffer, folderName) => {
     return new Promise((resolve, reject) => {
-        const stream = cloudinary_1.default.uploader.upload_stream({ folder: folderName }, (error, result) => {
+        const stream = cloudinary_1.default.uploader.upload_stream({ folder: folderName, resource_type: "auto" }, (error, result) => {
             if (error)
                 return reject(error);
             resolve({ url: result.secure_url, public_id: result.public_id });
@@ -77,7 +77,6 @@ const mapPostToDTO = async (post, userId) => {
         timeLabel: (0, exports.formatRelativeTime)(post.createdAt),
         likes: post.likes,
         comments: post.commentsCount,
-        viewsCount: post.viewsCount || 0,
         imagePath: post.imagePath || null,
         imageUrls: post.imageUrls || [],
         isLikedByMe,
@@ -316,9 +315,24 @@ const createPost = async (req, res) => {
                 targetId: post._id,
                 payload: { title: post.title.substring(0, 50), plantTag }
             });
+            // Notify followers
+            const mongoose = require('mongoose');
+            const Follow = mongoose.model('Follow');
+            const followers = await Follow.find({ following: new mongoose.Types.ObjectId(userId) });
+            for (const follow of followers) {
+                await notification_service_1.NotificationService.sendNotification({
+                    userId: follow.follower.toString(),
+                    actorId: userId,
+                    type: 'NEW_POST_FROM_FOLLOWING',
+                    entityId: post._id.toString(),
+                    entityType: 'CommunityPost',
+                    title: 'New Post',
+                    message: `${username} published a new post.`
+                });
+            }
         }
         catch (auditErr) {
-            logger_1.logger.error('Failed to log audit action for CREATE_POST', { error: auditErr, postId: post._id });
+            logger_1.logger.error('Failed to log audit action for CREATE_POST or notify followers', { error: auditErr, postId: post._id });
         }
         const populatedPost = await community_post_model_1.default.findById(post._id)
             .populate("author", "name role")
@@ -509,8 +523,9 @@ const createComment = async (req, res, next) => {
         if (!post) {
             return res.status(404).json({ success: false, message: "Post not found or unavailable", code: 'RESOURCE_NOT_FOUND' });
         }
+        let parentComment = null;
         if (parentId) {
-            const parentComment = await comment_model_1.default.findOne({ _id: parentId, post: postId });
+            parentComment = await comment_model_1.default.findOne({ _id: parentId, post: postId });
             if (!parentComment) {
                 return res.status(404).json({ success: false, message: "Parent comment not found", code: 'RESOURCE_NOT_FOUND' });
             }
@@ -529,15 +544,32 @@ const createComment = async (req, res, next) => {
         // Atomically increment comment count
         await community_post_model_1.default.updateOne({ _id: post._id }, { $inc: { commentsCount: 1 } });
         // Send Notification
-        notification_service_1.NotificationService.sendNotification({
-            userId: post.author.toString(),
-            actorId: userId,
-            type: 'COMMENT_POST',
-            entityId: comment._id.toString(),
-            entityType: 'CommentV2',
-            title: 'New Comment',
-            message: `${username} commented on your post "${post.title.substring(0, 20)}..."`
-        }).catch(e => logger_1.logger.error('Error sending comment notification', { error: e }));
+        if (parentId && parentComment) {
+            if (parentComment.author.toString() !== userId) {
+                notification_service_1.NotificationService.sendNotification({
+                    userId: parentComment.author.toString(),
+                    actorId: userId,
+                    type: 'REPLY_COMMENT',
+                    entityId: post._id.toString(),
+                    entityType: 'CommunityPost',
+                    title: 'New Reply',
+                    message: `${username} replied to your comment on "${post.title.substring(0, 20)}..."`
+                }).catch(e => logger_1.logger.error('Error sending reply notification', { error: e }));
+            }
+        }
+        else {
+            if (post.author.toString() !== userId) {
+                notification_service_1.NotificationService.sendNotification({
+                    userId: post.author.toString(),
+                    actorId: userId,
+                    type: 'COMMENT_POST',
+                    entityId: post._id.toString(),
+                    entityType: 'CommunityPost',
+                    title: 'New Comment',
+                    message: `${username} commented on your post "${post.title.substring(0, 20)}..."`
+                }).catch(e => logger_1.logger.error('Error sending comment notification', { error: e }));
+            }
+        }
         await community_audit_service_1.CommunityAuditService.logAction(userId, 'CREATE_COMMENT', 'Comment', comment._id.toString(), { postId: post._id.toString(), textLength: text.length });
         logger_1.logger.info('Created comment on post', {
             event: 'community_feed_and_moderation.create_comment',
@@ -867,26 +899,6 @@ const getSavedPosts = async (req, res) => {
     }
 };
 exports.getSavedPosts = getSavedPosts;
-// @desc    Increment post view count
-// @route   POST /api/community/posts/:id/view
-// @access  Private
-const incrementPostView = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const post = await community_post_model_1.default.findById(id);
-        if (!post) {
-            return res.status(404).json({ success: false, message: "Post not found" });
-        }
-        post.viewsCount = (post.viewsCount || 0) + 1;
-        await post.save();
-        res.status(200).json({ success: true, viewsCount: post.viewsCount });
-    }
-    catch (error) {
-        logger_1.logger.error('Failed to increment view count', { error });
-        res.status(500).json({ message: "Failed to increment view count" });
-    }
-};
-exports.incrementPostView = incrementPostView;
 // @desc    Get user activity center timeline
 // @route   GET /api/community/activity
 // @access  Private

@@ -2,21 +2,29 @@ import { Router } from 'express';
 import { protect, admin } from '../middlewares/auth_middleware';
 import { validateRequest } from '../middlewares/validate_request_middleware';
 import { adminCommunityQuerySchema, adminModerationSchema } from '../validation/community_schemas';
-import { adminGetPosts, adminModeratePost, adminResolvePost, adminGetComments, adminModerateComment, getCommunityAnalytics, getCommunityReputationStats, adminUpdatePost } from '../controllers/admin_community_controller';
+import { adminGetPosts, adminModeratePost, adminResolvePost, adminGetComments, adminModerateComment, getCommunityAnalytics, getCommunityReputationStats, adminUpdatePost, adminUpdateComment, deleteAdminCommunityPost, restoreAdminCommunityPost, deleteAdminCommunityComment, restoreAdminCommunityComment, getAdminLogs } from '../controllers/admin_community_controller';
 import { ReportController } from '../controllers/report_controller';
 
 const router = Router();
 
 router.get('/analytics', protect, admin, getCommunityAnalytics);
 router.get('/reputation-stats', protect, admin, getCommunityReputationStats);
+router.get('/logs', protect, admin, getAdminLogs);
 
 router.get('/posts', protect, admin, validateRequest(adminCommunityQuerySchema), adminGetPosts);
 router.patch('/posts/:id/moderation', protect, admin, validateRequest(adminModerationSchema), adminModeratePost);
 router.patch('/posts/:id/resolve', protect, admin, adminResolvePost);
 router.put('/posts/:id', protect, admin, adminUpdatePost);
+router.patch('/posts/:id', protect, admin, adminUpdatePost);
+router.delete('/posts/:id', protect, admin, deleteAdminCommunityPost);
+router.post('/posts/:id/restore', protect, admin, restoreAdminCommunityPost);
 
 router.get('/comments', protect, admin, validateRequest(adminCommunityQuerySchema), adminGetComments);
 router.patch('/comments/:id/moderation', protect, admin, validateRequest(adminModerationSchema), adminModerateComment);
+router.put('/comments/:id', protect, admin, adminUpdateComment);
+router.patch('/comments/:id', protect, admin, adminUpdateComment);
+router.delete('/comments/:id', protect, admin, deleteAdminCommunityComment);
+router.post('/comments/:id/restore', protect, admin, restoreAdminCommunityComment);
 
 // Reports
 router.get('/reports', protect, admin, ReportController.getReports);

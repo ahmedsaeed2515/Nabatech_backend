@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -203,6 +236,35 @@ const updateSpecialistOfferStatus = async (req, res) => {
             offer.cancelledAt = new Date();
         offer.version += 1;
         await offer.save();
+        // Send notifications
+        try {
+            const NotificationService = (await Promise.resolve().then(() => __importStar(require("../services/notification_service")))).NotificationService;
+            if (status === 'accepted') {
+                await NotificationService.sendNotification({
+                    userId: offer.specialist.toString(),
+                    actorId: userId,
+                    type: 'CONSULTATION_ACCEPTED',
+                    entityId: offer._id.toString(),
+                    entityType: 'Consultation', // General entity type, assuming SpecialistOffer falls under it
+                    title: 'Offer Accepted',
+                    message: `Your consultation offer has been accepted.`
+                });
+            }
+            else if (status === 'rejected') {
+                await NotificationService.sendNotification({
+                    userId: offer.specialist.toString(),
+                    actorId: userId,
+                    type: 'CONSULTATION_REJECTED',
+                    entityId: offer._id.toString(),
+                    entityType: 'Consultation',
+                    title: 'Offer Rejected',
+                    message: `Your consultation offer has been rejected.`
+                });
+            }
+        }
+        catch (notifyErr) {
+            logger_1.logger.error('Failed to send consultation accepted/rejected notification', { error: notifyErr });
+        }
         logger_1.logger.info('Specialist offer status updated', {
             event: 'specialist_offers.update_status',
             requestId: req.id,

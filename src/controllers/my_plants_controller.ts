@@ -369,17 +369,26 @@ export const deleteCloudinaryImage = async (imageUrl: string) => {
   if (!imageUrl || !imageUrl.includes('cloudinary.com')) return;
   try {
     const urlParts = imageUrl.split('/');
-    // e.g. https://res.cloudinary.com/cloud_name/image/upload/v12345/my_folder/my_image.jpg
+    // e.g. https://res.cloudinary.com/cloud/image/upload/v12345/folder/image.jpg
+    // or   https://res.cloudinary.com/cloud/image/upload/folder/image.jpg
     const uploadIndex = urlParts.indexOf('upload');
     if (uploadIndex === -1) return;
-    
-    // Everything after upload/vXXX/ is the public_id, minus extension
-    const pathAfterUpload = urlParts.slice(uploadIndex + 2).join('/');
-    const publicId = pathAfterUpload.split('.')[0];
-    
-    await cloudinary.uploader.destroy(publicId);
+
+    // Skip optional version segment (starts with 'v' followed by digits)
+    let startIndex = uploadIndex + 1;
+    if (urlParts[startIndex] && /^v\d+$/.test(urlParts[startIndex])) {
+      startIndex += 1;
+    }
+
+    // Everything from startIndex onward is the public_id minus file extension
+    const pathAfterUpload = urlParts.slice(startIndex).join('/');
+    const publicId = pathAfterUpload.replace(/\.[^/.]+$/, ''); // remove extension
+
+    if (publicId) {
+      await cloudinary.uploader.destroy(publicId);
+    }
   } catch (err) {
-    console.error("Failed to delete image from cloudinary:", err);
+    console.error('Failed to delete image from Cloudinary:', err);
   }
 };
 
@@ -490,7 +499,7 @@ export const uploadPlantImage = async (req: Request, res: Response, next: NextFu
 
     const imageUrl = await new Promise<string>((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
-        { folder: "my_plants" },
+        { folder: 'nabatech/my_plants', resource_type: 'image' },
         (error, result) => {
           if (error) return reject(error);
           resolve(result!.secure_url);

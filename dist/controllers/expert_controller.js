@@ -42,6 +42,7 @@ const user_model_1 = __importDefault(require("../models/user_model"));
 const community_post_model_1 = __importDefault(require("../models/community_post_model"));
 const app_error_1 = require("../utils/app_error");
 const community_controller_1 = require("./community_controller");
+const logger_1 = require("../utils/logger");
 // @desc    Get expert profile by userId
 // @route   GET /api/experts/:id
 // @access  Private
@@ -196,6 +197,16 @@ const resolveEscalation = async (req, res, next) => {
         escalation.expertResponse = response;
         escalation.expertId = adminId;
         await escalation.save();
+        const NotificationService = (await Promise.resolve().then(() => __importStar(require("../services/notification_service")))).NotificationService;
+        NotificationService.sendNotification({
+            userId: escalation.userId.toString(),
+            actorId: adminId,
+            type: 'EXPERT_REPLY',
+            entityId: escalation._id.toString(),
+            entityType: 'CommunityReport', // Using a generic type or add 'Escalation' to enum
+            title: 'Expert Reply',
+            message: `An expert has replied to your escalation.`
+        }).catch(e => logger_1.logger.error('Error sending expert reply notification', { error: e }));
         // Broadcast update via SSE
         broadcastEscalationEvent('resolved', escalation);
         res.status(200).json({

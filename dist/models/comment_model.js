@@ -40,6 +40,8 @@ const commentSchema = new mongoose_1.Schema({
     authorName: { type: String, required: true },
     text: { type: String, required: true },
     status: { type: String, enum: ["visible", "hidden", "removed"], default: "visible" },
+    isHidden: { type: Boolean, default: false },
+    isPinned: { type: Boolean, default: false },
     clientOperationId: { type: String, index: true },
     version: { type: Number, default: 0 },
     moderationReason: { type: String },

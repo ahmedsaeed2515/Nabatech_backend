@@ -6,6 +6,7 @@ import DiagnosisHistory from "../models/diagnosis_history_model";
 import CommunityPost from "../models/community_post_model";
 import CommentV2 from "../models/comment_v2_model";
 import mongoose from "mongoose";
+import { logger } from "../utils/logger";
 
 // Helper to log admin actions
 const logAction = async (adminId: string, action: string, targetUserId: string | null, details: any, targetUsers?: string[]) => {
@@ -85,7 +86,63 @@ export const getUsers = async (req: Request, res: Response) => {
       total
     });
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch users", error });
+    logger.error('Failed to fetch users', { error });
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const updateUserModeration = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { action, reason } = req.body;
+    const adminId = (req as any).user.id;
+
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    let updateData: any = {};
+    switch(action) {
+      case "suspend":
+        user.isSuspended = true;
+        user.suspensionReason = reason;
+        updateData = { isSuspended: true, suspensionReason: reason };
+        break;
+      case "unsuspend":
+        user.isSuspended = false;
+        user.suspensionReason = undefined;
+        updateData = { isSuspended: false };
+        break;
+      case "ban":
+        user.isBanned = true;
+        user.banReason = reason;
+        updateData = { isBanned: true, banReason: reason };
+        break;
+      case "unban":
+        user.isBanned = false;
+        user.banReason = undefined;
+        updateData = { isBanned: false };
+        break;
+      case "mute":
+        user.isMuted = true;
+        updateData = { isMuted: true };
+        break;
+      case "unmute":
+        user.isMuted = false;
+        updateData = { isMuted: false };
+        break;
+      default:
+        return res.status(400).json({ success: false, message: "Invalid action" });
+    }
+
+    await user.save();
+
+    const AdminActivityLogService = (await import('../services/admin_activity_log_service')).AdminActivityLogService;
+    await AdminActivityLogService.logAction(adminId, `USER_${action.toUpperCase()}`, user.id, "User", updateData);
+
+    res.status(200).json({ success: true, message: `User ${action} successful`, data: user });
+  } catch (error) {
+    logger.error('Failed to update user moderation', { error });
+    res.status(500).json({ message: 'Internal server error' });
   }
 };
 

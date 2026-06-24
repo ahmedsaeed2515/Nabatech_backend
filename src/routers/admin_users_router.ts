@@ -7,7 +7,8 @@ import {
   updateUserStatus, 
   softDeleteUser, 
   restoreUser, 
-  bulkAction 
+  bulkAction,
+  updateUserModeration
 } from "../controllers/admin_users_controller";
 
 const router = Router();
@@ -31,6 +32,9 @@ router.patch('/:id/status', updateUserStatus);
 
 // Route: /api/admin/users/:id/restore
 router.post('/:id/restore', restoreUser);
+
+// Route: /api/admin/users/:id/moderation
+router.patch('/:id/moderation', updateUserModeration);
 
 // Route: /api/admin/users/:id
 router.route('/:id')

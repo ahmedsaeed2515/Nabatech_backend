@@ -16,7 +16,7 @@ import SavedPost from "../models/saved_post_model";
 const uploadToCloudinary = (fileBuffer: Buffer, folderName: string): Promise<{ url: string, public_id: string }> => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder: folderName },
+      { folder: folderName, resource_type: "auto" },
       (error, result) => {
         if (error) return reject(error);
         resolve({ url: result!.secure_url, public_id: result!.public_id });
@@ -78,7 +78,6 @@ const mapPostToDTO = async (post: any, userId: string) => {
     timeLabel: formatRelativeTime(post.createdAt),
     likes: post.likes,
     comments: post.commentsCount,
-    viewsCount: post.viewsCount || 0,
     imagePath: post.imagePath || null,
     imageUrls: post.imageUrls || [],
     isLikedByMe,
@@ -341,8 +340,24 @@ export const createPost = async (req: Request, res: Response) => {
         targetId: post._id,
         payload: { title: post.title.substring(0, 50), plantTag }
       });
+
+      // Notify followers
+      const mongoose = require('mongoose');
+      const Follow = mongoose.model('Follow');
+      const followers = await Follow.find({ following: new mongoose.Types.ObjectId(userId) });
+      for (const follow of followers) {
+        await NotificationService.sendNotification({
+          userId: follow.follower.toString(),
+          actorId: userId,
+          type: 'NEW_POST_FROM_FOLLOWING',
+          entityId: post._id.toString(),
+          entityType: 'CommunityPost',
+          title: 'New Post',
+          message: `${username} published a new post.`
+        });
+      }
     } catch (auditErr) {
-      logger.error('Failed to log audit action for CREATE_POST', { error: auditErr, postId: post._id });
+      logger.error('Failed to log audit action for CREATE_POST or notify followers', { error: auditErr, postId: post._id });
     }
 
     const populatedPost = await CommunityPost.findById(post._id)
@@ -556,8 +571,9 @@ export const createComment = async (req: Request, res: Response, next: NextFunct
       return res.status(404).json({ success: false, message: "Post not found or unavailable", code: 'RESOURCE_NOT_FOUND' });
     }
 
+    let parentComment = null;
     if (parentId) {
-      const parentComment = await Comment.findOne({ _id: parentId, post: postId });
+      parentComment = await Comment.findOne({ _id: parentId, post: postId });
       if (!parentComment) {
         return res.status(404).json({ success: false, message: "Parent comment not found", code: 'RESOURCE_NOT_FOUND' });
       }
@@ -580,15 +596,31 @@ export const createComment = async (req: Request, res: Response, next: NextFunct
     await CommunityPost.updateOne({ _id: post._id }, { $inc: { commentsCount: 1 } });
 
     // Send Notification
-    NotificationService.sendNotification({
-      userId: post.author.toString(),
-      actorId: userId,
-      type: 'COMMENT_POST',
-      entityId: comment._id.toString(),
-      entityType: 'CommentV2',
-      title: 'New Comment',
-      message: `${username} commented on your post "${post.title.substring(0, 20)}..."`
-    }).catch(e => logger.error('Error sending comment notification', { error: e }));
+    if (parentId && parentComment) {
+      if (parentComment.author.toString() !== userId) {
+        NotificationService.sendNotification({
+          userId: parentComment.author.toString(),
+          actorId: userId,
+          type: 'REPLY_COMMENT',
+          entityId: post._id.toString(),
+          entityType: 'CommunityPost',
+          title: 'New Reply',
+          message: `${username} replied to your comment on "${post.title.substring(0, 20)}..."`
+        }).catch(e => logger.error('Error sending reply notification', { error: e }));
+      }
+    } else {
+      if (post.author.toString() !== userId) {
+        NotificationService.sendNotification({
+          userId: post.author.toString(),
+          actorId: userId,
+          type: 'COMMENT_POST',
+          entityId: post._id.toString(),
+          entityType: 'CommunityPost',
+          title: 'New Comment',
+          message: `${username} commented on your post "${post.title.substring(0, 20)}..."`
+        }).catch(e => logger.error('Error sending comment notification', { error: e }));
+      }
+    }
 
     await CommunityAuditService.logAction(userId, 'CREATE_COMMENT', 'Comment', comment._id.toString(), { postId: post._id.toString(), textLength: text.length });
     logger.info('Created comment on post', {
@@ -941,28 +973,6 @@ export const getSavedPosts = async (req: Request, res: Response) => {
   } catch (error) {
     logger.error('Failed to get saved posts', { error });
     res.status(500).json({ message: "Failed to get saved posts" });
-  }
-};
-
-// @desc    Increment post view count
-// @route   POST /api/community/posts/:id/view
-// @access  Private
-export const incrementPostView = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    
-    const post = await CommunityPost.findById(id);
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found" });
-    }
-
-    post.viewsCount = (post.viewsCount || 0) + 1;
-    await post.save();
-
-    res.status(200).json({ success: true, viewsCount: post.viewsCount });
-  } catch (error) {
-    logger.error('Failed to increment view count', { error });
-    res.status(500).json({ message: "Failed to increment view count" });
   }
 };
 

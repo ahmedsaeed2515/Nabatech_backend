@@ -370,17 +370,25 @@ const deleteCloudinaryImage = async (imageUrl) => {
         return;
     try {
         const urlParts = imageUrl.split('/');
-        // e.g. https://res.cloudinary.com/cloud_name/image/upload/v12345/my_folder/my_image.jpg
+        // e.g. https://res.cloudinary.com/cloud/image/upload/v12345/folder/image.jpg
+        // or   https://res.cloudinary.com/cloud/image/upload/folder/image.jpg
         const uploadIndex = urlParts.indexOf('upload');
         if (uploadIndex === -1)
             return;
-        // Everything after upload/vXXX/ is the public_id, minus extension
-        const pathAfterUpload = urlParts.slice(uploadIndex + 2).join('/');
-        const publicId = pathAfterUpload.split('.')[0];
-        await cloudinary_1.default.uploader.destroy(publicId);
+        // Skip optional version segment (starts with 'v' followed by digits)
+        let startIndex = uploadIndex + 1;
+        if (urlParts[startIndex] && /^v\d+$/.test(urlParts[startIndex])) {
+            startIndex += 1;
+        }
+        // Everything from startIndex onward is the public_id minus file extension
+        const pathAfterUpload = urlParts.slice(startIndex).join('/');
+        const publicId = pathAfterUpload.replace(/\.[^/.]+$/, ''); // remove extension
+        if (publicId) {
+            await cloudinary_1.default.uploader.destroy(publicId);
+        }
     }
     catch (err) {
-        console.error("Failed to delete image from cloudinary:", err);
+        console.error('Failed to delete image from Cloudinary:', err);
     }
 };
 exports.deleteCloudinaryImage = deleteCloudinaryImage;
@@ -481,7 +489,7 @@ const uploadPlantImage = async (req, res, next) => {
             return res.status(404).json({ success: false, message: "Plant not found" });
         }
         const imageUrl = await new Promise((resolve, reject) => {
-            const stream = cloudinary_1.default.uploader.upload_stream({ folder: "my_plants" }, (error, result) => {
+            const stream = cloudinary_1.default.uploader.upload_stream({ folder: 'nabatech/my_plants', resource_type: 'image' }, (error, result) => {
                 if (error)
                     return reject(error);
                 resolve(result.secure_url);

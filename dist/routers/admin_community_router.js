@@ -13,8 +13,15 @@ router.get('/posts', auth_middleware_1.protect, auth_middleware_1.admin, (0, val
 router.patch('/posts/:id/moderation', auth_middleware_1.protect, auth_middleware_1.admin, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.adminModerationSchema), admin_community_controller_1.adminModeratePost);
 router.patch('/posts/:id/resolve', auth_middleware_1.protect, auth_middleware_1.admin, admin_community_controller_1.adminResolvePost);
 router.put('/posts/:id', auth_middleware_1.protect, auth_middleware_1.admin, admin_community_controller_1.adminUpdatePost);
+router.patch('/posts/:id', auth_middleware_1.protect, auth_middleware_1.admin, admin_community_controller_1.adminUpdatePost);
+router.delete('/posts/:id', auth_middleware_1.protect, auth_middleware_1.admin, admin_community_controller_1.deleteAdminCommunityPost);
+router.post('/posts/:id/restore', auth_middleware_1.protect, auth_middleware_1.admin, admin_community_controller_1.restoreAdminCommunityPost);
 router.get('/comments', auth_middleware_1.protect, auth_middleware_1.admin, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.adminCommunityQuerySchema), admin_community_controller_1.adminGetComments);
 router.patch('/comments/:id/moderation', auth_middleware_1.protect, auth_middleware_1.admin, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.adminModerationSchema), admin_community_controller_1.adminModerateComment);
+router.put('/comments/:id', auth_middleware_1.protect, auth_middleware_1.admin, admin_community_controller_1.adminUpdateComment);
+router.patch('/comments/:id', auth_middleware_1.protect, auth_middleware_1.admin, admin_community_controller_1.adminUpdateComment);
+router.delete('/comments/:id', auth_middleware_1.protect, auth_middleware_1.admin, admin_community_controller_1.deleteAdminCommunityComment);
+router.post('/comments/:id/restore', auth_middleware_1.protect, auth_middleware_1.admin, admin_community_controller_1.restoreAdminCommunityComment);
 // Reports
 router.get('/reports', auth_middleware_1.protect, auth_middleware_1.admin, report_controller_1.ReportController.getReports);
 router.patch('/reports/:id/resolve', auth_middleware_1.protect, auth_middleware_1.admin, report_controller_1.ReportController.resolveReport);

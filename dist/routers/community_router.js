@@ -17,13 +17,15 @@ const community_notification_controller_1 = require("../controllers/community_no
 const poll_controller_1 = require("../controllers/poll_controller");
 const consultation_controller_1 = require("../controllers/consultation_controller");
 const community_controller_1 = require("../controllers/community_controller");
+const report_controller_1 = require("../controllers/report_controller");
 const router = (0, express_1.Router)();
+// Reports
+router.post('/reports', auth_middleware_1.protect, report_controller_1.ReportController.createReport);
 // Activity Center
 router.get("/activity", auth_middleware_1.protect, community_controller_1.getActivityCenter);
 // Saved Posts
 router.get("/saved", auth_middleware_1.protect, community_controller_1.getSavedPosts);
 router.post("/posts/:id/save", auth_middleware_1.protect, community_controller_1.toggleSave);
-router.post("/posts/:id/view", auth_middleware_1.protect, community_controller_1.incrementPostView);
 router.get("/posts", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.feedQuerySchema), community_controller_1.getCommunityPosts);
 router.get("/search", auth_middleware_1.protect, rate_limit_middleware_1.communitySearchLimiter, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.searchQuerySchema), community_controller_1.searchPosts);
 router.get("/trending", auth_middleware_1.protect, (0, validate_request_middleware_1.validateRequest)(community_schemas_1.trendingQuerySchema), community_controller_1.getTrendingPosts);

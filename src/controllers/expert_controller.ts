@@ -4,6 +4,7 @@ import User from '../models/user_model';
 import CommunityPost from '../models/community_post_model';
 import { AppError } from '../utils/app_error';
 import { formatRelativeTime } from './community_controller';
+import { logger } from '../utils/logger';
 
 // @desc    Get expert profile by userId
 // @route   GET /api/experts/:id
@@ -178,6 +179,17 @@ export const resolveEscalation = async (req: Request, res: Response, next: NextF
     escalation.expertResponse = response;
     escalation.expertId = adminId;
     await escalation.save();
+
+    const NotificationService = (await import("../services/notification_service")).NotificationService;
+    NotificationService.sendNotification({
+      userId: escalation.userId.toString(),
+      actorId: adminId,
+      type: 'EXPERT_REPLY',
+      entityId: escalation._id.toString(),
+      entityType: 'CommunityReport', // Using a generic type or add 'Escalation' to enum
+      title: 'Expert Reply',
+      message: `An expert has replied to your escalation.`
+    }).catch(e => logger.error('Error sending expert reply notification', { error: e }));
 
     // Broadcast update via SSE
     broadcastEscalationEvent('resolved', escalation);

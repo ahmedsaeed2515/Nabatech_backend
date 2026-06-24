@@ -8,13 +8,26 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const community_notification_model_1 = __importDefault(require("../models/community_notification_model"));
 const logger_1 = require("../utils/logger");
 class NotificationService {
-    /**
-     * Triggers a new community notification if the actor is not the target user.
-     */
     static async sendNotification(data) {
         try {
-            // Don't send notification to self
-            if (data.userId === data.actorId) {
+            // Don't send notification to self, unless it's a system-generated type like BADGE_EARNED
+            if (data.userId === data.actorId && !['BADGE_EARNED', 'EXPERT_LEVEL_UP'].includes(data.type)) {
+                return;
+            }
+            // Deduplication: check if an unread notification of the same type/actor/entity already exists
+            const existing = await community_notification_model_1.default.findOne({
+                userId: new mongoose_1.default.Types.ObjectId(data.userId),
+                actorId: new mongoose_1.default.Types.ObjectId(data.actorId),
+                type: data.type,
+                entityId: new mongoose_1.default.Types.ObjectId(data.entityId),
+                read: false
+            });
+            if (existing) {
+                // Just update the timestamp to bump it
+                existing.updatedAt = new Date();
+                existing.title = data.title;
+                existing.message = data.message;
+                await existing.save();
                 return;
             }
             const notification = new community_notification_model_1.default({

@@ -48,7 +48,7 @@ const communityNotificationSchema = new mongoose_1.Schema({
     },
     type: {
         type: String,
-        enum: ['LIKE_POST', 'COMMENT_POST', 'FOLLOW_USER', 'REPORT_RESOLVED', 'BADGE_EARNED', 'EXPERT_LEVEL_UP'],
+        enum: ['LIKE_POST', 'COMMENT_POST', 'REPLY_COMMENT', 'FOLLOW_USER', 'NEW_POST_FROM_FOLLOWING', 'REPORT_RESOLVED', 'BADGE_EARNED', 'EXPERT_LEVEL_UP', 'EXPERT_REPLY', 'CONSULTATION_REQUEST', 'CONSULTATION_ACCEPTED', 'CONSULTATION_REJECTED'],
         required: true,
     },
     entityId: {
@@ -57,7 +57,7 @@ const communityNotificationSchema = new mongoose_1.Schema({
     },
     entityType: {
         type: String,
-        enum: ['CommunityPost', 'CommentV2', 'User', 'CommunityReport'],
+        enum: ['CommunityPost', 'CommentV2', 'User', 'CommunityReport', 'Consultation', 'Badge'],
         required: true,
     },
     title: {

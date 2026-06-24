@@ -2,6 +2,7 @@ import { PostRepository } from '../repositories/PostRepository';
 import { CommentV2Repository } from '../repositories/CommentV2Repository';
 import { LikeV2Repository } from '../repositories/LikeV2Repository';
 import { NotificationService } from './NotificationService';
+import { NotificationService as CommunityNotificationService } from './notification_service';
 import { UserRepository } from '../repositories/UserRepository';
 import mongoose from 'mongoose';
 import { logger } from '../utils/logger';
@@ -24,7 +25,7 @@ export class CommunityService {
   async createPost(userId: string, content: string, imageUrl?: string, plantTag: string = 'General', title?: string, createdByAI: boolean = false) {
     const user = await this.userRepo.findById(userId);
     const authorName = user?.name || user?.email || 'Unknown';
-    return this.postRepo.create({
+    const post = await this.postRepo.create({
       author: new mongoose.Types.ObjectId(userId) as any,
       authorName,
       plantTag,
@@ -37,6 +38,28 @@ export class CommunityService {
       status: 'visible',
       createdByAI
     } as any);
+
+    // Notify followers
+    try {
+      // Import Follow model dynamically or assume it exists in models
+      const Follow = mongoose.model('Follow');
+      const followers = await Follow.find({ following: new mongoose.Types.ObjectId(userId) });
+      for (const follow of followers) {
+        await CommunityNotificationService.sendNotification({
+          userId: follow.follower.toString(),
+          actorId: userId,
+          type: 'NEW_POST_FROM_FOLLOWING',
+          entityId: post._id.toString(),
+          entityType: 'CommunityPost',
+          title: 'New Post',
+          message: `${authorName} published a new post.`
+        });
+      }
+    } catch (e) {
+      logger.error('Failed to notify followers for new post', e);
+    }
+
+    return post;
   }
 
   async getPosts(page: number = 1, limit: number = 10) {
@@ -77,6 +100,26 @@ export class CommunityService {
           post: postId as any
         });
         await this.postRepo.incrementLikes(postId);
+
+        // Send Notification
+        try {
+          const post = await this.postRepo.findById(postId);
+          const user = await this.userRepo.findById(userId);
+          if (post && user && post.author.toString() !== userId) {
+            await CommunityNotificationService.sendNotification({
+              userId: post.author.toString(),
+              actorId: userId,
+              type: 'LIKE_POST',
+              entityId: postId,
+              entityType: 'CommunityPost',
+              title: 'New Like',
+              message: `${user.name || 'Someone'} liked your post.`
+            });
+          }
+        } catch (e) {
+          logger.error('Failed to send LIKE_POST notification', e);
+        }
+
         return { liked: true };
       } catch (err: any) {
         if (err.code === 11000) {
@@ -101,19 +144,33 @@ export class CommunityService {
         const postOwner = await this.userRepo.findById(post.author.toString());
         const commenter = await this.userRepo.findById(userId);
         
-        if (postOwner && postOwner.fcmToken) {
-          // FIX [TASK-6.1]: Use user's real name instead of email
+        if (postOwner) {
           const commenterName = commenter?.name || commenter?.email?.split('@')[0] || 'Someone';
-          await this.notificationService.sendPushNotification(
-            postOwner.fcmToken,
-            {
-              notification: {
-                title: 'New Comment',
-                body: `${commenterName} commented on your post: "${content.substring(0, 50)}..."`
-              },
-              data: { type: 'NEW_COMMENT', postId: postId }
-            }
-          );
+
+          // 1. Send In-App Notification
+          await CommunityNotificationService.sendNotification({
+            userId: postOwner._id.toString(),
+            actorId: userId,
+            type: 'COMMENT_POST',
+            entityId: postId,
+            entityType: 'CommunityPost',
+            title: 'New Comment',
+            message: `${commenterName} commented on your post: "${content.substring(0, 50)}..."`
+          });
+
+          // 2. Send FCM Notification
+          if (postOwner.fcmToken) {
+            await this.notificationService.sendPushNotification(
+              postOwner.fcmToken,
+              {
+                notification: {
+                  title: 'New Comment',
+                  body: `${commenterName} commented on your post: "${content.substring(0, 50)}..."`
+                },
+                data: { type: 'NEW_COMMENT', postId: postId }
+              }
+            );
+          }
         }
       }
     } catch (err) {

@@ -125,13 +125,25 @@ export const getCommunityAnalytics = async (req: Request, res: Response) => {
 
 export const adminGetPosts = async (req: Request, res: Response) => {
   try {
-    const { cursor, limit, status, authorId } = req.query;
+    const { cursor, limit, status, authorId, search, filter } = req.query;
     const qLimit = limit ? parseInt(limit as string, 10) : 20;
 
     const query: any = {};
     if (status && status !== 'all') query.status = status;
     if (authorId) query.author = authorId;
     if (cursor) query._id = { $lt: cursor };
+    
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { content: { $regex: search, $options: "i" } }
+      ];
+    }
+    
+    if (filter === "pinned") query.isPinned = true;
+    if (filter === "hidden") query.isHidden = true;
+    if (filter === "locked") query.isLocked = true;
+    if (filter === "deleted") query.status = "removed";
 
     const posts = await CommunityPost.find(query)
       .sort({ _id: -1 })
@@ -308,6 +320,47 @@ export const adminModerateComment = async (req: Request, res: Response) => {
   }
 };
 
+export const adminUpdateComment = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    const adminId = (req as any).user.id;
+
+    const comment = await Comment.findById(id);
+    if (!comment) {
+      return res.status(404).json({ success: false, message: 'Comment not found', code: 'RESOURCE_NOT_FOUND' });
+    }
+
+    const allowedFields = ["text", "isHidden", "isPinned", "status"];
+    
+    allowedFields.forEach((field) => {
+      if (updateData[field] !== undefined) {
+        (comment as any)[field] = updateData[field];
+      }
+    });
+
+    comment.lastEditedAt = new Date();
+    comment.version += 1;
+
+    await comment.save();
+
+    const AdminActivityLogService = (await import('../services/admin_activity_log_service')).AdminActivityLogService;
+    await AdminActivityLogService.logAction(adminId, "COMMENT_UPDATED", comment.id, "Comment", updateData);
+
+    logger.info(`Admin updated comment ${id}`, {
+      event: 'community_feed_and_moderation.admin_update_comment',
+      requestId: (req as any).id,
+      actorId: adminId,
+      targetId: id
+    });
+
+    return res.status(200).json({ success: true, data: { comment } });
+  } catch (error) {
+    logger.error('Failed to update comment', { event: 'community_feed_and_moderation.admin_update_comment.error', error });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 export const getCommunityReputationStats = async (req: Request, res: Response) => {
   try {
     const [topContributor, mostFollowed, highestReputation, recentExperts, badgeDistribution] = await Promise.all([
@@ -353,15 +406,87 @@ export const getCommunityReputationStats = async (req: Request, res: Response) =
       }
     });
   } catch (error) {
-    logger.error('Failed to get community reputation stats', { event: 'community_feed_and_moderation.admin_reputation_stats.error', error });
-    res.status(500).json({ message: 'Internal server error' });
+    logger.error('Failed to get community reputation stats', { event: 'community_feed_and_moderation.admin_get_reputation_stats.error', error });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const deleteAdminCommunityPost = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const post = await CommunityPost.findById(id);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    post.status = "removed";
+    await post.save();
+
+    const AdminActivityLogService = (await import('../services/admin_activity_log_service')).AdminActivityLogService;
+    await AdminActivityLogService.logAction((req as any).user.id, "POST_DELETED", post.id, "CommunityPost");
+
+    res.status(200).json({ success: true, message: "Post deleted" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const restoreAdminCommunityPost = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const post = await CommunityPost.findById(id);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    post.status = "visible";
+    await post.save();
+
+    const AdminActivityLogService = (await import('../services/admin_activity_log_service')).AdminActivityLogService;
+    await AdminActivityLogService.logAction((req as any).user.id, "POST_RESTORED", post.id, "CommunityPost");
+
+    res.status(200).json({ success: true, message: "Post restored" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const deleteAdminCommunityComment = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const comment = await Comment.findById(id);
+    if (!comment) return res.status(404).json({ success: false, message: "Comment not found" });
+
+    comment.status = "removed";
+    await comment.save();
+
+    const AdminActivityLogService = (await import('../services/admin_activity_log_service')).AdminActivityLogService;
+    await AdminActivityLogService.logAction((req as any).user.id, "COMMENT_DELETED", comment.id, "Comment");
+
+    res.status(200).json({ success: true, message: "Comment deleted" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const restoreAdminCommunityComment = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const comment = await Comment.findById(id);
+    if (!comment) return res.status(404).json({ success: false, message: "Comment not found" });
+
+    comment.status = "visible";
+    await comment.save();
+
+    const AdminActivityLogService = (await import('../services/admin_activity_log_service')).AdminActivityLogService;
+    await AdminActivityLogService.logAction((req as any).user.id, "COMMENT_RESTORED", comment.id, "Comment");
+
+    res.status(200).json({ success: true, message: "Comment restored" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
 export const adminUpdatePost = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { title, content, likes } = req.body;
+    const updateData = req.body;
     const adminId = (req as any).user.id;
 
     const post = await CommunityPost.findById(id);
@@ -369,14 +494,27 @@ export const adminUpdatePost = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Post not found', code: 'RESOURCE_NOT_FOUND' });
     }
 
-    if (title !== undefined) post.title = title;
-    if (content !== undefined) post.content = content;
-    if (likes !== undefined) post.likes = likes;
+    const allowedFields = [
+      "title", "content", "plantTag", "imageUrls", "isPinned", "isHidden", 
+      "isLocked", "likes", "commentsCount", "sharesCount", "hashtags", "tags", "createdAt", "updatedAt", "status"
+    ];
+
+    allowedFields.forEach((field) => {
+      if (updateData[field] !== undefined) {
+        if ((field === "likes" || field === "commentsCount" || field === "sharesCount") && updateData[field] < 0) {
+          return; // Prevent negative metrics
+        }
+        (post as any)[field] = updateData[field];
+      }
+    });
 
     post.lastEditedAt = new Date();
     post.version += 1;
 
     await post.save();
+
+    const AdminActivityLogService = (await import('../services/admin_activity_log_service')).AdminActivityLogService;
+    await AdminActivityLogService.logAction(adminId, "POST_UPDATED", post.id, "CommunityPost", updateData);
 
     logger.info(`Admin updated post ${id}`, {
       event: 'community_feed_and_moderation.admin_update_post',
@@ -389,6 +527,34 @@ export const adminUpdatePost = async (req: Request, res: Response) => {
   } catch (error) {
     logger.error('Failed to update post', { event: 'community_feed_and_moderation.admin_update_post.error', error });
     return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const getAdminLogs = async (req: Request, res: Response) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+
+    const AdminActivityLog = (await import('../models/admin_activity_log_model')).default;
+    const logs = await AdminActivityLog.find()
+      .populate('adminId', 'name email')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+      
+    const total = await AdminActivityLog.countDocuments();
+    
+    res.status(200).json({
+      success: true,
+      data: logs,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit)
+    });
+  } catch (error) {
+    logger.error('Failed to get admin logs', { error });
+    res.status(500).json({ message: 'Internal server error' });
   }
 };
 
