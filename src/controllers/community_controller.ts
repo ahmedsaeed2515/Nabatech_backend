@@ -280,7 +280,7 @@ export const createPost = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
     const username = (req as any).user.name;
-    const { title, content, plantTag, clientOperationId, linkedDiagnosisId } = req.body;
+    const { title, content, plantTag, clientOperationId, linkedDiagnosisId, pollQuestion, pollOptions } = req.body;
 
     // Validation is mostly handled by Zod now, but idempotency check happens here
     if (clientOperationId) {
@@ -318,6 +318,29 @@ export const createPost = async (req: Request, res: Response) => {
       uploadedImagePublicIds.push(imagePublicId);
     }
 
+    let linkedPollId = undefined;
+
+    if (pollQuestion && pollOptions) {
+      const optionsArray = Array.isArray(pollOptions) ? pollOptions : [pollOptions];
+      if (optionsArray.length >= 2) {
+        const poll = await CommunityPoll.create({
+          question: pollQuestion.trim(),
+          totalVotes: 0,
+        });
+        linkedPollId = poll._id;
+
+        let sortOrder = 0;
+        for (const opt of optionsArray) {
+          await CommunityPollOption.create({
+            poll: poll._id,
+            text: opt.trim(),
+            votes: 0,
+            sortOrder: sortOrder++,
+          });
+        }
+      }
+    }
+
     const post = await CommunityPost.create({
       author: userId,
       authorName: username,
@@ -329,6 +352,7 @@ export const createPost = async (req: Request, res: Response) => {
       imageUrls,
       clientOperationId,
       linkedDiagnosis: linkedDiagnosisId || undefined,
+      poll: linkedPollId,
     });
 
     try {

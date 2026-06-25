@@ -8,6 +8,7 @@ import UserReputation from '../models/user_reputation_model';
 import Follow from '../models/follow_model';
 import SavedPost from '../models/saved_post_model';
 import CommunityAudit from '../models/community_audit_model';
+import User from '../models/user_model'; // Fix MissingSchemaError when populating author
 
 export const getCommunityAnalytics = async (req: Request, res: Response) => {
   try {
@@ -31,7 +32,8 @@ export const getCommunityAnalytics = async (req: Request, res: Response) => {
       CommunityPost.findOne({ status: 'visible' }).sort({ commentsCount: -1 }).populate('author', 'name'),
       // Most reported
       CommunityReport.aggregate([
-        { $group: { _id: "$reportedPost", count: { $sum: 1 } } },
+        { $match: { entityModel: 'CommunityPost' } },
+        { $group: { _id: "$reportedEntityId", count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 1 }
       ]),
