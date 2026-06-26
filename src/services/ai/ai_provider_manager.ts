@@ -29,9 +29,9 @@ class AiProviderManager {
 
   private determineProviderType(url: string, providerName: string): any {
     const p = providerName.toLowerCase();
-    // AgentRouter and Groq are disabled — skip their type detection to avoid routing to them
+    // AgentRouter is disabled — skip its type detection to avoid routing to it
     if (p.includes('agentrouter') || url.includes('agentrouter.org')) return null;
-    if (p.includes('groq') || url.includes('api.groq.com')) return null;
+    if (p.includes('groq') || url.includes('api.groq.com')) return 'generic_llm';
     if (p.includes('gemini') || url.includes('generativelanguage.googleapis')) return 'gemini';
     if (p.includes('anthropic')) return 'anthropic';
     if (p.includes('cohere')) return 'cohere';
@@ -61,8 +61,19 @@ class AiProviderManager {
 
     const errors: any[] = [];
     
-    // Sort providers: prefer fewer consecutive errors, then by priority
+    // Sort providers: enforce RAG+OpenAI first, Groq second, others next
     const sortedProviders = [...this.providers].sort((a, b) => {
+      const getWeight = (name: string) => {
+        const n = name.toLowerCase();
+        if (n.includes('openai') || n.includes('openrouter')) return 1;
+        if (n.includes('groq')) return 2;
+        return 3;
+      };
+
+      const wA = getWeight(a.providerName);
+      const wB = getWeight(b.providerName);
+      if (wA !== wB) return wA - wB;
+
       const errA = (this as any).consecutiveErrors?.[a.providerName] || 0;
       const errB = (this as any).consecutiveErrors?.[b.providerName] || 0;
       if (errA !== errB) return errA - errB;
@@ -87,9 +98,9 @@ class AiProviderManager {
       const apiKey = decryptSecret(provider.apiKeyEncrypted);
       const providerType = this.determineProviderType(provider.baseUrl, provider.providerName);
 
-      // Skip disabled provider types (AgentRouter, Groq)
+      // AgentRouter is disabled
       if (providerType === null) {
-        logger.warn(`[SKIP] Provider ${provider.providerName} is blocked (AgentRouter/Groq). Skipping.`);
+        logger.warn(`[SKIP] Provider ${provider.providerName} is blocked (AgentRouter). Skipping.`);
         continue;
       }
 

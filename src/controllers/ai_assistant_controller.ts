@@ -242,8 +242,24 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
       }
     }
 
-    const finalResponse = { success: true, ...result, imageUrl: imageUrl || undefined, uncertain: Boolean((result as any).lowConfidenceWarning) };
-    delete (finalResponse as any).ragContext;
+    const finalResponse: any = { success: true, ...result, imageUrl: imageUrl || undefined, uncertain: Boolean((result as any).lowConfidenceWarning) };
+    
+    // Clean up internal AI implementation details from the client response
+    delete finalResponse.ragContext;
+    delete finalResponse.communityContext;
+    delete finalResponse.providerChain;
+    delete finalResponse.lowConfidenceWarning;
+    delete finalResponse.provider;
+    delete finalResponse.source;
+    delete finalResponse.toolCalls;
+    
+    if (finalResponse.diagnosis) {
+       // Only expose the condition to the frontend
+       finalResponse.diagnosis = {
+         prediction: finalResponse.diagnosis.prediction,
+       };
+    }
+
     if (isSSE) {
       res.write(`data: ${JSON.stringify({ type: "result", data: finalResponse })}\n\n`);
       return res.end();

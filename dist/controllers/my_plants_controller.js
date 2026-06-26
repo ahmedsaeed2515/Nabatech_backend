@@ -59,10 +59,14 @@ const getMyPlants = async (req, res, next) => {
             totalPages: Math.ceil(total / limit),
             plants: plants.map(p => ({
                 id: p._id,
+                _id: p._id,
                 name: p.name,
                 species: p.species,
                 imageUrl: p.imageUrl,
                 location: p.location,
+                garden: p.garden,
+                zone: p.zone,
+                room: p.room,
                 waterFrequencyDays: p.waterFrequencyDays,
                 lastWatered: p.lastWatered,
                 healthStatus: p.healthStatus,
@@ -88,10 +92,14 @@ const getPlantById = async (req, res, next) => {
         return (0, api_response_1.ok)(res, {
             plant: {
                 id: plant._id,
+                _id: plant._id,
                 name: plant.name,
                 species: plant.species,
                 imageUrl: plant.imageUrl,
                 location: plant.location,
+                garden: plant.garden,
+                zone: plant.zone,
+                room: plant.room,
                 waterFrequencyDays: plant.waterFrequencyDays,
                 lastWatered: plant.lastWatered,
                 healthStatus: plant.healthStatus,
@@ -110,7 +118,7 @@ exports.getPlantById = getPlantById;
 const addPlant = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const { name, species, scientificName, imageUrl, location, room, notes, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications, confidenceScore, aiVerified, userApproved, clientOperationId, libraryProfile } = req.body;
+        const { name, species, scientificName, imageUrl, location, room, notes, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications, confidenceScore, aiVerified, userApproved, clientOperationId, libraryProfile, gardenId, zoneId } = req.body;
         if (!name || !species || !location || waterFrequencyDays === undefined) {
             throw new app_error_1.AppError({ code: 'VALIDATION_FAILED', statusCode: 400, message: 'Name, species, location and water frequency are required' });
         }
@@ -132,11 +140,14 @@ const addPlant = async (req, res, next) => {
                         const result = {
                             plant: {
                                 id: plant._id,
+                                _id: plant._id,
                                 name: plant.name,
                                 species: plant.species,
                                 scientificName: plant.scientificName,
                                 imageUrl: plant.imageUrl,
                                 location: plant.location,
+                                garden: plant.garden,
+                                zone: plant.zone,
                                 room: plant.room,
                                 notes: plant.notes,
                                 waterFrequencyDays: plant.waterFrequencyDays,
@@ -170,6 +181,8 @@ const addPlant = async (req, res, next) => {
         }
         const plant = await my_plant_model_1.default.create({
             user: userId,
+            garden: gardenId || undefined,
+            zone: zoneId || undefined,
             name: name.trim(),
             species: species.trim(),
             scientificName: scientificName?.trim(),
@@ -243,11 +256,14 @@ const addPlant = async (req, res, next) => {
         const result = {
             plant: {
                 id: plant._id,
+                _id: plant._id,
                 name: plant.name,
                 species: plant.species,
                 scientificName: plant.scientificName,
                 imageUrl: plant.imageUrl,
                 location: plant.location,
+                garden: plant.garden,
+                zone: plant.zone,
                 room: plant.room,
                 notes: plant.notes,
                 waterFrequencyDays: plant.waterFrequencyDays,
@@ -344,10 +360,14 @@ const updatePlant = async (req, res, next) => {
         return (0, api_response_1.ok)(res, {
             plant: {
                 id: plant._id,
+                _id: plant._id,
                 name: plant.name,
                 species: plant.species,
                 imageUrl: plant.imageUrl,
                 location: plant.location,
+                garden: plant.garden,
+                zone: plant.zone,
+                room: plant.room,
                 waterFrequencyDays: plant.waterFrequencyDays,
                 lastWatered: plant.lastWatered,
                 healthStatus: plant.healthStatus,

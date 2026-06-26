@@ -87,8 +87,11 @@ const chatWithAI = async (req, res) => {
         // ✅ FIX #1: Load authoritative conversation history from DB
         // This is the memory fix — the server always knows the full conversation,
         // even if the client forgot to send history (e.g., after app restart)
+        const tHistoryStart = performance.now();
         const dbHistory = await loadDbHistory(userId, conversationId, 20);
         const history = mergeHistory(dbHistory, clientHistory);
+        const tHistoryEnd = performance.now();
+        console.log(`[PERF] History Load & Merge: ${(tHistoryEnd - tHistoryStart).toFixed(2)}ms`);
         // Create a MongoDB Message log for user query
         await message_model_1.default.create({
             user: userId,
@@ -108,6 +111,7 @@ const chatWithAI = async (req, res) => {
         }
         let chatResult;
         try {
+            const tOrchStart = performance.now();
             chatResult = await (0, ai_orchestrator_service_1.orchestrateChat)({
                 userId,
                 requestId,
@@ -121,6 +125,8 @@ const chatWithAI = async (req, res) => {
                     }
                 }
             });
+            const tOrchEnd = performance.now();
+            console.log(`[PERF] Orchestrator: ${(tOrchEnd - tOrchStart).toFixed(2)}ms`);
         }
         catch (aiError) {
             // Record failed assistant response

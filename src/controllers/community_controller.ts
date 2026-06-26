@@ -172,23 +172,23 @@ export const searchPosts = async (req: Request, res: Response) => {
       query.plantTag = plantTag;
     }
 
+    let skip = 0;
     if (cursor) {
-      // In text search, cursor pagination by _id might conflict with text score sorting.
-      // For simplicity, we just filter by _id if cursor is provided and sort by _id
-      // For a production app, we'd use skip/limit or cursor on score.
-      query._id = { $lt: cursor };
+      skip = parseInt(cursor as string, 10);
+      if (isNaN(skip)) skip = 0;
     }
 
     let posts = await CommunityPost.find(query, { score: { $meta: "textScore" } })
       .populate("author", "name role")
       .populate("linkedDiagnosis", "diseaseNameEn confidence severity")
       .sort({ score: { $meta: "textScore" }, _id: -1 })
+      .skip(skip)
       .limit(qLimit + 1);
 
     const hasNextPage = posts.length > qLimit;
     if (hasNextPage) posts.pop();
 
-    const nextCursor = posts.length > 0 ? posts[posts.length - 1]._id : null;
+    const nextCursor = hasNextPage ? (skip + qLimit).toString() : null;
 
     const mappedPosts = await Promise.all(posts.map(p => mapPostToDTO(p, (req as any).user.id)));
 
@@ -215,8 +215,10 @@ export const getTrendingPosts = async (req: Request, res: Response) => {
     
     const query: any = { status: 'visible' };
 
+    let skip = 0;
     if (cursor) {
-      query._id = { $lt: cursor };
+      skip = parseInt(cursor as string, 10);
+      if (isNaN(skip)) skip = 0;
     }
 
     // We'll calculate a simple trending score sorting by recent high engagement.
@@ -244,6 +246,7 @@ export const getTrendingPosts = async (req: Request, res: Response) => {
         }
       },
       { $sort: { trendingScore: -1, _id: -1 } },
+      { $skip: skip },
       { $limit: qLimit + 1 }
     ]);
 
@@ -256,7 +259,7 @@ export const getTrendingPosts = async (req: Request, res: Response) => {
     const hasNextPage = posts.length > qLimit;
     if (hasNextPage) posts.pop();
 
-    const nextCursor = posts.length > 0 ? posts[posts.length - 1]._id : null;
+    const nextCursor = hasNextPage ? (skip + qLimit).toString() : null;
 
     const mappedPosts = await Promise.all(posts.map(p => mapPostToDTO(p, (req as any).user.id)));
 
@@ -301,22 +304,36 @@ export const createPost = async (req: Request, res: Response) => {
     let imagePublicId = "";
     const imageUrls: string[] = [];
     
+    const extractArray = (field: any): string[] => {
+      if (!field) return [];
+      if (Array.isArray(field)) return field;
+      try {
+        const parsed = JSON.parse(field);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+      return [field];
+    };
+    
+    imageUrls.push(...extractArray(req.body.existingImageUrls));
+    imageUrls.push(...extractArray(req.body['existingImageUrls[]']));
+
     if (req.files && Array.isArray(req.files) && req.files.length > 0) {
       for (const file of req.files) {
         const uploadResult = await uploadToCloudinary(file.buffer, "community_posts");
         imageUrls.push(uploadResult.url);
         uploadedImagePublicIds.push(uploadResult.public_id);
       }
-      if (imageUrls.length > 0) {
-        imageUrl = imageUrls[0];
-        imagePublicId = uploadedImagePublicIds[0];
-      }
     } else if (req.file) {
       const uploadResult = await uploadToCloudinary(req.file.buffer, "community_posts");
-      imageUrl = uploadResult.url;
-      imagePublicId = uploadResult.public_id;
-      imageUrls.push(imageUrl);
-      uploadedImagePublicIds.push(imagePublicId);
+      imageUrls.push(uploadResult.url);
+      uploadedImagePublicIds.push(uploadResult.public_id);
+    }
+
+    if (imageUrls.length > 0) {
+      imageUrl = imageUrls[0];
+      if (uploadedImagePublicIds.length > 0) {
+        imagePublicId = uploadedImagePublicIds[0];
+      }
     }
 
     let linkedPollId = undefined;
@@ -403,6 +420,18 @@ export const createPost = async (req: Request, res: Response) => {
     }
 
     if (error.code === 11000) {
+      if (req.body.clientOperationId) {
+        const existing = await CommunityPost.findOne({ author: (req as any).user.id, clientOperationId: req.body.clientOperationId })
+            .populate("author", "name role")
+            .populate("linkedDiagnosis", "diseaseNameEn confidence severity");
+        if (existing) {
+          const dto = await mapPostToDTO(existing, (req as any).user.id);
+          return res.status(201).json({
+            success: true,
+            data: { post: dto }
+          });
+        }
+      }
       return res.status(409).json({ success: false, message: 'Conflict on create', code: 'CONFLICT' });
     }
     logger.error('Failed to create post', { event: 'community_feed_and_moderation.create_post.error', error });
@@ -431,28 +460,30 @@ export const toggleLike = async (req: Request, res: Response) => {
     const shouldLike = wantsToLike !== undefined ? wantsToLike : !hasLiked;
     let liked = false;
 
-    if (!shouldLike && hasLiked) {
+    if (!shouldLike) {
       // Unlike atomically
-      await CommunityPost.updateOne(
-        { _id: postId },
+      await CommunityPost.findOneAndUpdate(
+        { _id: postId, likedBy: userId },
         { 
           $pull: { likedBy: userId },
           $inc: { likes: -1 }
         }
       );
-    } else if (shouldLike && !hasLiked) {
+      liked = false;
+    } else {
       // Like atomically
-      await CommunityPost.updateOne(
-        { _id: postId },
+      const result = await CommunityPost.findOneAndUpdate(
+        { _id: postId, likedBy: { $ne: userId } },
         { 
           $addToSet: { likedBy: userId },
           $inc: { likes: 1 }
-        }
+        },
+        { new: true }
       );
       liked = true;
 
       // Send Notification to post author if not liking own post
-      if (post.author.toString() !== userId) {
+      if (result && post.author.toString() !== userId) {
         NotificationService.sendNotification({
           userId: post.author.toString(),
           actorId: userId,
@@ -464,9 +495,6 @@ export const toggleLike = async (req: Request, res: Response) => {
           message: `${(req as any).user.name || 'Someone'} liked your post "${post.title.substring(0, 20)}..."`
         }).catch(e => logger.error('Error sending like notification', { error: e }));
       }
-    } else {
-      // No change needed, just return current state
-      liked = hasLiked;
     }
 
     // Fetch the updated post to get the true current count
@@ -679,6 +707,27 @@ export const createComment = async (req: Request, res: Response, next: NextFunct
     });
   } catch (error: any) {
     if (error.code === 11000) {
+      if (req.body.clientOperationId) {
+        const existing = await Comment.findOne({ author: (req as any).user.id, post: req.params.id, clientOperationId: req.body.clientOperationId }).populate('author', 'name role');
+        if (existing) {
+          const authorRole = (existing.author as any)?.role || "farmer";
+          return res.status(201).json({
+            success: true,
+            data: {
+              comment: {
+                id: existing._id,
+                author: { id: (existing.author as any)?._id || (req as any).user.id, name: existing.authorName },
+                authorRole,
+                content: existing.text,
+                createdAt: existing.createdAt.toISOString(),
+                isExpert: authorRole === "expert" || authorRole === "agronomist",
+                parentId: existing.parentId?.toString() || null,
+                replies: []
+              }
+            }
+          });
+        }
+      }
       return res.status(409).json({ success: false, message: 'Conflict on create', code: 'CONFLICT' });
     }
     if (error.name === 'ValidationError') {
@@ -707,6 +756,24 @@ export const deletePost = async (req: Request, res: Response, next: NextFunction
     }
 
     await CommunityPost.updateOne({ _id: postId }, { status: 'removed' });
+
+    // Delete images from Cloudinary
+    if (post.imageUrls && post.imageUrls.length > 0) {
+      for (const url of post.imageUrls) {
+        try {
+          const parts = url.split('/');
+          const publicIdWithExt = parts[parts.length - 1];
+          const publicId = 'community_posts/' + publicIdWithExt.split('.')[0];
+          await cloudinary.uploader.destroy(publicId);
+        } catch (err) {
+          logger.error('Failed to delete image from Cloudinary on post delete', { url, err });
+        }
+      }
+    } else if (post.imagePublicId) {
+      try {
+        await cloudinary.uploader.destroy(post.imagePublicId);
+      } catch (err) {}
+    }
 
     await CommunityAuditService.logAction(userId, 'DELETE_POST', 'CommunityPost', postId as string);
     logger.info('User deleted community post', {
@@ -747,25 +814,56 @@ export const updatePost = async (req: Request, res: Response, next: NextFunction
     if (plantTag) post.plantTag = plantTag;
     post.lastEditedAt = new Date();
 
+    let imageUrls: string[] = [];
+    const extractArray = (field: any): string[] => {
+      if (!field) return [];
+      if (Array.isArray(field)) return field;
+      try {
+        const parsed = JSON.parse(field);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+      return [field];
+    };
+
+    imageUrls.push(...extractArray(req.body.existingImageUrls));
+    imageUrls.push(...extractArray(req.body['existingImageUrls[]']));
+
+    const removedUrls = (post.imageUrls || []).filter(url => !imageUrls.includes(url));
+
     if (req.files && Array.isArray(req.files) && req.files.length > 0) {
-      const urls: string[] = [];
       for (const file of req.files) {
         const uploadResult = await uploadToCloudinary(file.buffer, "community_posts");
-        urls.push(uploadResult.url);
+        imageUrls.push(uploadResult.url);
         uploadedImagePublicIds.push(uploadResult.public_id);
-      }
-      if (urls.length > 0) {
-        post.imagePath = urls[0];
-        post.imageUrls = urls;
-        // Should we update imagePublicId too? If there's multiple, maybe just the first one?
-        post.imagePublicId = uploadedImagePublicIds[0];
       }
     } else if (req.file) {
       const uploadResult = await uploadToCloudinary(req.file.buffer, "community_posts");
-      post.imagePath = uploadResult.url;
-      post.imagePublicId = uploadResult.public_id;
-      post.imageUrls = [uploadResult.url];
+      imageUrls.push(uploadResult.url);
       uploadedImagePublicIds.push(uploadResult.public_id);
+    }
+
+    if (imageUrls.length > 0) {
+      post.imagePath = imageUrls[0];
+      post.imageUrls = imageUrls;
+      if (uploadedImagePublicIds.length > 0) {
+        post.imagePublicId = uploadedImagePublicIds[0];
+      }
+    } else {
+      post.imagePath = undefined;
+      post.imageUrls = [];
+      post.imagePublicId = undefined;
+    }
+
+    // Clean up orphaned Cloudinary images
+    for (const url of removedUrls) {
+      try {
+        const parts = url.split('/');
+        const publicIdWithExt = parts[parts.length - 1];
+        const publicId = 'community_posts/' + publicIdWithExt.split('.')[0];
+        await cloudinary.uploader.destroy(publicId);
+      } catch (err) {
+        logger.error('Failed to delete orphaned image from Cloudinary', { url, err });
+      }
     }
 
     await post.save();
@@ -867,10 +965,17 @@ export const deleteComment = async (req: Request, res: Response, next: NextFunct
       return res.status(403).json({ success: false, message: "Not authorized to delete this comment", code: 'FORBIDDEN' });
     }
 
-    comment.status = 'removed';
-    await comment.save();
+    const result = await Comment.findOneAndUpdate(
+      { _id: commentId, status: { $ne: 'removed' } },
+      { status: 'removed' },
+      { new: true }
+    );
 
-    await CommunityPost.updateOne({ _id: postId }, { $inc: { commentsCount: -1 } });
+    if (result) {
+      await CommunityPost.updateOne({ _id: postId }, { $inc: { commentsCount: -1 } });
+    } else {
+      return res.status(400).json({ success: false, message: "Comment already removed" });
+    }
 
     await CommunityAuditService.logAction(userId, 'DELETE_COMMENT', 'Comment', commentId as string);
     logger.info('User deleted comment', {
@@ -971,28 +1076,7 @@ export const getSavedPosts = async (req: Request, res: Response) => {
 
     const nextCursor = validSavedPosts.length > 0 ? validSavedPosts[validSavedPosts.length - 1]._id : null;
 
-    const mappedPosts = validSavedPosts.map(sp => {
-      const p = sp.post as any;
-      return {
-        id: p._id,
-        author: p.author?._id,
-        authorName: p.authorName,
-        authorRole: p.author?.role ?? "farmer",
-        plantTag: p.plantTag,
-        title: p.title,
-        content: p.content,
-        timeLabel: formatRelativeTime(p.createdAt),
-        likes: p.likes,
-        comments: p.commentsCount,
-        imagePath: p.imagePath,
-        liked: p.likedBy?.includes(userId) ?? false,
-        saved: true,
-        linkedDiagnosisId: p.linkedDiagnosis?._id?.toString(),
-        diagnosisDisease: p.linkedDiagnosis?.diseaseNameEn,
-        diagnosisConfidence: p.linkedDiagnosis?.confidence,
-        diagnosisSeverity: p.linkedDiagnosis?.severity,
-      };
-    });
+    const mappedPosts = await Promise.all(validSavedPosts.map(sp => mapPostToDTO(sp.post, userId)));
 
     res.status(200).json({
       success: true,

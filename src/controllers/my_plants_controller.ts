@@ -11,6 +11,13 @@ import crypto from "crypto";
 import { AppError } from "../utils/app_error";
 import { ok, created } from "../utils/api_response";
 
+const calculateNextWaterInDays = (lastWatered: Date | undefined, frequency: number): number => {
+  if (!lastWatered || frequency <= 0) return frequency || 0;
+  const diffTime = Date.now() - new Date(lastWatered).getTime();
+  const daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  return Math.max(0, frequency - daysElapsed);
+};
+
 // @desc    Get all plants of the user
 // @route   GET /api/my-plants
 // @access  Private
@@ -54,12 +61,17 @@ export const getMyPlants = async (req: Request, res: Response, next: NextFunctio
       totalPages: Math.ceil(total / limit),
       plants: plants.map(p => ({
         id: p._id,
+        _id: p._id,
         name: p.name,
         species: p.species,
         imageUrl: p.imageUrl,
         location: p.location,
+        garden: p.garden,
+        zone: p.zone,
+        room: p.room,
         waterFrequencyDays: p.waterFrequencyDays,
         lastWatered: p.lastWatered,
+        nextWaterInDays: calculateNextWaterInDays(p.lastWatered, p.waterFrequencyDays),
         healthStatus: p.healthStatus,
         createdAt: p.createdAt,
       })),
@@ -84,12 +96,17 @@ export const getPlantById = async (req: Request, res: Response, next: NextFuncti
     return ok(res, {
       plant: {
         id: plant._id,
+        _id: plant._id,
         name: plant.name,
         species: plant.species,
         imageUrl: plant.imageUrl,
         location: plant.location,
+        garden: plant.garden,
+        zone: plant.zone,
+        room: plant.room,
         waterFrequencyDays: plant.waterFrequencyDays,
         lastWatered: plant.lastWatered,
+        nextWaterInDays: calculateNextWaterInDays(plant.lastWatered, plant.waterFrequencyDays),
         healthStatus: plant.healthStatus,
         createdAt: plant.createdAt,
       }
@@ -105,7 +122,7 @@ export const getPlantById = async (req: Request, res: Response, next: NextFuncti
 export const addPlant = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = (req as any).user.id;
-    const { name, species, scientificName, imageUrl, location, room, notes, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications, confidenceScore, aiVerified, userApproved, clientOperationId, libraryProfile } = req.body;
+    const { name, species, scientificName, imageUrl, location, room, notes, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications, confidenceScore, aiVerified, userApproved, clientOperationId, libraryProfile, gardenId, zoneId } = req.body;
 
     if (!name || !species || !location || waterFrequencyDays === undefined) {
       throw new AppError({ code: 'VALIDATION_FAILED', statusCode: 400, message: 'Name, species, location and water frequency are required' });
@@ -132,15 +149,19 @@ export const addPlant = async (req: Request, res: Response, next: NextFunction) 
             const result = {
               plant: {
                 id: plant._id,
+                _id: plant._id,
                 name: plant.name,
                 species: plant.species,
                 scientificName: plant.scientificName,
                 imageUrl: plant.imageUrl,
                 location: plant.location,
+                garden: plant.garden,
+                zone: plant.zone,
                 room: plant.room,
                 notes: plant.notes,
                 waterFrequencyDays: plant.waterFrequencyDays,
                 lastWatered: plant.lastWatered,
+                nextWaterInDays: calculateNextWaterInDays(plant.lastWatered, plant.waterFrequencyDays),
                 plantLibraryId: plant.plantLibraryId,
                 confidenceScore: plant.confidenceScore,
                 aiVerified: plant.aiVerified,
@@ -170,6 +191,8 @@ export const addPlant = async (req: Request, res: Response, next: NextFunction) 
 
     const plant = await MyPlant.create({
       user: userId,
+      garden: gardenId || undefined,
+      zone: zoneId || undefined,
       name: name.trim(),
       species: species.trim(),
       scientificName: scientificName?.trim(),
@@ -247,15 +270,19 @@ export const addPlant = async (req: Request, res: Response, next: NextFunction) 
     const result = {
       plant: {
         id: plant._id,
+        _id: plant._id,
         name: plant.name,
         species: plant.species,
         scientificName: plant.scientificName,
         imageUrl: plant.imageUrl,
         location: plant.location,
+        garden: plant.garden,
+        zone: plant.zone,
         room: plant.room,
         notes: plant.notes,
         waterFrequencyDays: plant.waterFrequencyDays,
         lastWatered: plant.lastWatered,
+        nextWaterInDays: calculateNextWaterInDays(plant.lastWatered, plant.waterFrequencyDays),
         plantLibraryId: plant.plantLibraryId,
         confidenceScore: plant.confidenceScore,
         aiVerified: plant.aiVerified,
@@ -346,12 +373,17 @@ export const updatePlant = async (req: Request, res: Response, next: NextFunctio
     return ok(res, {
       plant: {
         id: plant._id,
+        _id: plant._id,
         name: plant.name,
         species: plant.species,
         imageUrl: plant.imageUrl,
         location: plant.location,
+        garden: plant.garden,
+        zone: plant.zone,
+        room: plant.room,
         waterFrequencyDays: plant.waterFrequencyDays,
         lastWatered: plant.lastWatered,
+        nextWaterInDays: calculateNextWaterInDays(plant.lastWatered, plant.waterFrequencyDays),
         healthStatus: plant.healthStatus,
         createdAt: plant.createdAt,
       }

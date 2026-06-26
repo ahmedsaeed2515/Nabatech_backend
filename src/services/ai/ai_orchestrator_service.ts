@@ -471,16 +471,9 @@ export const orchestrateAssistantRequest = async (args: {
     // [CRITICAL FIX] HARD ABORT ON LOW CONFIDENCE
     let abortMessage = "";
     const isArabic = /[\\u0600-\\u06FF]/.test(args.question || "") || args.language === "ar";
-    if (isHealthy) {
-       abortMessage = isArabic 
-         ? `النتيجة:\nغير حاسمة\n\nالتوصية:\nتحليل الصورة غير مؤكد. يرجى رفع صورة أوضح للأجزاء المصابة من النبات.`
-         : `Result:\nInconclusive\n\nRecommendation:\nThe image analysis is uncertain. Please upload a clearer image of the affected plant parts.`;
-    } else {
-       const formattedDisease = cnnResult.prediction.replace(/___/g, " - ").replace(/_/g, " ");
-       abortMessage = isArabic
-         ? `المرض:\n${formattedDisease}\n\nنسبة الثقة:\n${(conf * 100).toFixed(0)}%\n\nالنتيجة:\nتشخيص بنسبة ثقة منخفضة\n\nالتوصية:\nيرجى رفع صورة أوضح تظهر الأوراق المصابة.`
-         : `Disease:\n${formattedDisease}\n\nConfidence:\n${(conf * 100).toFixed(0)}%\n\nResult:\nLow confidence diagnosis\n\nRecommendation:\nPlease upload a clearer image showing affected leaves.`;
-    }
+    abortMessage = isArabic
+      ? "عذرًا، لم نتمكن من تحديد حالة النبات بثقة من هذه الصورة. يرجى رفع صورة أوضح للأوراق أو الأجزاء المصابة."
+      : "We couldn't confidently identify the condition from this image. Please upload a clearer photo showing the affected leaves.";
 
     let communityDraft: any = null;
     if (args.userId && args.originalName) {

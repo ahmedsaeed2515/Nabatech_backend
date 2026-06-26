@@ -210,9 +210,9 @@ const envDefaults = (): AiSettingsShape => ({
     cnnApiKey: "",
   },
   // ── AI Mode Switching defaults ─────────────────────────────────────────────
-  // Priority: HuggingFace Spaces first (fast, reliable), then rag_openai as last resort
-  // AgentRouter and Groq are removed due to WAF/rate-limit issues
-  aiModePriority: ["hf_v62", "hf_v8", "rag_openai"],
+  // Priority: Hardcoded to RAG+OpenAI first, then Groq, then others as requested
+  // AgentRouter is removed due to WAF/rate-limit issues
+  aiModePriority: ["rag_openai", "hf_grok", "hf_v8", "hf_v62"],
   hfIntegrated: {
     grokEndpointUrl: "https://abdulrhmanhelmy-llm-grok.hf.space/query",
     v8EndpointUrl:   "https://ahmedsaeed111-rag-only.hf.space/ask",
@@ -269,16 +269,8 @@ const mergeSettings = (defaults: AiSettingsShape, db: Partial<IAiSettings> | nul
       ragApiKey: decryptSecret(plain?.secrets?.ragApiKeyEnc || ""),
       cnnApiKey: decryptSecret(plain?.secrets?.cnnApiKeyEnc || ""),
     },
-    // ── AI Mode Switching ───────────────────────────────────────────────────────────
-    // Only use DB aiModePriority if it contains HF modes; otherwise fall back to defaults
-    aiModePriority: (() => {
-      const dbModes = Array.isArray(plain?.aiModePriority)
-        ? plain.aiModePriority.filter((m: any) => ["rag_openai", "hf_grok", "hf_v8", "hf_v62"].includes(m))
-        : [];
-      // If DB has no HF modes configured, use the code defaults (HF-first)
-      const hasHfMode = dbModes.some((m: any) => m.startsWith("hf_"));
-      return hasHfMode ? dbModes : defaults.aiModePriority;
-    })(),
+    // Force AI Priority Routing order as requested by user
+    aiModePriority: ["rag_openai", "hf_grok", "hf_v8", "hf_v62"],
     hfIntegrated: {
       grokEndpointUrl: String(plain?.hfIntegrated?.grokEndpointUrl || "https://abdulrhmanhelmy-llm-grok.hf.space/query").trim(),
       v8EndpointUrl:   String(plain?.hfIntegrated?.v8EndpointUrl   || "https://ahmedsaeed111-rag-only.hf.space/ask").trim(),

@@ -3,6 +3,7 @@ import mongoose, { Document, Schema } from "mongoose";
 export interface IMyPlant extends Document {
   user: mongoose.Types.ObjectId;
   garden?: mongoose.Types.ObjectId;
+  zone?: mongoose.Types.ObjectId;
   name: string;
   species: string;
   scientificName?: string;
@@ -28,11 +29,12 @@ const myPlantSchema = new Schema<IMyPlant>(
   {
     user: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     garden: { type: Schema.Types.ObjectId, ref: "Garden", index: true },
+    zone: { type: Schema.Types.ObjectId, ref: "Zone", index: true },
     name: { type: String, required: true },
     species: { type: String, required: true },
     scientificName: { type: String },
     imageUrl: { type: String, default: "" },
-    location: { type: String, enum: ['indoor', 'outdoor', '\u062F\u0627\u062E\u0644\u064A', '\u062E\u0627\u0631\u062C\u064a'], required: true },
+    location: { type: String, enum: ['indoor', 'outdoor', 'داخلي', 'خارجي'], lowercase: true, required: true },
     room: { type: String },
     notes: { type: String },
     waterFrequencyDays: { type: Number, required: true },
@@ -46,11 +48,13 @@ const myPlantSchema = new Schema<IMyPlant>(
     healthStatus: { 
       type: String, 
       enum: ['excellent', 'good', 'needs_care', 'sick', 'critical', 'ممتازة', 'جيدة', 'تحتاج رعاية', 'مريضة', 'حرجة'], 
+      lowercase: true,
       default: 'excellent' 
     },
     growthStage: {
       type: String,
       enum: ['SEED', 'SPROUT', 'VEGETATIVE', 'FLOWERING', 'FRUITING', 'MATURE', 'DEAD'],
+      uppercase: true,
       default: 'MATURE'
     },
   },
