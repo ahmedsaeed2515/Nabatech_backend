@@ -82,6 +82,7 @@ export const callProvider = async (args: {
 
   if (args.providerType === "generic_llm" || args.providerType === "openai_compatible") {
     const isOpenRouter = args.endpointUrl.includes("openrouter.ai");
+    const tLlmNetStart = performance.now();
     const response = await axios.post<OpenAiCompletionResponse>(
       args.endpointUrl,
       {
@@ -104,6 +105,9 @@ export const callProvider = async (args: {
         },
       }
     );
+    const tLlmNetEnd = performance.now();
+    console.log(`[PERF] LLM Network Request (OpenAI): ${(tLlmNetEnd - tLlmNetStart).toFixed(2)}ms`);
+
     return (response.data?.choices?.[0]?.message?.content || "").toString().trim();
   }
 

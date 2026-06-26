@@ -207,62 +207,80 @@ export const orchestrateChat = async (args: {
 
   if (args.onProgress) args.onProgress("LOADING_CONTEXT");
 
-  const [ragResultData, commResultData, memoryContext, gardenContext] = await Promise.all([
-    // 1. RAG Retrieval
-    (async () => {
-      if (shouldSkipRag || !settings.rag.enabled || !settings.rag.endpointUrl) return undefined;
-      let optimizedQuery = args.question;
-      try {
-        const sanitizedQuestion = args.question.replace(/"/g, '\\"');
-        const searchPrompt = `Generate a precise agricultural search query to find the best treatment or information in a database for the following question. Output ONLY the search query text, without quotes or extra explanation.\n\nUser Question: ${sanitizedQuestion}`;
-        const searchRes = await Promise.race([
-          askLlm(settings, searchPrompt, "llm", [], "search"),
-          new Promise<any>((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 3000))
-        ]);
-        optimizedQuery = sanitizeModelOutput(searchRes.message);
-      } catch (searchErr) {
-        console.warn("[SEARCH_LLM_FAILED] Search LLM failed, using raw question.");
-      }
+    const tContextStart = performance.now();
+    const [ragResultData, commResultData, memoryContext, gardenContext] = await Promise.all([
+      // 1. RAG Retrieval
+      (async () => {
+        if (shouldSkipRag || !settings.rag.enabled || !settings.rag.endpointUrl) return undefined;
+        let optimizedQuery = args.question;
+        try {
+          const sanitizedQuestion = args.question.replace(/"/g, '\\"');
+          const searchPrompt = `Generate a precise agricultural search query to find the best treatment or information in a database for the following question. Output ONLY the search query text, without quotes or extra explanation.\n\nUser Question: ${sanitizedQuestion}`;
+          const searchRes = await Promise.race([
+            askLlm(settings, searchPrompt, "llm", [], "search"),
+            new Promise<any>((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 3000))
+          ]);
+          optimizedQuery = sanitizeModelOutput(searchRes.message);
+        } catch (searchErr) {
+          console.warn("[SEARCH_LLM_FAILED] Search LLM failed, using raw question.");
+        }
 
-      try {
-        const result = await retrieveRagChunks(settings, "", optimizedQuery, args.topK || 4, args.language);
-        console.log(`[RAG_SUCCESS] ${result.chunks.length} chunks retrieved for text chat`);
-        return result.contextText;
-      } catch (error) {
-        console.warn("[RAG_FAILED] RAG retrieval failed:", sanitizeErrorMessage(error));
-        return undefined;
-      }
-    })(),
+        try {
+          const tRagStart = performance.now();
+          const result = await retrieveRagChunks(settings, "", optimizedQuery, args.topK || 4, args.language);
+          const tRagEnd = performance.now();
+          console.log(`[PERF] RAG Retrieval: ${(tRagEnd - tRagStart).toFixed(2)}ms`);
+          console.log(`[RAG_SUCCESS] ${result.chunks.length} chunks retrieved for text chat`);
+          return result.contextText;
+        } catch (error) {
+          console.warn("[RAG_FAILED] RAG retrieval failed:", sanitizeErrorMessage(error));
+          return undefined;
+        }
+      })(),
 
-    // 2. Community Context Retrieval
-    (async () => {
-      try {
-        const result = await retrieveCommunityContext(undefined, args.question);
-        return result.hasData ? result.text : undefined;
-      } catch (error) {
-        console.warn("Community context retrieval failed:", sanitizeErrorMessage(error));
-        return undefined;
-      }
-    })(),
+      // 2. Community Context Retrieval
+      (async () => {
+        try {
+          const tCommStart = performance.now();
+          const result = await retrieveCommunityContext(undefined, args.question);
+          const tCommEnd = performance.now();
+          console.log(`[PERF] Community Context Retrieval: ${(tCommEnd - tCommStart).toFixed(2)}ms`);
+          return result.hasData ? result.text : undefined;
+        } catch (error) {
+          console.warn("Community context retrieval failed:", sanitizeErrorMessage(error));
+          return undefined;
+        }
+      })(),
 
-    // 3. Memory Retrieval
-    MemoryManager.getAllContext(args.userId || "anonymous"),
+      // 3. Memory Retrieval
+      (async () => {
+        const tMemStart = performance.now();
+        const res = await MemoryManager.getAllContext(args.userId || "anonymous");
+        const tMemEnd = performance.now();
+        console.log(`[PERF] Memory Context Retrieval: ${(tMemEnd - tMemStart).toFixed(2)}ms`);
+        return res;
+      })(),
 
-    // 4. Deep Garden Context
-    (async () => {
-      if (!args.userId) return undefined;
-      try {
-        const PlantModel = (await import("../../models/plant_model")).default;
-        const plants = await PlantModel.find({ user: args.userId }).lean();
-        if (!plants || plants.length === 0) return "User has no plants in their garden.";
-        return "User's Garden Plants: " + JSON.stringify(plants.map((p: any) => ({
-          name: p.name, species: p.species, stage: p.stage, health: p.healthScore, lastWatered: p.lastWatered
-        })));
-      } catch (e) { return undefined; }
-    })()
-  ]);
+      // 4. Deep Garden Context
+      (async () => {
+        if (!args.userId) return undefined;
+        try {
+          const tGardenStart = performance.now();
+          const PlantModel = (await import("../../models/plant_model")).default;
+          const plants = await PlantModel.find({ user: args.userId }).lean();
+          const tGardenEnd = performance.now();
+          console.log(`[PERF] Garden Context Retrieval: ${(tGardenEnd - tGardenStart).toFixed(2)}ms`);
+          if (!plants || plants.length === 0) return "User has no plants in their garden.";
+          return "User's Garden Plants: " + JSON.stringify(plants.map((p: any) => ({
+            name: p.name, species: p.species, stage: p.stage, health: p.healthScore, lastWatered: p.lastWatered
+          })));
+        } catch (e) { return undefined; }
+      })()
+    ]);
+    const tContextEnd = performance.now();
+    console.log(`[PERF] Total Context Parallel Gathering: ${(tContextEnd - tContextStart).toFixed(2)}ms`);
 
-  const ragContext = ragResultData;
+    const ragContext = ragResultData;
   const communityContext = commResultData;
   const systemPromptAddition = `\n\nUser Profile & Memory Context: ${JSON.stringify(memoryContext)}\n\n${gardenContext || ""}`;
   
@@ -306,7 +324,10 @@ export const orchestrateChat = async (args: {
   } else {
     // ✅ FAST PATH: Direct LLM call — no Agent Loop overhead
     if (args.onProgress) args.onProgress("SIMPLE_LLM_GENERATING");
+    const tLlmStart = performance.now();
     chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
+    const tLlmEnd = performance.now();
+    console.log(`[PERF] askLlm Execution: ${(tLlmEnd - tLlmStart).toFixed(2)}ms`);
   }
 
   // ✅ Save short-term memory in background (non-blocking)
