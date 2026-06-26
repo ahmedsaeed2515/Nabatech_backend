@@ -13,5 +13,11 @@
       "src": "/(.*)",
       "dest": "/dist/vercel.js"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/internal/warmup-ai",
+      "schedule": "*/4 * * * *"
+    }
   ]
 }

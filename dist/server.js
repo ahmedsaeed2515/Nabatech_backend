@@ -22,6 +22,7 @@ const WeatherRemindersCron_1 = require("./crons/WeatherRemindersCron");
 const ReminderCron_1 = require("./crons/ReminderCron");
 const WeatherCron_1 = require("./crons/WeatherCron");
 const StreakCron_1 = require("./crons/StreakCron");
+const HuggingFaceWarmupCron_1 = require("./crons/HuggingFaceWarmupCron");
 // Ensure workers are registered (only if Redis is available)
 care_sync_worker_1.careSyncWorker?.on('error', (err) => logger_1.logger.error('careSyncWorker error:', err));
 ai_queue_1.aiAnalysisWorker?.on('error', (err) => logger_1.logger.error('aiAnalysisWorker error:', err));
@@ -43,6 +44,7 @@ const startServer = async () => {
             ReminderCron_1.ReminderCron.start();
             WeatherCron_1.WeatherCron.start();
             StreakCron_1.StreakCron.start();
+            (0, HuggingFaceWarmupCron_1.startHuggingFaceWarmupCron)(); // Keep HF Spaces warm to avoid cold starts
         }
         const server = app_1.default.listen(PORT, () => {
             logger_1.logger.info(`Server running on http://localhost:${PORT}`);

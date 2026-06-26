@@ -160,10 +160,10 @@ const envDefaults = (): AiSettingsShape => ({
     enabled: true,
     provider: process.env.CNN_PROVIDER || "huggingface-space",
     endpointUrl: process.env.IMAGE_API_URL || process.env.CNN_ENDPOINT_URL || "",
-    timeoutMs: toNum(process.env.AI_CNN_TIMEOUT_MS, 20000),
+    timeoutMs: toNum(process.env.AI_CNN_TIMEOUT_MS, 15000),
     inputSize: toNum(process.env.CNN_INPUT_SIZE, 224),
     preprocessRequired: (process.env.CNN_PREPROCESS_REQUIRED || "false").toLowerCase() === "true",
-    confidenceThreshold: toNum(process.env.CNN_CONFIDENCE_THRESHOLD, 0.35),
+    confidenceThreshold: toNum(process.env.CNN_CONFIDENCE_THRESHOLD, 0.30),
     pool: [],
   },
   rag: {

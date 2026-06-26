@@ -19,6 +19,7 @@ import { startWeatherReminders } from './crons/WeatherRemindersCron';
 import { ReminderCron } from "./crons/ReminderCron";
 import { WeatherCron } from "./crons/WeatherCron";
 import { StreakCron } from "./crons/StreakCron";
+import { startHuggingFaceWarmupCron } from './crons/HuggingFaceWarmupCron';
 
 // Ensure workers are registered (only if Redis is available)
 careSyncWorker?.on('error', (err: Error) => logger.error('careSyncWorker error:', err));
@@ -46,6 +47,7 @@ const startServer = async () => {
       ReminderCron.start();
       WeatherCron.start();
       StreakCron.start();
+      startHuggingFaceWarmupCron(); // Keep HF Spaces warm to avoid cold starts
     }
 
     const server = app.listen(PORT, () => {
