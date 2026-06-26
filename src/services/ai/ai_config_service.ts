@@ -94,6 +94,7 @@ export type AiSettingsUpdatePayload = {
   features?: Partial<AiSettingsShape["features"]>;
   pipeline?: Partial<AiSettingsShape["pipeline"]>;
   secrets?: Partial<AiSettingsShape["secrets"]>;
+  aiModePriority?: AiSettingsShape["aiModePriority"];
 };
 
 const toNum = (value: string | undefined, fallback: number) => {
@@ -269,8 +270,13 @@ const mergeSettings = (defaults: AiSettingsShape, db: Partial<IAiSettings> | nul
       ragApiKey: decryptSecret(plain?.secrets?.ragApiKeyEnc || ""),
       cnnApiKey: decryptSecret(plain?.secrets?.cnnApiKeyEnc || ""),
     },
-    // Force AI Priority Routing order as requested by user
-    aiModePriority: ["rag_openai", "hf_grok", "hf_v8", "hf_v62"],
+    // Only use DB aiModePriority if it contains HF modes; otherwise fall back to defaults
+    aiModePriority: (() => {
+      const dbModes = Array.isArray(plain?.aiModePriority)
+        ? plain.aiModePriority.filter((m: any) => ["rag_openai", "hf_grok", "hf_v8", "hf_v62"].includes(m))
+        : [];
+      return dbModes.length > 0 ? dbModes : defaults.aiModePriority;
+    })(),
     hfIntegrated: {
       grokEndpointUrl: String(plain?.hfIntegrated?.grokEndpointUrl || "https://abdulrhmanhelmy-llm-grok.hf.space/query").trim(),
       v8EndpointUrl:   String(plain?.hfIntegrated?.v8EndpointUrl   || "https://ahmedsaeed111-rag-only.hf.space/ask").trim(),
@@ -638,6 +644,15 @@ const sanitizePayload = (payload: Record<string, unknown>, current: AiSettingsSh
     if (!hasPool && !merged.llm.model.trim()) throw new Error("llm.model is required when llm is enabled");
   }
 
+  if (payload.aiModePriority !== undefined) {
+    if (!Array.isArray(payload.aiModePriority)) throw new Error("aiModePriority must be an array");
+    const allowedModes = new Set(["rag_openai", "hf_grok", "hf_v8", "hf_v62"]);
+    const modes = payload.aiModePriority.map(m => String(m).trim());
+    const invalid = modes.filter(m => !allowedModes.has(m));
+    if (invalid.length) throw new Error(`Invalid aiModePriority values: ${invalid.join(", ")}`);
+    out.aiModePriority = dedupe(modes) as AiSettingsShape["aiModePriority"];
+  }
+
   return out;
 };
 
@@ -654,6 +669,7 @@ export const updateAiSettings = async (payload: Record<string, unknown>, updated
     features: { ...current.features, ...(sanitized.features || {}) },
     pipeline: { ...current.pipeline, ...(sanitized.pipeline || {}) },
     secrets: { ...current.secrets, ...(sanitized.secrets || {}) },
+    aiModePriority: sanitized.aiModePriority ?? current.aiModePriority,
     updatedBy,
   };
 
