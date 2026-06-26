@@ -4,7 +4,7 @@
 1. `cd backend`
 2. `npm install`
 3. Create `.env` from `.env.example`
-4. Start dev server:
+4. Start dev server: 
    - `npm run dev`
 5. Build/start production:
    - `npm run build`
