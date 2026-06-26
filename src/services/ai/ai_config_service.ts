@@ -160,10 +160,10 @@ const envDefaults = (): AiSettingsShape => ({
     enabled: true,
     provider: process.env.CNN_PROVIDER || "huggingface-space",
     endpointUrl: process.env.IMAGE_API_URL || process.env.CNN_ENDPOINT_URL || "",
-    timeoutMs: toNum(process.env.AI_CNN_TIMEOUT_MS, 60000),
+    timeoutMs: toNum(process.env.AI_CNN_TIMEOUT_MS, 20000),
     inputSize: toNum(process.env.CNN_INPUT_SIZE, 224),
     preprocessRequired: (process.env.CNN_PREPROCESS_REQUIRED || "false").toLowerCase() === "true",
-    confidenceThreshold: toNum(process.env.CNN_CONFIDENCE_THRESHOLD, 0),
+    confidenceThreshold: toNum(process.env.CNN_CONFIDENCE_THRESHOLD, 0.35),
     pool: [],
   },
   rag: {
@@ -210,7 +210,9 @@ const envDefaults = (): AiSettingsShape => ({
     cnnApiKey: "",
   },
   // ── AI Mode Switching defaults ─────────────────────────────────────────────
-  aiModePriority: ["rag_openai", "hf_v8", "hf_v62"],
+  // Priority: HuggingFace Spaces first (fast, reliable), then rag_openai as last resort
+  // AgentRouter and Groq are removed due to WAF/rate-limit issues
+  aiModePriority: ["hf_v62", "hf_v8", "rag_openai"],
   hfIntegrated: {
     grokEndpointUrl: "https://abdulrhmanhelmy-llm-grok.hf.space/query",
     v8EndpointUrl:   "https://ahmedsaeed111-rag-only.hf.space/ask",
@@ -268,9 +270,15 @@ const mergeSettings = (defaults: AiSettingsShape, db: Partial<IAiSettings> | nul
       cnnApiKey: decryptSecret(plain?.secrets?.cnnApiKeyEnc || ""),
     },
     // ── AI Mode Switching ───────────────────────────────────────────────────────────
-    aiModePriority: Array.isArray(plain?.aiModePriority) 
-      ? plain.aiModePriority.filter((m: any) => ["rag_openai", "hf_grok", "hf_v8", "hf_v62"].includes(m))
-      : ["rag_openai"],
+    // Only use DB aiModePriority if it contains HF modes; otherwise fall back to defaults
+    aiModePriority: (() => {
+      const dbModes = Array.isArray(plain?.aiModePriority)
+        ? plain.aiModePriority.filter((m: any) => ["rag_openai", "hf_grok", "hf_v8", "hf_v62"].includes(m))
+        : [];
+      // If DB has no HF modes configured, use the code defaults (HF-first)
+      const hasHfMode = dbModes.some((m: any) => m.startsWith("hf_"));
+      return hasHfMode ? dbModes : defaults.aiModePriority;
+    })(),
     hfIntegrated: {
       grokEndpointUrl: String(plain?.hfIntegrated?.grokEndpointUrl || "https://abdulrhmanhelmy-llm-grok.hf.space/query").trim(),
       v8EndpointUrl:   String(plain?.hfIntegrated?.v8EndpointUrl   || "https://ahmedsaeed111-rag-only.hf.space/ask").trim(),

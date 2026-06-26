@@ -65,7 +65,7 @@ const runQA = async () => {
         const { default: User } = await Promise.resolve().then(() => __importStar(require('../models/user_model')));
         const { default: MyPlant } = await Promise.resolve().then(() => __importStar(require('../models/my_plant_model')));
         const { default: CommunityPost } = await Promise.resolve().then(() => __importStar(require('../models/community_post_model')));
-        const { default: CommunityNotification } = await Promise.resolve().then(() => __importStar(require('../models/community_notification_model')));
+        const { default: NotificationModel } = await Promise.resolve().then(() => __importStar(require('../models/notification_model')));
         // Start Express App
         server = app.listen(PORT, () => {
             console.log(`✅ Started isolated Express Server on port ${PORT}`);
@@ -165,8 +165,8 @@ const runQA = async () => {
         console.log('\n--- DATABASE VALIDATION: NOTIFICATIONS ---');
         // Wait 1.5 seconds for async notifications and triggers to fire
         await new Promise(r => setTimeout(r, 1500));
-        const notifsForA = await CommunityNotification.find({ recipient: users.A.id }).sort({ createdAt: -1 });
-        const notifsForB = await CommunityNotification.find({ recipient: users.B.id }).sort({ createdAt: -1 });
+        const notifsForA = await NotificationModel.find({ user: users.A.id }).sort({ createdAt: -1 });
+        const notifsForB = await NotificationModel.find({ user: users.B.id }).sort({ createdAt: -1 });
         const likeNotif = notifsForA.find(n => n.type === 'LIKE_POST');
         const commentNotif = notifsForA.find(n => n.type === 'COMMENT_POST');
         const followNotif = notifsForA.find(n => n.type === 'FOLLOW_USER');

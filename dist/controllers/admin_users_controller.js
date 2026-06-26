@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bulkAction = exports.restoreUser = exports.softDeleteUser = exports.updateUserStatus = exports.updateUserRole = exports.getUserById = exports.updateUserModeration = exports.getUsers = void 0;
+exports.adminCreateUser = exports.bulkAction = exports.restoreUser = exports.softDeleteUser = exports.updateUserStatus = exports.updateUserRole = exports.getUserById = exports.updateUserModeration = exports.getUsers = void 0;
 const user_model_1 = __importStar(require("../models/user_model"));
 const admin_audit_log_model_1 = __importDefault(require("../models/admin_audit_log_model"));
 const my_plant_model_1 = __importDefault(require("../models/my_plant_model"));
@@ -45,6 +45,7 @@ const community_post_model_1 = __importDefault(require("../models/community_post
 const comment_v2_model_1 = __importDefault(require("../models/comment_v2_model"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const logger_1 = require("../utils/logger");
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 // Helper to log admin actions
 const logAction = async (adminId, action, targetUserId, details, targetUsers) => {
     await admin_audit_log_model_1.default.create({
@@ -342,3 +343,33 @@ const bulkAction = async (req, res) => {
     }
 };
 exports.bulkAction = bulkAction;
+const adminCreateUser = async (req, res) => {
+    try {
+        const { name, email, password, role } = req.body;
+        const adminId = req.user.id;
+        if (!name || !email || !password) {
+            return res.status(400).json({ success: false, message: "Name, email and password are required" });
+        }
+        const existingUser = await user_model_1.default.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({ success: false, message: "User with this email already exists" });
+        }
+        const hashedPassword = await bcryptjs_1.default.hash(password, 10);
+        const newUser = new user_model_1.default({
+            name,
+            email,
+            passwordHash: hashedPassword,
+            role: role || 'user',
+            isEmailVerified: true // Admin created users are automatically verified
+        });
+        await newUser.save();
+        const AdminActivityLogService = (await Promise.resolve().then(() => __importStar(require('../services/admin_activity_log_service')))).AdminActivityLogService;
+        await AdminActivityLogService.logAction(adminId, "CREATE_USER", newUser.id, "User", { email, role: newUser.role });
+        res.status(201).json({ success: true, data: newUser, message: "User created successfully" });
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to create user as admin', { error });
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+};
+exports.adminCreateUser = adminCreateUser;

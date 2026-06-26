@@ -84,7 +84,7 @@ const getLeaderboard = async (req, res) => {
     }
 };
 exports.getLeaderboard = getLeaderboard;
-const notification_service_1 = require("../services/notification_service");
+const NotificationService_1 = require("../services/NotificationService");
 // Internal service method for awarding points (to be used by other controllers like community_controller when post is created/liked)
 const awardReputationPoints = async (userId, pointsToAdd, reason) => {
     try {
@@ -106,7 +106,7 @@ const awardReputationPoints = async (userId, pointsToAdd, reason) => {
             newLevel = true;
         }
         if (newLevel) {
-            notification_service_1.NotificationService.sendNotification({
+            NotificationService_1.NotificationService.sendNotification({
                 userId: userId.toString(),
                 actorId: userId.toString(), // Self generated
                 type: 'EXPERT_LEVEL_UP',
@@ -119,7 +119,7 @@ const awardReputationPoints = async (userId, pointsToAdd, reason) => {
         const checkBadge = (threshold, badgeName, condition = true) => {
             if (condition && !rep.badges.includes(badgeName)) {
                 rep.badges.push(badgeName);
-                notification_service_1.NotificationService.sendNotification({
+                NotificationService_1.NotificationService.sendNotification({
                     userId: userId.toString(),
                     actorId: userId.toString(),
                     type: 'BADGE_EARNED',

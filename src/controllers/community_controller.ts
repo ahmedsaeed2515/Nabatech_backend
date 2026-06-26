@@ -377,6 +377,7 @@ export const createPost = async (req: Request, res: Response) => {
           type: 'NEW_POST_FROM_FOLLOWING',
           entityId: post._id.toString(),
           entityType: 'CommunityPost',
+          postId: post._id.toString(),
           title: 'New Post',
           message: `${username} published a new post.`
         });
@@ -458,6 +459,7 @@ export const toggleLike = async (req: Request, res: Response) => {
           type: 'LIKE_POST',
           entityId: post._id.toString(),
           entityType: 'CommunityPost',
+          postId: post._id.toString(),
           title: 'New Like',
           message: `${(req as any).user.name || 'Someone'} liked your post "${post.title.substring(0, 20)}..."`
         }).catch(e => logger.error('Error sending like notification', { error: e }));
@@ -629,6 +631,8 @@ export const createComment = async (req: Request, res: Response, next: NextFunct
           type: 'REPLY_COMMENT',
           entityId: post._id.toString(),
           entityType: 'CommunityPost',
+          postId: post._id.toString(),
+          commentId: comment._id.toString(),
           title: 'New Reply',
           message: `${username} replied to your comment on "${post.title.substring(0, 20)}..."`
         }).catch(e => logger.error('Error sending reply notification', { error: e }));
@@ -641,6 +645,8 @@ export const createComment = async (req: Request, res: Response, next: NextFunct
           type: 'COMMENT_POST',
           entityId: post._id.toString(),
           entityType: 'CommunityPost',
+          postId: post._id.toString(),
+          commentId: comment._id.toString(),
           title: 'New Comment',
           message: `${username} commented on your post "${post.title.substring(0, 20)}..."`
         }).catch(e => logger.error('Error sending comment notification', { error: e }));

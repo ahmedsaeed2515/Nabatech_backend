@@ -9,7 +9,8 @@ router.use(auth_middleware_1.protect);
 router.use((0, auth_middleware_1.authorizeRoles)('admin', 'super_admin'));
 // Route: /api/admin/users
 router.route('/')
-    .get(admin_users_controller_1.getUsers);
+    .get(admin_users_controller_1.getUsers)
+    .post(admin_users_controller_1.adminCreateUser);
 // Route: /api/admin/users/bulk-action
 router.post('/bulk-action', admin_users_controller_1.bulkAction);
 // Route: /api/admin/users/:id/role

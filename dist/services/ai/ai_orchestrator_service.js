@@ -207,7 +207,7 @@ const orchestrateChat = async (args) => {
                 const searchPrompt = `Generate a precise agricultural search query to find the best treatment or information in a database for the following question. Output ONLY the search query text, without quotes or extra explanation.\n\nUser Question: ${sanitizedQuestion}`;
                 const searchRes = await Promise.race([
                     (0, llm_provider_1.askLlm)(settings, searchPrompt, "llm", [], "search"),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 5000))
+                    new Promise((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 3000))
                 ]);
                 optimizedQuery = (0, ai_sanitizer_1.sanitizeModelOutput)(searchRes.message);
             }
@@ -265,61 +265,38 @@ const orchestrateChat = async (args) => {
         communityContext,
         language: args.language,
     }) + systemPromptAddition;
-    // Use the Agent LLM loop if user provided ID (meaning they're logged in and we want full agent capabilities)
+    // ✅ PERFORMANCE FIX: Skip the slow multi-step Agent Loop for regular chat.
+    // The Agent Loop (up to 15 iterations, each with a 15s timeout) was the primary
+    // cause of slow responses and timeouts.
+    // For regular chat: Use direct fast LLM call, and save memory to background.
+    // The Agent Loop is only triggered for explicit tool-action requests (e.g., 'add plant', 'schedule reminder').
+    const TOOL_TRIGGER_REGEX = /\b(add|remove|schedule|remind|create post|create a post|publish|watering reminder|weather|forecast|expert|companion plant)\b/i;
+    const requiresToolAction = args.userId && settings.llm.enabled && TOOL_TRIGGER_REGEX.test(args.question);
     let chatResult;
-    if (args.userId && settings.llm.enabled) {
-        console.log("[AGENT] Starting Tool Calling Loop");
+    if (requiresToolAction) {
+        console.log("[AGENT] Tool action detected, running Agent Loop (background-safe)");
         try {
             const agentProvider = new agent_llm_provider_1.AgentLlmProvider();
-            const agentResult = await agentProvider.runAgentLoop(settings, args.userId, prompt, // Here we pass the full built prompt with RAG and Memory
-            sanitizedHistory, agent_tool_registry_1.AGENT_TOOLS, 15, // ✅ FIX: Raised from 5 to support multi-step tasks
+            const agentResult = await agentProvider.runAgentLoop(settings, args.userId, prompt, sanitizedHistory, agent_tool_registry_1.AGENT_TOOLS, 8, // Reduced from 15 to avoid extreme timeouts
             args.onProgress);
-            // Save short-term memory of this interaction
-            await memory_manager_1.MemoryManager.saveShortTermMemory(args.userId, `last_chat_${reqId}`, args.question);
-            // ✅ NEW: Extract and save long-term user profile facts from conversation
-            let attempt = 0;
-            let success = false;
-            while (attempt < 2 && !success) {
-                try {
-                    const factExtractionPrompt = `Analyze this user message and extract any permanent facts about the user (location, preferred language, farming experience, plant preferences, treatment preferences like organic/chemical). Return JSON: {"facts": [{"key": "string", "value": "string"}]}. If no new facts, return {"facts": []}.
-
-User message: "${args.question.substring(0, 300)}"`;
-                    const factRes = await (0, llm_provider_1.askLlm)(settings, factExtractionPrompt, "llm", [], "search");
-                    const cleanedMessage = (0, ai_sanitizer_1.sanitizeModelOutput)(factRes.message);
-                    const parsed = JSON.parse(cleanedMessage.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
-                    if (!parsed || !Array.isArray(parsed.facts)) {
-                        throw new Error("Invalid schema: 'facts' array missing");
-                    }
-                    for (const fact of parsed.facts) {
-                        if (fact.key && fact.value) {
-                            await memory_manager_1.MemoryManager.saveLongTermMemory(args.userId, fact.key, fact.value);
-                            console.log(`[MEMORY] Saved long-term fact: ${fact.key} = ${fact.value}`);
-                        }
-                    }
-                    success = true;
-                }
-                catch (memErr) {
-                    attempt++;
-                    if (attempt >= 2) {
-                        console.warn("[MEMORY] Long-term fact extraction failed (non-critical) after 2 attempts:", memErr.message);
-                    }
-                }
-            }
             chatResult = { message: agentResult.message, source: "llm", provider: "agent_llm", toolCalls: agentResult.toolCalls, pendingToolCall: agentResult.pendingToolCall };
         }
         catch (agentErr) {
             console.warn("[AGENT_FAILED] Falling back to standard LLM flow. Error:", agentErr.message);
-            // FIX [TASK-6.2]: Add SSE phase for simple LLM path
             if (args.onProgress)
                 args.onProgress("SIMPLE_LLM_GENERATING");
             chatResult = await (0, llm_provider_1.askLlm)(settings, prompt, "llm", sanitizedHistory);
         }
     }
     else {
-        // FIX [TASK-6.2]: Add SSE phase for simple LLM path
+        // ✅ FAST PATH: Direct LLM call — no Agent Loop overhead
         if (args.onProgress)
             args.onProgress("SIMPLE_LLM_GENERATING");
         chatResult = await (0, llm_provider_1.askLlm)(settings, prompt, "llm", sanitizedHistory);
+    }
+    // ✅ Save short-term memory in background (non-blocking)
+    if (args.userId) {
+        Promise.resolve().then(() => memory_manager_1.MemoryManager.saveShortTermMemory(args.userId, `last_chat_${reqId}`, args.question).catch(() => { }));
     }
     if (chatResult.source === "fallback") {
         console.warn("[LLM] All providers failed, using static fallback.");
@@ -499,19 +476,21 @@ Output valid JSON in this exact format:
         // ── RAG Stage: Pure Knowledge Retrieval ──────────────────────────────────
         let ragRetrievedContext;
         if (settings.rag.enabled && settings.rag.endpointUrl && cnnResult?.prediction) {
-            let optimizedQuery = question;
-            try {
-                const escapedQuestion = question.replace(/"/g, '\\"');
-                const escapedPrediction = (cnnResult.prediction || "unknown").replace(/"/g, '\\"');
-                const searchPrompt = `Generate a precise agricultural search query to find the best treatment or information in a database for the following question and detected disease. Output ONLY the search query text, without quotes or extra explanation.\n\nDetected Disease: ${escapedPrediction}\nUser Question: ${escapedQuestion}`;
-                const searchRes = await Promise.race([
-                    (0, llm_provider_1.askLlm)(settings, searchPrompt, "llm", [], "search"),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 5000))
-                ]);
-                optimizedQuery = searchRes.message;
-            }
-            catch (searchErr) {
-                console.warn("[SEARCH_LLM_FAILED] Search LLM failed or not configured, using raw question.");
+            let optimizedQuery = question || cnnResult.prediction.replace(/_/g, " ");
+            if (question) {
+                try {
+                    const escapedQuestion = question.replace(/"/g, '\\"');
+                    const escapedPrediction = (cnnResult.prediction || "unknown").replace(/"/g, '\\"');
+                    const searchPrompt = `Generate a precise agricultural search query to find the best treatment or information in a database for the following question and detected disease. Output ONLY the search query text, without quotes or extra explanation.\n\nDetected Disease: ${escapedPrediction}\nUser Question: ${escapedQuestion}`;
+                    const searchRes = await Promise.race([
+                        (0, llm_provider_1.askLlm)(settings, searchPrompt, "llm", [], "search"),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 5000))
+                    ]);
+                    optimizedQuery = searchRes.message;
+                }
+                catch (searchErr) {
+                    console.warn("[SEARCH_LLM_FAILED] Search LLM failed or not configured, using raw question.");
+                }
             }
             try {
                 const ragResult = await (0, rag_provider_1.retrieveRagChunks)(settings, predictedDisease, args.question || "", args.topK, args.language, predictedCrop);
@@ -575,19 +554,22 @@ Output valid JSON in this exact format:
         console.log("[RUNTIME_TRACE] BEFORE LLM CALL");
         console.log("[RUNTIME_TRACE] LLM REQUEST PROMPT LENGTH:", prompt.length);
         if (args.userId && settings.llm.enabled && !args.skipAdvice) {
-            console.log("[AGENT] Starting Tool Calling Loop for Diagnosis");
-            try {
-                const agentProvider = new agent_llm_provider_1.AgentLlmProvider();
-                const targetPlantName = predictedCrop || predictedDisease.replace(/_/g, " ").split(" ")[0];
-                console.log("\n[DEBUG_RUNTIME] targetPlantName extracted for tool:", targetPlantName);
-                const imageUrlParam = args.originalName ? ` and pass imageUrl "${args.originalName}"` : "";
-                const systemPrompt = prompt + `\n\nINSTRUCTION: Try to use the add_plant_to_garden tool to add "${targetPlantName}" to the user's garden${imageUrlParam}. If the tool returns an error, IGNORE the error entirely and DO NOT mention it to the user. Proceed to summarize the diagnosis and care advice in the user's language.`;
-                const agentResult = await agentProvider.runAgentLoop(settings, args.userId, systemPrompt, sanitizedHistory, agent_tool_registry_1.AGENT_TOOLS, 5, args.onProgress);
-                chatResult = { message: agentResult.message, source: "llm", provider: "agent_llm", toolCalls: agentResult.toolCalls };
-            }
-            catch (agentErr) {
-                console.warn("[AGENT_FAILED] Falling back to standard LLM flow:", agentErr.message);
-                chatResult = await (0, llm_provider_1.askLlm)(settings, prompt, "llm", sanitizedHistory);
+            console.log("[AGENT] Fast-tracking LLM call for Diagnosis (Agent loop bypassed for speed)");
+            chatResult = await (0, llm_provider_1.askLlm)(settings, prompt, "llm", sanitizedHistory);
+            // Asynchronously add the detected plant to the user's garden without blocking the response
+            const targetPlantName = predictedCrop || predictedDisease.replace(/_/g, " ").split(" ")[0];
+            if (targetPlantName && args.userId) {
+                (async () => {
+                    try {
+                        const { AgentToolRegistry } = await Promise.resolve().then(() => __importStar(require("./agent_tool_registry")));
+                        const registry = new AgentToolRegistry();
+                        await registry.executeTool("add_plant_to_garden", { plantName: targetPlantName, imageUrl: args.originalName }, args.userId, undefined, settings);
+                        console.log("[BACKGROUND] Successfully added diagnosed plant to garden asynchronously.");
+                    }
+                    catch (e) {
+                        console.log("[BACKGROUND] Failed to auto-add plant to garden:", e);
+                    }
+                })();
             }
         }
         else {

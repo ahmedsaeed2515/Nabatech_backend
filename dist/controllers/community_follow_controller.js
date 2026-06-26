@@ -8,7 +8,7 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const follow_model_1 = __importDefault(require("../models/follow_model"));
 const user_model_1 = __importDefault(require("../models/user_model"));
 const logger_1 = require("../utils/logger");
-const notification_service_1 = require("../services/notification_service");
+const NotificationService_1 = require("../services/NotificationService");
 const community_audit_service_1 = require("../services/community_audit_service");
 const followUser = async (req, res) => {
     try {
@@ -38,7 +38,7 @@ const followUser = async (req, res) => {
             targetId: followingId,
         });
         // Fire notification
-        notification_service_1.NotificationService.sendNotification({
+        NotificationService_1.NotificationService.sendNotification({
             userId: followingId,
             actorId: followerId,
             type: 'FOLLOW_USER',

@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAdminLogs = exports.adminUpdatePost = exports.restoreAdminCommunityComment = exports.deleteAdminCommunityComment = exports.restoreAdminCommunityPost = exports.deleteAdminCommunityPost = exports.getCommunityReputationStats = exports.adminUpdateComment = exports.adminModerateComment = exports.adminGetComments = exports.adminResolvePost = exports.adminModeratePost = exports.adminGetPosts = exports.getCommunityAnalytics = void 0;
+exports.adminCreatePost = exports.adminRemoveLikes = exports.adminAddLikes = exports.adminUnlockComments = exports.adminLockComments = exports.adminUnpinPost = exports.adminPinPost = exports.getAdminLogs = exports.adminUpdatePost = exports.restoreAdminCommunityComment = exports.deleteAdminCommunityComment = exports.restoreAdminCommunityPost = exports.deleteAdminCommunityPost = exports.getCommunityReputationStats = exports.adminUpdateComment = exports.adminModerateComment = exports.adminGetComments = exports.adminResolvePost = exports.adminModeratePost = exports.adminGetPosts = exports.getCommunityAnalytics = void 0;
 const community_post_model_1 = __importDefault(require("../models/community_post_model"));
 const comment_model_1 = __importDefault(require("../models/comment_model"));
 const logger_1 = require("../utils/logger");
@@ -554,3 +554,133 @@ const getAdminLogs = async (req, res) => {
     }
 };
 exports.getAdminLogs = getAdminLogs;
+const adminPinPost = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const post = await community_post_model_1.default.findById(id);
+        if (!post)
+            return res.status(404).json({ success: false, message: "Post not found" });
+        post.isPinned = true;
+        await post.save();
+        const AdminActivityLogService = (await Promise.resolve().then(() => __importStar(require('../services/admin_activity_log_service')))).AdminActivityLogService;
+        await AdminActivityLogService.logAction(req.user.id, "POST_PINNED", post.id, "CommunityPost");
+        res.status(200).json({ success: true, message: "Post pinned", data: { post } });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+exports.adminPinPost = adminPinPost;
+const adminUnpinPost = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const post = await community_post_model_1.default.findById(id);
+        if (!post)
+            return res.status(404).json({ success: false, message: "Post not found" });
+        post.isPinned = false;
+        await post.save();
+        const AdminActivityLogService = (await Promise.resolve().then(() => __importStar(require('../services/admin_activity_log_service')))).AdminActivityLogService;
+        await AdminActivityLogService.logAction(req.user.id, "POST_UNPINNED", post.id, "CommunityPost");
+        res.status(200).json({ success: true, message: "Post unpinned", data: { post } });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+exports.adminUnpinPost = adminUnpinPost;
+const adminLockComments = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const post = await community_post_model_1.default.findById(id);
+        if (!post)
+            return res.status(404).json({ success: false, message: "Post not found" });
+        post.isLocked = true;
+        await post.save();
+        const AdminActivityLogService = (await Promise.resolve().then(() => __importStar(require('../services/admin_activity_log_service')))).AdminActivityLogService;
+        await AdminActivityLogService.logAction(req.user.id, "POST_LOCKED", post.id, "CommunityPost");
+        res.status(200).json({ success: true, message: "Comments locked", data: { post } });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+exports.adminLockComments = adminLockComments;
+const adminUnlockComments = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const post = await community_post_model_1.default.findById(id);
+        if (!post)
+            return res.status(404).json({ success: false, message: "Post not found" });
+        post.isLocked = false;
+        await post.save();
+        const AdminActivityLogService = (await Promise.resolve().then(() => __importStar(require('../services/admin_activity_log_service')))).AdminActivityLogService;
+        await AdminActivityLogService.logAction(req.user.id, "POST_UNLOCKED", post.id, "CommunityPost");
+        res.status(200).json({ success: true, message: "Comments unlocked", data: { post } });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+exports.adminUnlockComments = adminUnlockComments;
+const adminAddLikes = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const amount = req.body.amount || 1;
+        const post = await community_post_model_1.default.findById(id);
+        if (!post)
+            return res.status(404).json({ success: false, message: "Post not found" });
+        post.likes += amount;
+        await post.save();
+        const AdminActivityLogService = (await Promise.resolve().then(() => __importStar(require('../services/admin_activity_log_service')))).AdminActivityLogService;
+        await AdminActivityLogService.logAction(req.user.id, "LIKES_ADDED", post.id, "CommunityPost", { added: amount });
+        res.status(200).json({ success: true, message: `Added ${amount} likes`, data: { post } });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+exports.adminAddLikes = adminAddLikes;
+const adminRemoveLikes = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const amount = req.body.amount || 1;
+        const post = await community_post_model_1.default.findById(id);
+        if (!post)
+            return res.status(404).json({ success: false, message: "Post not found" });
+        post.likes = Math.max(0, post.likes - amount);
+        await post.save();
+        const AdminActivityLogService = (await Promise.resolve().then(() => __importStar(require('../services/admin_activity_log_service')))).AdminActivityLogService;
+        await AdminActivityLogService.logAction(req.user.id, "LIKES_REMOVED", post.id, "CommunityPost", { removed: amount });
+        res.status(200).json({ success: true, message: `Removed ${amount} likes`, data: { post } });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+exports.adminRemoveLikes = adminRemoveLikes;
+const adminCreatePost = async (req, res) => {
+    try {
+        const { title, content, category, images } = req.body;
+        const adminId = req.user.id;
+        if (!title || !content || !category) {
+            return res.status(400).json({ success: false, message: "Title, content and category are required" });
+        }
+        const newPost = new community_post_model_1.default({
+            title,
+            content,
+            category,
+            images: images || [],
+            author: adminId, // The admin creates the post
+            status: 'visible'
+        });
+        await newPost.save();
+        const AdminActivityLogService = (await Promise.resolve().then(() => __importStar(require('../services/admin_activity_log_service')))).AdminActivityLogService;
+        await AdminActivityLogService.logAction(adminId, "CREATE_POST", newPost.id, "CommunityPost", { title, category });
+        res.status(201).json({ success: true, data: newPost, message: "Post created successfully" });
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to create post as admin', { error });
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+};
+exports.adminCreatePost = adminCreatePost;

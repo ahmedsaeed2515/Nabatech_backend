@@ -8,7 +8,7 @@ const mongoose_1 = require("mongoose");
 const community_report_model_1 = __importDefault(require("../models/community_report_model"));
 const community_post_model_1 = __importDefault(require("../models/community_post_model"));
 const logger_1 = require("../utils/logger");
-const notification_service_1 = require("./notification_service");
+const NotificationService_1 = require("./NotificationService");
 class ReportService {
     /**
      * Creates a new community report.
@@ -79,7 +79,7 @@ class ReportService {
             resolvedAt: new Date(),
         }, { new: true });
         if (updated) {
-            notification_service_1.NotificationService.sendNotification({
+            NotificationService_1.NotificationService.sendNotification({
                 userId: updated.reporterId.toString(),
                 actorId: adminId,
                 type: 'REPORT_RESOLVED',

@@ -13,7 +13,7 @@ const reputation_controller_1 = require("../controllers/reputation_controller");
 const auth_middleware_1 = require("../middlewares/auth_middleware");
 const upload_middleware_1 = __importDefault(require("../middlewares/upload_middleware"));
 const rate_limit_middleware_1 = require("../middlewares/rate_limit_middleware");
-const community_notification_controller_1 = require("../controllers/community_notification_controller");
+const notification_controller_1 = require("../controllers/notification_controller");
 const poll_controller_1 = require("../controllers/poll_controller");
 const consultation_controller_1 = require("../controllers/consultation_controller");
 const community_controller_1 = require("../controllers/community_controller");
@@ -50,9 +50,9 @@ router.get('/following/:userId', auth_middleware_1.protect, community_follow_con
 router.get('/reputation/leaderboard', auth_middleware_1.protect, reputation_controller_1.getLeaderboard);
 router.get('/reputation/:userId', auth_middleware_1.protect, reputation_controller_1.getUserReputation);
 // Notifications System
-router.get('/notifications', auth_middleware_1.protect, community_notification_controller_1.CommunityNotificationController.getNotifications);
-router.patch('/notifications/read-all', auth_middleware_1.protect, community_notification_controller_1.CommunityNotificationController.markAllAsRead);
-router.patch('/notifications/:id/read', auth_middleware_1.protect, community_notification_controller_1.CommunityNotificationController.markAsRead);
+router.get('/notifications', auth_middleware_1.protect, notification_controller_1.getNotifications);
+router.patch('/notifications/read-all', auth_middleware_1.protect, notification_controller_1.markAllAsRead);
+router.patch('/notifications/:id/read', auth_middleware_1.protect, notification_controller_1.markAsRead);
 // Polls
 router.post('/polls/:pollId/vote', auth_middleware_1.protect, poll_controller_1.voteOnPoll);
 // Consultations

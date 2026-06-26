@@ -238,7 +238,7 @@ const updateSpecialistOfferStatus = async (req, res) => {
         await offer.save();
         // Send notifications
         try {
-            const NotificationService = (await Promise.resolve().then(() => __importStar(require("../services/notification_service")))).NotificationService;
+            const { NotificationService } = await Promise.resolve().then(() => __importStar(require("../services/NotificationService")));
             if (status === 'accepted') {
                 await NotificationService.sendNotification({
                     userId: offer.specialist.toString(),

@@ -8,7 +8,6 @@ const PostRepository_1 = require("../repositories/PostRepository");
 const CommentV2Repository_1 = require("../repositories/CommentV2Repository");
 const LikeV2Repository_1 = require("../repositories/LikeV2Repository");
 const NotificationService_1 = require("./NotificationService");
-const notification_service_1 = require("./notification_service");
 const UserRepository_1 = require("../repositories/UserRepository");
 const mongoose_1 = __importDefault(require("mongoose"));
 const logger_1 = require("../utils/logger");
@@ -42,7 +41,7 @@ class CommunityService {
             const Follow = mongoose_1.default.model('Follow');
             const followers = await Follow.find({ following: new mongoose_1.default.Types.ObjectId(userId) });
             for (const follow of followers) {
-                await notification_service_1.NotificationService.sendNotification({
+                await NotificationService_1.NotificationService.sendNotification({
                     userId: follow.follower.toString(),
                     actorId: userId,
                     type: 'NEW_POST_FROM_FOLLOWING',
@@ -100,7 +99,7 @@ class CommunityService {
                     const post = await this.postRepo.findById(postId);
                     const user = await this.userRepo.findById(userId);
                     if (post && user && post.author.toString() !== userId) {
-                        await notification_service_1.NotificationService.sendNotification({
+                        await NotificationService_1.NotificationService.sendNotification({
                             userId: post.author.toString(),
                             actorId: userId,
                             type: 'LIKE_POST',
@@ -139,7 +138,7 @@ class CommunityService {
                 if (postOwner) {
                     const commenterName = commenter?.name || commenter?.email?.split('@')[0] || 'Someone';
                     // 1. Send In-App Notification
-                    await notification_service_1.NotificationService.sendNotification({
+                    await NotificationService_1.NotificationService.sendNotification({
                         userId: postOwner._id.toString(),
                         actorId: userId,
                         type: 'COMMENT_POST',

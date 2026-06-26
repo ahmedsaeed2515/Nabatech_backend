@@ -82,14 +82,13 @@ export const callProvider = async (args: {
 
   if (args.providerType === "generic_llm" || args.providerType === "openai_compatible") {
     const isOpenRouter = args.endpointUrl.includes("openrouter.ai");
-    const isAgentRouter = args.endpointUrl.includes("agentrouter.org");
     const response = await axios.post<OpenAiCompletionResponse>(
       args.endpointUrl,
       {
         model: args.model,
         messages: [
           { role: "system", content: args.systemPrompt },
-          ...toOpenAiMessages(bounded),          // ✅ inject history between system and user
+          ...toOpenAiMessages(bounded),
           { role: "user", content: args.message },
         ],
       },
@@ -102,15 +101,12 @@ export const callProvider = async (args: {
             "HTTP-Referer": "https://nabatech.com", 
             "X-Title": "Nabatech AI Platform" 
           } : {}),
-          ...(isAgentRouter ? { 
-            "HTTP-Referer": "https://agentrouter.org/", 
-            "X-Title": "MyApp" 
-          } : {})
         },
       }
     );
     return (response.data?.choices?.[0]?.message?.content || "").toString().trim();
   }
+
 
   if (args.providerType === "anthropic") {
     const response = await axios.post<AnthropicResponse>(

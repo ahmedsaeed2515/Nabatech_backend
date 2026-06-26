@@ -9,7 +9,7 @@ const comment_model_1 = __importDefault(require("../models/comment_model"));
 const cloudinary_1 = __importDefault(require("../config/cloudinary"));
 const logger_1 = require("../utils/logger");
 const app_error_1 = require("../utils/app_error");
-const notification_service_1 = require("../services/notification_service");
+const NotificationService_1 = require("../services/NotificationService");
 const community_audit_service_1 = require("../services/community_audit_service");
 const community_poll_model_1 = __importDefault(require("../models/community_poll_model"));
 const community_poll_option_model_1 = __importDefault(require("../models/community_poll_option_model"));
@@ -341,12 +341,13 @@ const createPost = async (req, res) => {
             const Follow = mongoose.model('Follow');
             const followers = await Follow.find({ following: new mongoose.Types.ObjectId(userId) });
             for (const follow of followers) {
-                await notification_service_1.NotificationService.sendNotification({
+                await NotificationService_1.NotificationService.sendNotification({
                     userId: follow.follower.toString(),
                     actorId: userId,
                     type: 'NEW_POST_FROM_FOLLOWING',
                     entityId: post._id.toString(),
                     entityType: 'CommunityPost',
+                    postId: post._id.toString(),
                     title: 'New Post',
                     message: `${username} published a new post.`
                 });
@@ -410,12 +411,13 @@ const toggleLike = async (req, res) => {
             liked = true;
             // Send Notification to post author if not liking own post
             if (post.author.toString() !== userId) {
-                notification_service_1.NotificationService.sendNotification({
+                NotificationService_1.NotificationService.sendNotification({
                     userId: post.author.toString(),
                     actorId: userId,
                     type: 'LIKE_POST',
                     entityId: post._id.toString(),
                     entityType: 'CommunityPost',
+                    postId: post._id.toString(),
                     title: 'New Like',
                     message: `${req.user.name || 'Someone'} liked your post "${post.title.substring(0, 20)}..."`
                 }).catch(e => logger_1.logger.error('Error sending like notification', { error: e }));
@@ -567,12 +569,14 @@ const createComment = async (req, res, next) => {
         // Send Notification
         if (parentId && parentComment) {
             if (parentComment.author.toString() !== userId) {
-                notification_service_1.NotificationService.sendNotification({
+                NotificationService_1.NotificationService.sendNotification({
                     userId: parentComment.author.toString(),
                     actorId: userId,
                     type: 'REPLY_COMMENT',
                     entityId: post._id.toString(),
                     entityType: 'CommunityPost',
+                    postId: post._id.toString(),
+                    commentId: comment._id.toString(),
                     title: 'New Reply',
                     message: `${username} replied to your comment on "${post.title.substring(0, 20)}..."`
                 }).catch(e => logger_1.logger.error('Error sending reply notification', { error: e }));
@@ -580,12 +584,14 @@ const createComment = async (req, res, next) => {
         }
         else {
             if (post.author.toString() !== userId) {
-                notification_service_1.NotificationService.sendNotification({
+                NotificationService_1.NotificationService.sendNotification({
                     userId: post.author.toString(),
                     actorId: userId,
                     type: 'COMMENT_POST',
                     entityId: post._id.toString(),
                     entityType: 'CommunityPost',
+                    postId: post._id.toString(),
+                    commentId: comment._id.toString(),
                     title: 'New Comment',
                     message: `${username} commented on your post "${post.title.substring(0, 20)}..."`
                 }).catch(e => logger_1.logger.error('Error sending comment notification', { error: e }));

@@ -6,20 +6,15 @@ import { callProvider, HistoryTurn, LlmResult } from "./llm_provider";
 import { AiProviderError } from "./ai_errors";
 import { getAiSettings } from "./ai_config_service";
 
-// Global interceptor for agentrouter.org requirements
-axios.interceptors.request.use((config) => {
-  if (config.url && config.url.includes("agentrouter.org")) {
-    if (!config.headers) config.headers = {} as any;
-    config.headers!["HTTP-Referer"] = "https://agentrouter.org/";
-    config.headers!["X-Title"] = "MyApp";
-  }
-  return config;
-});
+// Note: AgentRouter and Groq providers have been removed from the system
+// due to WAF content blocking and rate limiting issues.
 
 class AiProviderManager {
   private providers: IAiProviderSettings[] = [];
   private lastReloadAt = 0;
-  private readonly RELOAD_TTL_MS = 30_000; // refresh from DB every 30s
+  private readonly RELOAD_TTL_MS = 60_000; // refresh from DB every 60s (reduced from 30s to cut DB calls)
+  private circuitBreaker: Map<string, { failedAt: number; count: number }> = new Map();
+  private readonly CIRCUIT_BREAKER_COOLDOWN_MS = 30_000; // 30s cooldown after 2+ consecutive failures
 
   constructor() {}
 
@@ -34,13 +29,16 @@ class AiProviderManager {
 
   private determineProviderType(url: string, providerName: string): any {
     const p = providerName.toLowerCase();
+    // AgentRouter and Groq are disabled — skip their type detection to avoid routing to them
+    if (p.includes('agentrouter') || url.includes('agentrouter.org')) return null;
+    if (p.includes('groq') || url.includes('api.groq.com')) return null;
     if (p.includes('gemini') || url.includes('generativelanguage.googleapis')) return 'gemini';
     if (p.includes('anthropic')) return 'anthropic';
     if (p.includes('cohere')) return 'cohere';
     if (p.includes('openrouter')) return 'generic_llm';
-    if (p.includes('groq') || url.includes('api.groq.com')) return 'generic_llm';
     if (p.includes('openai') || url.includes('api.openai.com')) return 'generic_llm';
     if (url.includes('router.huggingface.co')) return 'generic_llm';
+    // HuggingFace Spaces used as primary LLM providers
     if (url.includes('hf.space') || p.includes('huggingface')) return 'huggingface_inference';
     return 'generic_llm';
   }
@@ -71,10 +69,31 @@ class AiProviderManager {
       return a.priority - b.priority;
     });
 
-    for (const provider of sortedProviders) {
-      logger.info(`Attempting LLM call via ${provider.providerName} (${provider.llmModel})`);
+    const now2 = Date.now();
+    // Skip providers that tripped the circuit breaker (failed recently)
+    const eligibleProviders = sortedProviders.filter(p => {
+      const cb = this.circuitBreaker.get(p.providerName);
+      if (cb && cb.count >= 2 && (now2 - cb.failedAt) < this.CIRCUIT_BREAKER_COOLDOWN_MS) {
+        logger.warn(`[CIRCUIT_BREAKER] Skipping ${p.providerName} — in cooldown for ${Math.round((this.CIRCUIT_BREAKER_COOLDOWN_MS - (now2 - cb.failedAt)) / 1000)}s more`);
+        return false;
+      }
+      return true;
+    });
+    
+    // Use eligible providers, fallback to all if all are in cooldown
+    const targetProviders = eligibleProviders.length > 0 ? eligibleProviders : sortedProviders;
+
+    for (const provider of targetProviders) {
       const apiKey = decryptSecret(provider.apiKeyEncrypted);
       const providerType = this.determineProviderType(provider.baseUrl, provider.providerName);
+
+      // Skip disabled provider types (AgentRouter, Groq)
+      if (providerType === null) {
+        logger.warn(`[SKIP] Provider ${provider.providerName} is blocked (AgentRouter/Groq). Skipping.`);
+        continue;
+      }
+
+      logger.info(`Attempting LLM call via ${provider.providerName} (${provider.llmModel})`);
 
       try {
         const startTime = Date.now();
@@ -83,15 +102,16 @@ class AiProviderManager {
           endpointUrl: provider.baseUrl,
           model: provider.llmModel,
           apiKey,
-          timeoutMs: options.timeoutMs || 25000,
+          timeoutMs: options.timeoutMs || 8000, // Reduced to 8s for fast failover
           systemPrompt,
           message,
           history,
         });
 
-        // On success, reset consecutive errors
+        // On success, reset circuit breaker and consecutive errors
         (this as any).consecutiveErrors = (this as any).consecutiveErrors || {};
         (this as any).consecutiveErrors[provider.providerName] = 0;
+        this.circuitBreaker.delete(provider.providerName);
         
         // Update health on success asynchronously
         this.updateHealth(provider._id.toString(), "healthy", "");
@@ -107,9 +127,14 @@ class AiProviderManager {
         logger.warn(`Provider ${provider.providerName} failed: ${err.message}`);
         errors.push({ provider: provider.providerName, error: err.message });
         
-        // Track consecutive errors
+        // Track consecutive errors and update circuit breaker
         (this as any).consecutiveErrors = (this as any).consecutiveErrors || {};
         (this as any).consecutiveErrors[provider.providerName] = ((this as any).consecutiveErrors[provider.providerName] || 0) + 1;
+        const prevCb = this.circuitBreaker.get(provider.providerName);
+        this.circuitBreaker.set(provider.providerName, {
+          failedAt: Date.now(),
+          count: (prevCb?.count || 0) + 1
+        });
         
         // Update health on failure
         this.updateHealth(provider._id.toString(), "failed", err.message);

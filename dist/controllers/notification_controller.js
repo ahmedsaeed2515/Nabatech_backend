@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteNotification = exports.markAllAsRead = exports.markAsRead = exports.getUnreadCount = exports.getNotifications = void 0;
+const NotificationService_1 = require("../services/NotificationService");
 const notification_model_1 = __importDefault(require("../models/notification_model"));
 const mongoose_1 = __importDefault(require("mongoose"));
 /**
@@ -17,42 +18,13 @@ const getNotifications = async (req, res) => {
             return res.status(401).json({ success: false, message: 'Unauthorized' });
         const page = Math.max(1, parseInt(req.query.page) || 1);
         const limit = Math.min(50, parseInt(req.query.limit) || 20);
-        const skip = (page - 1) * limit;
-        const [notifications, total] = await Promise.all([
-            notification_model_1.default.find({ user: userId })
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean(),
-            notification_model_1.default.countDocuments({ user: userId })
-        ]);
-        const formattedNotifications = notifications.map((n) => {
-            let mappedType = 'system';
-            const t = (n.type || '').toUpperCase();
-            if (t.includes('REMINDER'))
-                mappedType = 'reminder';
-            else if (t.includes('ALERT'))
-                mappedType = 'alert';
-            else if (t.includes('COMMUNITY'))
-                mappedType = 'community';
-            return {
-                id: n._id,
-                titleAr: n.titleAr || n.title,
-                titleEn: n.titleEn || n.title,
-                bodyAr: n.bodyAr || n.body,
-                bodyEn: n.bodyEn || n.body,
-                type: mappedType,
-                isRead: n.read,
-                createdAt: n.createdAt,
-                updatedAt: n.updatedAt,
-                data: n.data
-            };
-        });
+        const result = await NotificationService_1.NotificationService.getNotifications(userId, page, limit);
         return res.json({
             success: true,
             data: {
-                items: formattedNotifications,
-                pageInfo: { page, limit, total, pages: Math.ceil(total / limit) }
+                items: result.items,
+                pageInfo: { page: result.page, limit, total: result.total, pages: result.pages },
+                unreadCount: result.unreadCount
             }
         });
     }
@@ -90,7 +62,7 @@ const markAsRead = async (req, res) => {
         if (!mongoose_1.default.isValidObjectId(req.params.id)) {
             return res.status(400).json({ success: false, message: 'Invalid notification ID' });
         }
-        const notification = await notification_model_1.default.findOneAndUpdate({ _id: req.params.id, user: userId }, { read: true }, { new: true });
+        const notification = await NotificationService_1.NotificationService.markAsRead(userId, req.params.id);
         if (!notification) {
             return res.status(404).json({ success: false, message: 'Notification not found' });
         }
@@ -110,7 +82,7 @@ const markAllAsRead = async (req, res) => {
         const userId = req.user?.id || req.userId;
         if (!userId)
             return res.status(401).json({ success: false, message: 'Unauthorized' });
-        await notification_model_1.default.updateMany({ user: userId, read: false }, { read: true });
+        await NotificationService_1.NotificationService.markAllAsRead(userId);
         return res.json({ success: true, message: 'All notifications marked as read' });
     }
     catch (err) {

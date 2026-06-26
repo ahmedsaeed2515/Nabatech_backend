@@ -37,27 +37,20 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getProviderManager = void 0;
-const axios_1 = __importDefault(require("axios"));
 const ai_provider_settings_model_1 = __importDefault(require("../../models/ai_provider_settings_model"));
 const secret_crypto_1 = require("./secret_crypto");
 const logger_1 = require("../../utils/logger");
 const llm_provider_1 = require("./llm_provider");
 const ai_errors_1 = require("./ai_errors");
-// Global interceptor for agentrouter.org requirements
-axios_1.default.interceptors.request.use((config) => {
-    if (config.url && config.url.includes("agentrouter.org")) {
-        if (!config.headers)
-            config.headers = {};
-        config.headers["HTTP-Referer"] = "https://agentrouter.org/";
-        config.headers["X-Title"] = "MyApp";
-    }
-    return config;
-});
+// Note: AgentRouter and Groq providers have been removed from the system
+// due to WAF content blocking and rate limiting issues.
 class AiProviderManager {
     constructor() {
         this.providers = [];
         this.lastReloadAt = 0;
-        this.RELOAD_TTL_MS = 30000; // refresh from DB every 30s
+        this.RELOAD_TTL_MS = 60000; // refresh from DB every 60s (reduced from 30s to cut DB calls)
+        this.circuitBreaker = new Map();
+        this.CIRCUIT_BREAKER_COOLDOWN_MS = 30000; // 30s cooldown after 2+ consecutive failures
     }
     async reloadProviders() {
         this.providers = await ai_provider_settings_model_1.default.find({ enabled: true }).sort({ priority: 1 });
@@ -68,6 +61,11 @@ class AiProviderManager {
     }
     determineProviderType(url, providerName) {
         const p = providerName.toLowerCase();
+        // AgentRouter and Groq are disabled — skip their type detection to avoid routing to them
+        if (p.includes('agentrouter') || url.includes('agentrouter.org'))
+            return null;
+        if (p.includes('groq') || url.includes('api.groq.com'))
+            return null;
         if (p.includes('gemini') || url.includes('generativelanguage.googleapis'))
             return 'gemini';
         if (p.includes('anthropic'))
@@ -76,12 +74,11 @@ class AiProviderManager {
             return 'cohere';
         if (p.includes('openrouter'))
             return 'generic_llm';
-        if (p.includes('groq') || url.includes('api.groq.com'))
-            return 'generic_llm';
         if (p.includes('openai') || url.includes('api.openai.com'))
             return 'generic_llm';
         if (url.includes('router.huggingface.co'))
             return 'generic_llm';
+        // HuggingFace Spaces used as primary LLM providers
         if (url.includes('hf.space') || p.includes('huggingface'))
             return 'huggingface_inference';
         return 'generic_llm';
@@ -104,10 +101,27 @@ class AiProviderManager {
                 return errA - errB;
             return a.priority - b.priority;
         });
-        for (const provider of sortedProviders) {
-            logger_1.logger.info(`Attempting LLM call via ${provider.providerName} (${provider.llmModel})`);
+        const now2 = Date.now();
+        // Skip providers that tripped the circuit breaker (failed recently)
+        const eligibleProviders = sortedProviders.filter(p => {
+            const cb = this.circuitBreaker.get(p.providerName);
+            if (cb && cb.count >= 2 && (now2 - cb.failedAt) < this.CIRCUIT_BREAKER_COOLDOWN_MS) {
+                logger_1.logger.warn(`[CIRCUIT_BREAKER] Skipping ${p.providerName} — in cooldown for ${Math.round((this.CIRCUIT_BREAKER_COOLDOWN_MS - (now2 - cb.failedAt)) / 1000)}s more`);
+                return false;
+            }
+            return true;
+        });
+        // Use eligible providers, fallback to all if all are in cooldown
+        const targetProviders = eligibleProviders.length > 0 ? eligibleProviders : sortedProviders;
+        for (const provider of targetProviders) {
             const apiKey = (0, secret_crypto_1.decryptSecret)(provider.apiKeyEncrypted);
             const providerType = this.determineProviderType(provider.baseUrl, provider.providerName);
+            // Skip disabled provider types (AgentRouter, Groq)
+            if (providerType === null) {
+                logger_1.logger.warn(`[SKIP] Provider ${provider.providerName} is blocked (AgentRouter/Groq). Skipping.`);
+                continue;
+            }
+            logger_1.logger.info(`Attempting LLM call via ${provider.providerName} (${provider.llmModel})`);
             try {
                 const startTime = Date.now();
                 const content = await (0, llm_provider_1.callProvider)({
@@ -115,14 +129,15 @@ class AiProviderManager {
                     endpointUrl: provider.baseUrl,
                     model: provider.llmModel,
                     apiKey,
-                    timeoutMs: options.timeoutMs || 25000,
+                    timeoutMs: options.timeoutMs || 8000, // Reduced to 8s for fast failover
                     systemPrompt,
                     message,
                     history,
                 });
-                // On success, reset consecutive errors
+                // On success, reset circuit breaker and consecutive errors
                 this.consecutiveErrors = this.consecutiveErrors || {};
                 this.consecutiveErrors[provider.providerName] = 0;
+                this.circuitBreaker.delete(provider.providerName);
                 // Update health on success asynchronously
                 this.updateHealth(provider._id.toString(), "healthy", "");
                 return {
@@ -135,9 +150,14 @@ class AiProviderManager {
             catch (err) {
                 logger_1.logger.warn(`Provider ${provider.providerName} failed: ${err.message}`);
                 errors.push({ provider: provider.providerName, error: err.message });
-                // Track consecutive errors
+                // Track consecutive errors and update circuit breaker
                 this.consecutiveErrors = this.consecutiveErrors || {};
                 this.consecutiveErrors[provider.providerName] = (this.consecutiveErrors[provider.providerName] || 0) + 1;
+                const prevCb = this.circuitBreaker.get(provider.providerName);
+                this.circuitBreaker.set(provider.providerName, {
+                    failedAt: Date.now(),
+                    count: (prevCb?.count || 0) + 1
+                });
                 // Update health on failure
                 this.updateHealth(provider._id.toString(), "failed", err.message);
                 // Continue to next priority provider

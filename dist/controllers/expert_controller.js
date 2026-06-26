@@ -43,6 +43,7 @@ const community_post_model_1 = __importDefault(require("../models/community_post
 const app_error_1 = require("../utils/app_error");
 const community_controller_1 = require("./community_controller");
 const logger_1 = require("../utils/logger");
+const NotificationService_1 = require("../services/NotificationService");
 // @desc    Get expert profile by userId
 // @route   GET /api/experts/:id
 // @access  Private
@@ -197,8 +198,7 @@ const resolveEscalation = async (req, res, next) => {
         escalation.expertResponse = response;
         escalation.expertId = adminId;
         await escalation.save();
-        const NotificationService = (await Promise.resolve().then(() => __importStar(require("../services/notification_service")))).NotificationService;
-        NotificationService.sendNotification({
+        NotificationService_1.NotificationService.sendNotification({
             userId: escalation.userId.toString(),
             actorId: adminId,
             type: 'EXPERT_REPLY',
