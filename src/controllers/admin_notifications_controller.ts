@@ -18,21 +18,26 @@ export const broadcastNotification = async (req: Request, res: Response): Promis
     }
 
     let userQuery: any = { pushEnabled: true };
+    let dbAudience = 'ALL';
 
     switch (targetAudience) {
       case 'ALL_USERS':
       case 'ALL':
+        dbAudience = 'ALL';
         // No additional filter
         break;
       case 'ALL_EXPERTS':
       case 'EXPERTS':
+        dbAudience = 'EXPERTS';
         userQuery.role = 'expert';
         break;
       case 'ALL_ADMINS':
+        dbAudience = 'SPECIFIC'; // Saved as specific since it's a filtered subset not in default enums
         userQuery.role = { $in: ['admin', 'super_admin'] };
         break;
       case 'SELECTED_USERS':
       case 'selected':
+        dbAudience = 'SPECIFIC';
         const userIds = req.body.userIds;
         if (!Array.isArray(userIds) || userIds.length === 0) {
           res.status(400).json({ success: false, message: 'userIds array is required for SELECTED_USERS' });
@@ -42,6 +47,7 @@ export const broadcastNotification = async (req: Request, res: Response): Promis
         break;
       case 'SPECIFIC_USER':
       case 'SPECIFIC':
+        dbAudience = 'SPECIFIC';
         if (!targetUserId) {
           res.status(400).json({ success: false, message: 'Specific User ID is required' });
           return;
@@ -49,6 +55,7 @@ export const broadcastNotification = async (req: Request, res: Response): Promis
         userQuery._id = targetUserId;
         break;
       case 'FARMERS':
+        dbAudience = 'FARMERS';
         userQuery.role = 'user';
         break;
       default:
@@ -111,7 +118,7 @@ export const broadcastNotification = async (req: Request, res: Response): Promis
     const broadcastRecord = await BroadcastNotificationModel.create({
       title,
       body: message,
-      targetAudience,
+      targetAudience: dbAudience,
       targetUserId,
       totalUsers: users.length,
       successCount,
@@ -153,3 +160,5 @@ export const getBroadcastHistory = async (req: Request, res: Response): Promise<
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+

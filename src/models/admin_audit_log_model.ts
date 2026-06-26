@@ -26,3 +26,5 @@ adminAuditLogSchema.index({ action: 1, createdAt: -1 });
 adminAuditLogSchema.index({ targetUser: 1, createdAt: -1 });
 
 export default mongoose.model<AdminAuditLog>('AdminAuditLog', adminAuditLogSchema);
+
+

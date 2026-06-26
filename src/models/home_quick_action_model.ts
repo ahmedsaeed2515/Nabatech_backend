@@ -19,3 +19,5 @@ const homeQuickActionSchema = new Schema<IHomeQuickAction>({
 }, { timestamps: true });
 
 export default model<IHomeQuickAction>("HomeQuickAction", homeQuickActionSchema);
+
+

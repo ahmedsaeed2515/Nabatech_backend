@@ -21,3 +21,5 @@ userXpSchema.pre(/^find/, function(next) {
 });
 
 export default mongoose.model<UserXp>('UserXp', userXpSchema);
+
+

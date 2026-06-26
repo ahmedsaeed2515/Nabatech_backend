@@ -40,3 +40,5 @@ router.delete("/sections/:id", deleteSection);
 router.get("/analytics", getHomeAnalytics);
 
 export default router;
+
+

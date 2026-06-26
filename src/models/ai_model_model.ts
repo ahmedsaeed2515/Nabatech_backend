@@ -28,3 +28,5 @@ const aiModelSchema = new Schema<IAiModel>(
 );
 
 export default model<IAiModel>("AiModel", aiModelSchema);
+
+

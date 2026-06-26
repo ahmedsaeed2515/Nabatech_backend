@@ -219,7 +219,7 @@ export const updateSpecialistOfferStatus = async (req: Request, res: Response) =
 
     // Send notifications
     try {
-      const NotificationService = (await import("../services/notification_service")).NotificationService;
+      const { NotificationService } = await import("../services/NotificationService");
       if (status === 'accepted') {
         await NotificationService.sendNotification({
           userId: offer.specialist.toString(),
@@ -260,4 +260,6 @@ export const updateSpecialistOfferStatus = async (req: Request, res: Response) =
     return res.status(500).json({ success: false, message: "Failed to update offer status" });
   }
 };
+
+
 

@@ -36,3 +36,5 @@ export class BaseRepository<T extends Document> {
     return this.model.findByIdAndDelete(id).exec();
   }
 }
+
+

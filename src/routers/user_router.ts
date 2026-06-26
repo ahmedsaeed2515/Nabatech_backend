@@ -36,3 +36,5 @@ router.put("/:id/role", protect, authorizeRoles('admin', 'super_admin'), validat
 router.delete("/:id", protect, authorizeRoles('admin', 'super_admin'), deleteUser);
 
 export default router;
+
+

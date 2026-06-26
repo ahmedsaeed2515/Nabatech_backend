@@ -19,3 +19,5 @@ const wateringLogSchema = new Schema<IWateringLog>(
 );
 
 export default mongoose.model<IWateringLog>("WateringLog", wateringLogSchema);
+
+

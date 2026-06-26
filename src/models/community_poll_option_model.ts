@@ -18,3 +18,5 @@ const communityPollOptionSchema = new Schema<ICommunityPollOption>(
 );
 
 export default mongoose.model<ICommunityPollOption>("CommunityPollOption", communityPollOptionSchema);
+
+

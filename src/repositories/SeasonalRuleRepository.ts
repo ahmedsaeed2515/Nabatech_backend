@@ -6,3 +6,5 @@ export class SeasonalRuleRepository extends BaseRepository<SeasonalRule> {
     super(SeasonalRuleModel);
   }
 }
+
+

@@ -10,3 +10,5 @@ export class GardenRepository extends BaseRepository<Garden> {
     return this.model.find().where('user').equals(userId).exec();
   }
 }
+
+

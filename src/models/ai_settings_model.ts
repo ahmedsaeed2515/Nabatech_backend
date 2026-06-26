@@ -187,3 +187,5 @@ const aiSettingsSchema = new Schema<IAiSettings>(
 );
 
 export default mongoose.model<IAiSettings>("AiSettings", aiSettingsSchema);
+
+

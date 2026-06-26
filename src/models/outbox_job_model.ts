@@ -33,3 +33,5 @@ const OutboxJobSchema = new Schema<IOutboxJob>({
 OutboxJobSchema.index({ status: 1, availableAt: 1, leaseUntil: 1 });
 
 export default mongoose.model<IOutboxJob>('OutboxJob', OutboxJobSchema);
+
+

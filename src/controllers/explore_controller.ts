@@ -327,3 +327,5 @@ export const updateOutbreak = async (req: Request, res: Response) => {
   }
 };
 
+
+

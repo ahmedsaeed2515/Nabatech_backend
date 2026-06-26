@@ -270,3 +270,5 @@ export const purgeCollection = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+

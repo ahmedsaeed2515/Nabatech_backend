@@ -297,3 +297,5 @@ export const trackHomeEvent = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: "Failed to track event" });
   }
 };
+
+

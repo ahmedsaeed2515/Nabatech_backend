@@ -26,3 +26,5 @@ const diaryEntrySchema = new Schema<IDiaryEntry>(
 );
 
 export default mongoose.model<IDiaryEntry>("DiaryEntry", diaryEntrySchema);
+
+

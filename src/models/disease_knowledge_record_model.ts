@@ -36,3 +36,5 @@ export const DiseaseKnowledgeRecord = mongoose.model<IDiseaseKnowledgeRecord>(
   'DiseaseKnowledgeRecord',
   DiseaseKnowledgeRecordSchema
 );
+
+

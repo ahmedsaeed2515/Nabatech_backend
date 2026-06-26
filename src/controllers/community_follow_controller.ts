@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import Follow from '../models/follow_model';
 import User from '../models/user_model';
 import { logger } from '../utils/logger';
-import { NotificationService } from '../services/notification_service';
+import { NotificationService } from '../services/NotificationService';
 import { CommunityAuditService } from '../services/community_audit_service';
 
 export const followUser = async (req: Request, res: Response) => {
@@ -142,3 +142,5 @@ export const getFollowing = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: 'Failed to get following', error: error.message });
   }
 };
+
+

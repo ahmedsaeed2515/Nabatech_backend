@@ -14,3 +14,5 @@ export class LikeV2Repository extends BaseRepository<LikeV2> {
     await this.model.deleteOne({ user: userId, post: postId }).exec();
   }
 }
+
+

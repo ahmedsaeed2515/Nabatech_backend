@@ -59,3 +59,5 @@ describe('Auth Module E2E', () => {
     expect(res.body.data.user).toHaveProperty('email', testUser.email);
   });
 });
+
+

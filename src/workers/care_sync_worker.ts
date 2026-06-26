@@ -37,3 +37,5 @@ if (redisUrl) {
 } else {
   logger.warn('Redis unavailable – care.sync worker disabled (serverless mode).');
 }
+
+

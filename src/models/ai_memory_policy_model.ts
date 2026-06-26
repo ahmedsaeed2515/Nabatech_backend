@@ -17,3 +17,5 @@ const aiMemoryPolicySchema = new Schema<IAiMemoryPolicy>({
 }, { timestamps: true });
 
 export default model<IAiMemoryPolicy>("AiMemoryPolicy", aiMemoryPolicySchema);
+
+

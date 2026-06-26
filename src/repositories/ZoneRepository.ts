@@ -14,3 +14,5 @@ export class ZoneRepository extends BaseRepository<Zone> {
     return this.model.find({ type: 'OUTDOOR' }).populate('user').exec();
   }
 }
+
+

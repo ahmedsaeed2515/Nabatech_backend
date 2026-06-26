@@ -10,3 +10,5 @@ router.post("/predict", protect, upload.single("image"), predictOnline);
 router.get("/:historyId/advice", protect, generateDiagnosisAdvice);
 
 export default router;
+
+

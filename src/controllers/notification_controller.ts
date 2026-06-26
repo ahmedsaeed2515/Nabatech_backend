@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { NotificationService } from '../services/NotificationService';
 import NotificationModel from '../models/notification_model';
 import mongoose from 'mongoose';
 
@@ -13,43 +14,15 @@ export const getNotifications = async (req: Request, res: Response) => {
 
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(50, parseInt(req.query.limit as string) || 20);
-    const skip = (page - 1) * limit;
 
-    const [notifications, total] = await Promise.all([
-      NotificationModel.find({ user: userId })
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      NotificationModel.countDocuments({ user: userId })
-    ]);
-
-    const formattedNotifications = notifications.map((n: any) => {
-      let mappedType = 'system';
-      const t = (n.type || '').toUpperCase();
-      if (t.includes('REMINDER')) mappedType = 'reminder';
-      else if (t.includes('ALERT')) mappedType = 'alert';
-      else if (t.includes('COMMUNITY')) mappedType = 'community';
-
-      return {
-        id: n._id,
-        titleAr: n.titleAr || n.title,
-        titleEn: n.titleEn || n.title,
-        bodyAr: n.bodyAr || n.body,
-        bodyEn: n.bodyEn || n.body,
-        type: mappedType,
-        isRead: n.read,
-        createdAt: n.createdAt,
-        updatedAt: n.updatedAt,
-        data: n.data
-      };
-    });
+    const result = await NotificationService.getNotifications(userId, page, limit);
 
     return res.json({
       success: true,
       data: {
-        items: formattedNotifications,
-        pageInfo: { page, limit, total, pages: Math.ceil(total / limit) }
+        items: result.items,
+        pageInfo: { page: result.page, limit, total: result.total, pages: result.pages },
+        unreadCount: result.unreadCount
       }
     });
   } catch (err: any) {
@@ -86,11 +59,7 @@ export const markAsRead = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid notification ID' });
     }
 
-    const notification = await NotificationModel.findOneAndUpdate(
-      { _id: req.params.id, user: userId },
-      { read: true },
-      { new: true }
-    );
+    const notification = await NotificationService.markAsRead(userId, req.params.id as string);
 
     if (!notification) {
       return res.status(404).json({ success: false, message: 'Notification not found' });
@@ -111,7 +80,7 @@ export const markAllAsRead = async (req: Request, res: Response) => {
     const userId = (req as any).user?.id || (req as any).userId;
     if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
-    await NotificationModel.updateMany({ user: userId, read: false }, { read: true });
+    await NotificationService.markAllAsRead(userId);
     return res.json({ success: true, message: 'All notifications marked as read' });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });
@@ -137,3 +106,5 @@ export const deleteNotification = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
+

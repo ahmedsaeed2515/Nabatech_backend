@@ -79,3 +79,5 @@ describe('[UNIT] PlantIdentificationService', () => {
     await expect(service.identifyImage('user_1', 'path/to/img.jpg')).rejects.toThrow('Plant identification failed: No response from AI');
   });
 });
+
+

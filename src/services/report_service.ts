@@ -2,7 +2,7 @@ import { Types } from "mongoose";
 import CommunityReport, { ICommunityReport } from "../models/community_report_model";
 import CommunityPost from "../models/community_post_model";
 import { logger } from "../utils/logger";
-import { NotificationService } from "./notification_service";
+import { NotificationService } from "./NotificationService";
 
 export class ReportService {
   /**
@@ -141,3 +141,5 @@ export class ReportService {
     );
   }
 }
+
+

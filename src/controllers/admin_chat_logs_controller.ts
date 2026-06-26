@@ -206,3 +206,5 @@ export const getChatDiagnoses = async (req: Request, res: Response, next: NextFu
     next(error);
   }
 };
+
+

@@ -44,3 +44,5 @@ commentSchema.index({ post: 1, createdAt: -1, _id: -1 });
 commentSchema.index({ author: 1, post: 1, clientOperationId: 1 }, { unique: true, sparse: true });
 
 export default mongoose.model<IComment>("Comment", commentSchema);
+
+

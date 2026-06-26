@@ -27,3 +27,5 @@ const exploreSectionSchema = new Schema<IExploreSection>(
 );
 
 export default mongoose.model<IExploreSection>("ExploreSection", exploreSectionSchema);
+
+

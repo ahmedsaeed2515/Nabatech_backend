@@ -10,3 +10,5 @@ export class UserXpRepository extends BaseRepository<UserXp> {
     return this.model.findOne({ user: userId }).exec();
   }
 }
+
+

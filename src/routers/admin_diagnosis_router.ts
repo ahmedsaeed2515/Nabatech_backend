@@ -11,3 +11,5 @@ router.get("/", protect, admin, validateRequest(adminDiagnosisQuerySchema), getA
 router.get("/analytics", protect, admin, validateRequest(adminDiagnosisAnalyticsQuerySchema), getAdminDiagnosisAnalytics);
 
 export default router;
+
+

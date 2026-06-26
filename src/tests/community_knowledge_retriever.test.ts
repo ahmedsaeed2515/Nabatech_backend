@@ -175,3 +175,5 @@ describe("Community Knowledge Retriever", () => {
     expect(result.text).toContain("How to water basil plants");
   });
 });
+
+

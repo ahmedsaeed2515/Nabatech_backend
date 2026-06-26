@@ -37,3 +37,5 @@ router.delete("/collections/:name/drop", authorizeRoles("super_admin"), dropColl
 router.delete("/collections/:name/purge", authorizeRoles("super_admin"), purgeCollection);
 
 export default router;
+
+

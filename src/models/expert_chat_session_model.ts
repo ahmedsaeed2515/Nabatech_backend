@@ -21,3 +21,5 @@ const expertChatSessionSchema = new Schema<IExpertChatSession>(
 // expertChatSessionSchema.index({ farmerId: 1, expertId: 1 }, { unique: true });
 
 export default mongoose.model<IExpertChatSession>("ExpertChatSession", expertChatSessionSchema);
+
+

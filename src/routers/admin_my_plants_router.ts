@@ -8,3 +8,5 @@ router.get("/", protect, admin, getAdminPlants);
 router.delete("/:id", protect, admin, deleteAdminPlant);
 
 export default router;
+
+

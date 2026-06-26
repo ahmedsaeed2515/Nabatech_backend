@@ -10,3 +10,5 @@ router.put("/:id", protect, updateDiaryEntry);
 router.delete("/:id", protect, deleteDiaryEntry);
 
 export default router;
+
+

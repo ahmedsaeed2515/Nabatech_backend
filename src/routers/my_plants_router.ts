@@ -21,3 +21,5 @@ router.post("/:id/fertilize", protect, fertilizePlant);
 router.get("/:id/fertilizer-logs", protect, getFertilizerLogs);
 
 export default router;
+
+

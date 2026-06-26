@@ -46,3 +46,5 @@ plantDnaSchema.pre(/^find/, function(next) {
 });
 
 export default mongoose.model<PlantDna>('PlantDna', plantDnaSchema);
+
+

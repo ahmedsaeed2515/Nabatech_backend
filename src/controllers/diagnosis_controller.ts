@@ -248,3 +248,5 @@ export const generateDiagnosisAdvice = async (req: Request, res: Response) => {
     res.status(status).json({ success: false, message: "Failed to generate advice" });
   }
 };
+
+

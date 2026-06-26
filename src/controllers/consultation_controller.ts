@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import Consultation from "../models/consultation_model";
 import User from "../models/user_model";
 import { logger } from "../utils/logger";
+import { NotificationService } from '../services/NotificationService';
 
 // @desc    Book a consultation
 // @route   POST /api/community/consultations
@@ -53,7 +54,6 @@ export const bookConsultation = async (req: Request, res: Response) => {
       status: 'pending'
     });
 
-    const NotificationService = (await import("../services/notification_service")).NotificationService;
     NotificationService.sendNotification({
       userId: expertId,
       actorId: farmerId,
@@ -119,3 +119,5 @@ export const getMyConsultations = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to fetch consultations" });
   }
 };
+
+

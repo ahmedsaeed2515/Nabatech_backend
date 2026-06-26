@@ -27,3 +27,5 @@ analyticsSnapshotSchema.pre(/^find/, function(next) {
 });
 
 export default mongoose.model<AnalyticsSnapshot>('AnalyticsSnapshot', analyticsSnapshotSchema);
+
+

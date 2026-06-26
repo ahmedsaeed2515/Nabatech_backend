@@ -23,3 +23,5 @@ router.put("/orders/:id/status", adminStoreController.updateOrderStatus);
 router.get("/analytics", adminStoreController.getStoreAnalytics);
 
 export default router;
+
+

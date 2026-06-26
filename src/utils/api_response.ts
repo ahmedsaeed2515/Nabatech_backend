@@ -48,3 +48,5 @@ export const created = <T>(res: Response, data: T, legacyAliases?: any) => {
   
   return res.status(201).json(response);
 };
+
+

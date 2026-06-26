@@ -74,3 +74,5 @@ diagnosisHistorySchema.index(
 );
 
 export default mongoose.model<IDiagnosisHistory>("DiagnosisHistory", diagnosisHistorySchema);
+
+

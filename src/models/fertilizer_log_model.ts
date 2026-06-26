@@ -50,3 +50,5 @@ fertilizerLogSchema.pre(/^find/, function(next) {
 });
 
 export default mongoose.model<FertilizerLog>('FertilizerLog', fertilizerLogSchema);
+
+

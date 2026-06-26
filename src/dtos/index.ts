@@ -20,3 +20,5 @@ export interface PlantDto {
   stage: string;
   healthScore: number;
 }
+
+

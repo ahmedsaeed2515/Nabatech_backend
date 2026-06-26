@@ -29,3 +29,5 @@ lightMeterSessionSchema.index({ user: 1, createdAt: -1, _id: -1 });
 lightMeterSessionSchema.index({ user: 1, clientOperationId: 1 }, { unique: true, sparse: true });
 
 export default mongoose.model<ILightMeterSession>("LightMeterSession", lightMeterSessionSchema);
+
+

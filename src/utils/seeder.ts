@@ -598,3 +598,5 @@ const seedDiseases = [
     descriptionEn: "A tiny pest active in hot weather, leaving yellow spots and light webbing on leaves."
   }
 ];
+
+

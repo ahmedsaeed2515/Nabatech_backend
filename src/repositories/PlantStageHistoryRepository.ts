@@ -10,3 +10,5 @@ export class PlantStageHistoryRepository extends BaseRepository<PlantStageHistor
     return this.model.find({ plant: plantId }).where('user').equals(userId).sort({ enteredAt: -1 }).exec();
   }
 }
+
+

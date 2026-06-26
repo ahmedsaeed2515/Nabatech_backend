@@ -15,3 +15,5 @@ const aiToolPolicySchema = new Schema<IAiToolPolicy>({
 }, { timestamps: true });
 
 export default model<IAiToolPolicy>("AiToolPolicy", aiToolPolicySchema);
+
+

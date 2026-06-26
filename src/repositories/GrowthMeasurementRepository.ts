@@ -10,3 +10,5 @@ export class GrowthMeasurementRepository extends BaseRepository<GrowthMeasuremen
     return this.model.find({ plant: plantId }).where('user').equals(userId).sort({ createdAt: -1 }).exec();
   }
 }
+
+

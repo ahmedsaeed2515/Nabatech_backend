@@ -20,3 +20,5 @@ export class WeatherAlertRepository extends BaseRepository<WeatherAlert> {
     return alerts.length > 0;
   }
 }
+
+

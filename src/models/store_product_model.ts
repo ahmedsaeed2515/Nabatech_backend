@@ -54,3 +54,5 @@ const storeProductSchema = new Schema<IStoreProduct>(
 );
 
 export default mongoose.model<IStoreProduct>("StoreProduct", storeProductSchema);
+
+

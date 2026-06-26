@@ -75,3 +75,5 @@ communityPostSchema.index({ author: 1, clientOperationId: 1 }, { unique: true, s
 communityPostSchema.index({ title: "text", content: "text", plantTag: "text" });
 
 export default mongoose.model<ICommunityPost>("CommunityPost", communityPostSchema);
+
+

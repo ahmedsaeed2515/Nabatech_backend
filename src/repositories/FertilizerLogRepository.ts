@@ -10,3 +10,5 @@ export class FertilizerLogRepository extends BaseRepository<FertilizerLog> {
     return this.model.find({ plant: plantId }).where('user').equals(userId).sort({ date: -1 }).exec();
   }
 }
+
+

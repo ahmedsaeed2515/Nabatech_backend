@@ -28,3 +28,5 @@ messageFeedbackSchema.index({ isHallucination: 1 });
 messageFeedbackSchema.index({ rating: 1 });
 
 export default model<IMessageFeedback>("MessageFeedback", messageFeedbackSchema);
+
+

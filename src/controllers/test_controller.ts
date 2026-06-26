@@ -12,3 +12,5 @@ export const getById = (req : Request, res : Response) => {
     const id = req.params.id;
     res.status(200).json({success: true, data: {youSent : id , message : "This is a get request with id"}});                
 }
+
+

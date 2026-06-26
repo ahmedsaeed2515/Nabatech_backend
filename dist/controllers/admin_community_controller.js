@@ -63,7 +63,8 @@ const getCommunityAnalytics = async (req, res) => {
             community_post_model_1.default.findOne({ status: 'visible' }).sort({ commentsCount: -1 }).populate('author', 'name'),
             // Most reported
             community_report_model_1.default.aggregate([
-                { $group: { _id: "$reportedPost", count: { $sum: 1 } } },
+                { $match: { entityModel: 'CommunityPost' } },
+                { $group: { _id: "$reportedEntityId", count: { $sum: 1 } } },
                 { $sort: { count: -1 } },
                 { $limit: 1 }
             ]),

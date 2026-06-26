@@ -34,3 +34,5 @@ timelapseJobSchema.pre(/^find/, function(next) {
 });
 
 export default mongoose.model<TimelapseJob>('TimelapseJob', timelapseJobSchema);
+
+

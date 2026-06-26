@@ -21,3 +21,5 @@ router.patch("/mode", protect, admin, patchAiMode);       // تبديل الوض
 router.post("/test-mode", protect, admin, testAiMode);    // اختبار وضع بدون تبديل
 
 export default router;
+
+

@@ -35,3 +35,5 @@ arScanSessionSchema.index({ user: 1, clientOperationId: 1 }, { unique: true, spa
 
 export default mongoose.model<IArScanSession>("ArScanSession", arScanSessionSchema);
 
+
+

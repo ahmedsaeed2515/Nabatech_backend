@@ -17,3 +17,5 @@ const aiRagPolicySchema = new Schema<IAiRagPolicy>({
 }, { timestamps: true });
 
 export default model<IAiRagPolicy>("AiRagPolicy", aiRagPolicySchema);
+
+

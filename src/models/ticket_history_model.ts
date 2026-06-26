@@ -21,3 +21,5 @@ const ticketHistorySchema = new Schema<ITicketHistory>(
 );
 
 export default mongoose.model<ITicketHistory>("TicketHistory", ticketHistorySchema);
+
+

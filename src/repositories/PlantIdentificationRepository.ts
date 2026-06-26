@@ -15,3 +15,5 @@ export class PlantIdentificationRepository extends BaseRepository<IPlantIdentifi
     return this.model.findByIdAndUpdate(id, { isAddedToGarden: true }, { new: true });
   }
 }
+
+

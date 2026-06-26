@@ -11,3 +11,5 @@ router.post('/broadcast', protect, admin, broadcastNotification);
 router.get('/history', protect, admin, getBroadcastHistory);
 
 export default router;
+
+

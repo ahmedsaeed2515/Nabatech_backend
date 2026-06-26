@@ -28,3 +28,5 @@ const ticketReplySchema = new Schema<ITicketReply>(
 );
 
 export default mongoose.model<ITicketReply>("TicketReply", ticketReplySchema);
+
+

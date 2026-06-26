@@ -19,3 +19,5 @@ const aiSafetyPolicySchema = new Schema<IAiSafetyPolicy>({
 }, { timestamps: true });
 
 export default model<IAiSafetyPolicy>("AiSafetyPolicy", aiSafetyPolicySchema);
+
+

@@ -6,3 +6,5 @@ export class PlantHealthLogRepository extends BaseRepository<PlantHealthLog> {
     super(PlantHealthLogModel);
   }
 }
+
+

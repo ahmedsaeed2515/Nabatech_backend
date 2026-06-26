@@ -560,3 +560,142 @@ export const getAdminLogs = async (req: Request, res: Response) => {
   }
 };
 
+export const adminPinPost = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const post = await CommunityPost.findById(id);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    post.isPinned = true;
+    await post.save();
+
+    const AdminActivityLogService = (await import('../services/admin_activity_log_service')).AdminActivityLogService;
+    await AdminActivityLogService.logAction((req as any).user.id, "POST_PINNED", post.id, "CommunityPost");
+
+    res.status(200).json({ success: true, message: "Post pinned", data: { post } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const adminUnpinPost = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const post = await CommunityPost.findById(id);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    post.isPinned = false;
+    await post.save();
+
+    const AdminActivityLogService = (await import('../services/admin_activity_log_service')).AdminActivityLogService;
+    await AdminActivityLogService.logAction((req as any).user.id, "POST_UNPINNED", post.id, "CommunityPost");
+
+    res.status(200).json({ success: true, message: "Post unpinned", data: { post } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const adminLockComments = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const post = await CommunityPost.findById(id);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    post.isLocked = true;
+    await post.save();
+
+    const AdminActivityLogService = (await import('../services/admin_activity_log_service')).AdminActivityLogService;
+    await AdminActivityLogService.logAction((req as any).user.id, "POST_LOCKED", post.id, "CommunityPost");
+
+    res.status(200).json({ success: true, message: "Comments locked", data: { post } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const adminUnlockComments = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const post = await CommunityPost.findById(id);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    post.isLocked = false;
+    await post.save();
+
+    const AdminActivityLogService = (await import('../services/admin_activity_log_service')).AdminActivityLogService;
+    await AdminActivityLogService.logAction((req as any).user.id, "POST_UNLOCKED", post.id, "CommunityPost");
+
+    res.status(200).json({ success: true, message: "Comments unlocked", data: { post } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const adminAddLikes = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const amount = req.body.amount || 1;
+    const post = await CommunityPost.findById(id);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    post.likes += amount;
+    await post.save();
+
+    const AdminActivityLogService = (await import('../services/admin_activity_log_service')).AdminActivityLogService;
+    await AdminActivityLogService.logAction((req as any).user.id, "LIKES_ADDED", post.id, "CommunityPost", { added: amount });
+
+    res.status(200).json({ success: true, message: `Added ${amount} likes`, data: { post } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const adminRemoveLikes = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const amount = req.body.amount || 1;
+    const post = await CommunityPost.findById(id);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    post.likes = Math.max(0, post.likes - amount);
+    await post.save();
+
+    const AdminActivityLogService = (await import('../services/admin_activity_log_service')).AdminActivityLogService;
+    await AdminActivityLogService.logAction((req as any).user.id, "LIKES_REMOVED", post.id, "CommunityPost", { removed: amount });
+
+    res.status(200).json({ success: true, message: `Removed ${amount} likes`, data: { post } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const adminCreatePost = async (req: Request, res: Response) => {
+  try {
+    const { title, content, category, images } = req.body;
+    const adminId = (req as any).user.id;
+
+    if (!title || !content || !category) {
+      return res.status(400).json({ success: false, message: "Title, content and category are required" });
+    }
+
+    const newPost = new CommunityPost({
+      title,
+      content,
+      category,
+      images: images || [],
+      author: adminId, // The admin creates the post
+      status: 'visible'
+    });
+
+    await newPost.save();
+
+    const AdminActivityLogService = (await import('../services/admin_activity_log_service')).AdminActivityLogService;
+    await AdminActivityLogService.logAction(adminId, "CREATE_POST", newPost.id, "CommunityPost", { title, category });
+
+    res.status(201).json({ success: true, data: newPost, message: "Post created successfully" });
+  } catch (error) {
+    logger.error('Failed to create post as admin', { error });
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};

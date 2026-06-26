@@ -105,3 +105,5 @@ ticketSchema.pre(/^find/, function (next) {
 });
 
 export default mongoose.model<ITicket>("Ticket", ticketSchema);
+
+

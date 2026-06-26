@@ -119,3 +119,5 @@ if (redisUrl) {
 } else {
   logger.warn('Redis unavailable – timelapse worker disabled (serverless mode).');
 }
+
+

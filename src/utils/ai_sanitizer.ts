@@ -10,3 +10,5 @@ export const sanitizeModelOutput = (text: string): string => {
     .replace(/<thought>[\s\S]*?<\/thought>/gi, "")
     .trim();
 };
+
+

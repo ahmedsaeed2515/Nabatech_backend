@@ -10,3 +10,5 @@ router.put("/:id", protect, updateReminder);
 router.delete("/:id", protect, deleteReminder);
 
 export default router;
+
+

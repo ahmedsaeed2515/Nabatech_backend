@@ -58,3 +58,5 @@ const myPlantSchema = new Schema<IMyPlant>(
 );
 
 export default mongoose.model<IMyPlant>("MyPlant", myPlantSchema);
+
+

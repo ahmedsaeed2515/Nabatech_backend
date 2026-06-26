@@ -29,3 +29,5 @@ export const getReportsQuerySchema = z.object({
     reason: z.enum(["Spam", "Wrong Diagnosis", "Harassment", "Fake Information", "Other"]).optional(),
   }),
 });
+
+

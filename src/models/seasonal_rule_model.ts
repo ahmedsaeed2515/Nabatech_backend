@@ -23,3 +23,5 @@ seasonalRuleSchema.pre(/^find/, function(next) {
 });
 
 export default mongoose.model<SeasonalRule>('SeasonalRule', seasonalRuleSchema);
+
+

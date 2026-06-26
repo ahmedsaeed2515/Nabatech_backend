@@ -26,3 +26,5 @@ if (redisUrl) {
 export const isRedisAvailable = () => redisClient !== null;
 
 export default redisClient;
+
+

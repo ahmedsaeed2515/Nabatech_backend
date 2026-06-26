@@ -36,3 +36,5 @@ communityReportSchema.index({ reporterId: 1, reportedEntityId: 1 }, { unique: tr
 communityReportSchema.index({ status: 1, createdAt: -1 });
 
 export default mongoose.model<ICommunityReport>("CommunityReport", communityReportSchema);
+
+

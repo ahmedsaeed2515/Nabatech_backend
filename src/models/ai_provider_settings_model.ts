@@ -32,3 +32,5 @@ const aiProviderSettingsSchema = new Schema<IAiProviderSettings>(
 );
 
 export default mongoose.model<IAiProviderSettings>("AiProviderSettings", aiProviderSettingsSchema);
+
+

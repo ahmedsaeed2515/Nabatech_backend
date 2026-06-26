@@ -33,3 +33,5 @@ voiceCommandSchema.pre(/^find/, function(next) {
 });
 
 export default mongoose.model<VoiceCommand>('VoiceCommand', voiceCommandSchema);
+
+

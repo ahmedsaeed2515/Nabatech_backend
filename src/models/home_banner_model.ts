@@ -23,3 +23,5 @@ const homeBannerSchema = new Schema<IHomeBanner>({
 }, { timestamps: true });
 
 export default model<IHomeBanner>("HomeBanner", homeBannerSchema);
+
+

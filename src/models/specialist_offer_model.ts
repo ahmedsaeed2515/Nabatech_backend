@@ -54,3 +54,5 @@ specialistOfferSchema.index({ specialist: 1, post: 1, clientOperationId: 1 }, { 
 
 export default mongoose.model<ISpecialistOffer>("SpecialistOffer", specialistOfferSchema);
 
+
+

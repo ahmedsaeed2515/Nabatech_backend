@@ -42,3 +42,5 @@ export class CareService {
     return fertLog;
   }
 }
+
+

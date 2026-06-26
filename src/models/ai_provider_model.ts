@@ -22,3 +22,5 @@ const aiProviderSchema = new Schema<IAiProvider>(
 );
 
 export default model<IAiProvider>("AiProvider", aiProviderSchema);
+
+

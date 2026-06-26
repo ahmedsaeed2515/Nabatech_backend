@@ -34,3 +34,5 @@ const broadcastNotificationSchema = new mongoose.Schema<IBroadcastNotification>(
 );
 
 export default mongoose.model<IBroadcastNotification>('BroadcastNotification', broadcastNotificationSchema);
+
+

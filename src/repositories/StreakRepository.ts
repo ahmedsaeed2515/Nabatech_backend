@@ -17,3 +17,5 @@ export class StreakRepository extends BaseRepository<Streak> {
     ).exec();
   }
 }
+
+

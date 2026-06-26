@@ -14,3 +14,5 @@ export class TimelapseJobRepository extends BaseRepository<TimelapseJob> {
     return this.model.find({ plant: plantId }).sort({ createdAt: -1 }).exec();
   }
 }
+
+

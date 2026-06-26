@@ -30,3 +30,5 @@ const consultationSchema = new Schema<IConsultation>(
 );
 
 export default mongoose.model<IConsultation>("Consultation", consultationSchema);
+
+

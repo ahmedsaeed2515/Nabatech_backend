@@ -41,3 +41,5 @@ if (redisClient) {
   logger.warn('Redis unavailable – AI analysis worker disabled (serverless mode).');
 }
 
+
+

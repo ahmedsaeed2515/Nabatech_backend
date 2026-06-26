@@ -5,6 +5,7 @@ import CommunityPost from '../models/community_post_model';
 import { AppError } from '../utils/app_error';
 import { formatRelativeTime } from './community_controller';
 import { logger } from '../utils/logger';
+import { NotificationService } from '../services/NotificationService';
 
 // @desc    Get expert profile by userId
 // @route   GET /api/experts/:id
@@ -180,7 +181,6 @@ export const resolveEscalation = async (req: Request, res: Response, next: NextF
     escalation.expertId = adminId;
     await escalation.save();
 
-    const NotificationService = (await import("../services/notification_service")).NotificationService;
     NotificationService.sendNotification({
       userId: escalation.userId.toString(),
       actorId: adminId,
@@ -232,3 +232,5 @@ const broadcastEscalationEvent = (type: string, data: any) => {
     }
   });
 };
+
+

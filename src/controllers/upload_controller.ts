@@ -120,3 +120,5 @@ export const uploadCover = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: 'Cover image upload failed', error });
   }
 };
+
+

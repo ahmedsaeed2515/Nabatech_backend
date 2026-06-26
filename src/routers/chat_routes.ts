@@ -13,3 +13,5 @@ router.get("/sessions", protect, getChatSessions);
 router.get("/all", protect, admin, getAllChatLogs);
 
 export default router;
+
+

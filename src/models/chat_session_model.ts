@@ -31,3 +31,5 @@ chatSessionSchema.index({ user: 1, startedAt: -1 });
 chatSessionSchema.index({ startedAt: -1 });
 
 export default model<IChatSession>("ChatSession", chatSessionSchema);
+
+

@@ -33,6 +33,26 @@ exports.createPostSchema = zod_1.z.object({
         plantTag: zod_1.z.enum(['Diagnosis', 'Care Tips', 'Watering', 'Pests', 'General']),
         clientOperationId: zod_1.z.string().min(1).max(100),
         linkedDiagnosisId: zod_1.z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid diagnosis ID format').optional(),
+        pollQuestion: zod_1.z.string().trim().min(5).max(300).regex(/^(?!.*<[^>]+>).*/s, "HTML tags are not allowed").optional(),
+        pollOptions: zod_1.z.union([
+            zod_1.z.string(),
+            zod_1.z.array(zod_1.z.string().trim().min(1).max(100).regex(/^(?!.*<[^>]+>).*/s, "HTML tags are not allowed"))
+        ]).optional(),
+    }).refine((data) => {
+        if (data.pollQuestion) {
+            if (!data.pollOptions)
+                return false;
+            const options = Array.isArray(data.pollOptions) ? data.pollOptions : [data.pollOptions];
+            if (options.length < 2 || options.length > 10)
+                return false;
+            const uniqueOptions = new Set(options.map(o => o.toLowerCase()));
+            if (uniqueOptions.size !== options.length)
+                return false;
+        }
+        return true;
+    }, {
+        message: "If a poll is provided, there must be between 2 and 10 unique poll options",
+        path: ["pollOptions"],
     }),
     // file validation is handled by upload_middleware but we can validate its presence if needed
 });

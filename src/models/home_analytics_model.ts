@@ -19,3 +19,5 @@ const homeAnalyticsSchema = new Schema<IHomeAnalytics>({
 homeAnalyticsSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
 
 export default model<IHomeAnalytics>("HomeAnalytics", homeAnalyticsSchema);
+
+

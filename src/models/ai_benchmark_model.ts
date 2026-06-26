@@ -26,3 +26,5 @@ const aiBenchmarkSchema = new Schema<IAiBenchmark>(
 aiBenchmarkSchema.index({ model: 1, testedAt: -1 });
 
 export default model<IAiBenchmark>("AiBenchmark", aiBenchmarkSchema);
+
+

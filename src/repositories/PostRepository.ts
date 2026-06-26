@@ -27,3 +27,5 @@ export class PostRepository extends BaseRepository<ICommunityPost> {
     await this.model.findByIdAndUpdate(postId, { $inc: { likes: -1 } }).exec();
   }
 }
+
+

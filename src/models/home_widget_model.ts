@@ -21,3 +21,5 @@ const homeWidgetSchema = new Schema<IHomeWidget>({
 }, { timestamps: true });
 
 export default model<IHomeWidget>("HomeWidget", homeWidgetSchema);
+
+

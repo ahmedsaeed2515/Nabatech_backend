@@ -29,3 +29,5 @@ const outbreakSpotSchema = new Schema<IOutbreakSpot>(
 );
 
 export default mongoose.model<IOutbreakSpot>("OutbreakSpot", outbreakSpotSchema);
+
+

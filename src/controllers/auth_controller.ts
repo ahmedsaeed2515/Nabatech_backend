@@ -477,3 +477,5 @@ export const resendVerification = async (req: Request, res: Response, next: Next
     session.endSession();
   }
 };
+
+

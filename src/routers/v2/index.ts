@@ -124,3 +124,5 @@ router.post('/edge/timelapse', protectV2, IdempotencyCheck, edgeController.reque
 router.get('/edge/timelapse', protectV2, edgeController.getTimelapseJobs);
 
 export default router;
+
+

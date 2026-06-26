@@ -33,3 +33,5 @@ aiToolCallSchema.index({ toolName: 1, status: 1 });
 aiToolCallSchema.index({ createdAt: -1 });
 
 export default model<IAiToolCall>("AiToolCall", aiToolCallSchema);
+
+

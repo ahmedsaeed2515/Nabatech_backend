@@ -62,3 +62,5 @@ export const protectV2 = async (req: Request, res: Response, next: NextFunction)
     return next(new AppError({ code: 'AUTH_REQUIRED', statusCode: 401, message: 'Not authorized, no token' }));
   }
 };
+
+

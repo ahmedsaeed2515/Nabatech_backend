@@ -87,3 +87,5 @@ router.post('/logout', protect, validateRequest(logoutSchema), logoutUser);
 router.post('/logout-all', protect, logoutAll);
 
 export default router;
+
+

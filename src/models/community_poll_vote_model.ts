@@ -19,3 +19,5 @@ const communityPollVoteSchema = new Schema<ICommunityPollVote>(
 communityPollVoteSchema.index({ poll: 1, user: 1 }, { unique: true });
 
 export default mongoose.model<ICommunityPollVote>("CommunityPollVote", communityPollVoteSchema);
+
+

@@ -25,3 +25,5 @@ streakSchema.pre(/^find/, function(next) {
 });
 
 export default mongoose.model<Streak>('Streak', streakSchema);
+
+

@@ -63,3 +63,5 @@ export const authorizeRoles = (...roles: string[]) => {
 };
 
 export const admin = authorizeRoles('admin', 'super_admin');
+
+

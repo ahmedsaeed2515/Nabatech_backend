@@ -12,3 +12,5 @@ router.put("/:id", protect, admin, updateAdminUserPlant);
 router.delete("/:id", protect, admin, deleteAdminUserPlant);
 
 export default router;
+
+

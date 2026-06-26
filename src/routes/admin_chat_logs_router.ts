@@ -22,3 +22,5 @@ router.get("/:id", getChatLogById);
 router.get("/", getChatLogs);
 
 export default router;
+
+

@@ -17,3 +17,5 @@ const aiEscalationPolicySchema = new Schema<IAiEscalationPolicy>({
 }, { timestamps: true });
 
 export default model<IAiEscalationPolicy>("AiEscalationPolicy", aiEscalationPolicySchema);
+
+

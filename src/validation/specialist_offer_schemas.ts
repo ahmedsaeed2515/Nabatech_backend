@@ -51,3 +51,5 @@ export const adminOffersQuerySchema = z.object({
     specialistId: z.string().regex(objectIdRegex, 'Invalid specialist ID format').optional(),
   }),
 });
+
+

@@ -33,7 +33,7 @@ const runQA = async () => {
         const { default: User } = await import('../models/user_model');
         const { default: MyPlant } = await import('../models/my_plant_model');
         const { default: CommunityPost } = await import('../models/community_post_model');
-        const { default: CommunityNotification } = await import('../models/community_notification_model');
+        const { default: NotificationModel } = await import('../models/notification_model');
 
         // Start Express App
         server = app.listen(PORT, () => {
@@ -150,8 +150,8 @@ const runQA = async () => {
         // Wait 1.5 seconds for async notifications and triggers to fire
         await new Promise(r => setTimeout(r, 1500));
         
-        const notifsForA = await CommunityNotification.find({ recipient: users.A.id }).sort({ createdAt: -1 });
-        const notifsForB = await CommunityNotification.find({ recipient: users.B.id }).sort({ createdAt: -1 });
+        const notifsForA = await NotificationModel.find({ user: users.A.id }).sort({ createdAt: -1 });
+        const notifsForB = await NotificationModel.find({ user: users.B.id }).sort({ createdAt: -1 });
 
         const likeNotif = notifsForA.find(n => n.type === 'LIKE_POST');
         const commentNotif = notifsForA.find(n => n.type === 'COMMENT_POST');
@@ -186,3 +186,5 @@ const runQA = async () => {
 };
 
 runQA();
+
+

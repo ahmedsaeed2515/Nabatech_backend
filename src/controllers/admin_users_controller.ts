@@ -7,6 +7,7 @@ import CommunityPost from "../models/community_post_model";
 import CommentV2 from "../models/comment_v2_model";
 import mongoose from "mongoose";
 import { logger } from "../utils/logger";
+import bcrypt from "bcryptjs";
 
 // Helper to log admin actions
 const logAction = async (adminId: string, action: string, targetUserId: string | null, details: any, targetUsers?: string[]) => {
@@ -340,3 +341,42 @@ export const bulkAction = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to execute bulk action", error });
   }
 };
+
+export const adminCreateUser = async (req: Request, res: Response) => {
+  try {
+    const { name, email, password, role } = req.body;
+    const adminId = (req as any).user.id;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ success: false, message: "Name, email and password are required" });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: "User with this email already exists" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = new User({
+      name,
+      email,
+      passwordHash: hashedPassword,
+      role: role || 'user',
+      isEmailVerified: true // Admin created users are automatically verified
+    });
+
+    await newUser.save();
+
+    const AdminActivityLogService = (await import('../services/admin_activity_log_service')).AdminActivityLogService;
+    await AdminActivityLogService.logAction(adminId, "CREATE_USER", newUser.id, "User", { email, role: newUser.role });
+
+    res.status(201).json({ success: true, data: newUser, message: "User created successfully" });
+  } catch (error) {
+    logger.error('Failed to create user as admin', { error });
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+
+

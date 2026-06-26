@@ -25,3 +25,5 @@ postSchema.pre(/^find/, function(next) {
 });
 
 export default mongoose.model<Post>('Post', postSchema);
+
+

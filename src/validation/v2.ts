@@ -87,3 +87,5 @@ export const updateInventoryItemSchema = z.object({
     qty: z.number().int().min(0).optional()
   })
 });
+
+

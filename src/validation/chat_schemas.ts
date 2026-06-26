@@ -17,3 +17,5 @@ export const validateChatText = (text?: string): boolean => {
   const trimmed = text.trim();
   return trimmed.length > 0 && trimmed.length <= 2000;
 };
+
+

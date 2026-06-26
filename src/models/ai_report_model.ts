@@ -25,3 +25,5 @@ aiReportSchema.pre(/^find/, function(next) {
 });
 
 export default mongoose.model<AiReport>('AiReport', aiReportSchema);
+
+

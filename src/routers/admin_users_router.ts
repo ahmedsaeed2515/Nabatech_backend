@@ -8,7 +8,8 @@ import {
   softDeleteUser, 
   restoreUser, 
   bulkAction,
-  updateUserModeration
+  updateUserModeration,
+  adminCreateUser
 } from "../controllers/admin_users_controller";
 
 const router = Router();
@@ -19,7 +20,8 @@ router.use(authorizeRoles('admin', 'super_admin'));
 
 // Route: /api/admin/users
 router.route('/')
-  .get(getUsers);
+  .get(getUsers)
+  .post(adminCreateUser);
 
 // Route: /api/admin/users/bulk-action
 router.post('/bulk-action', bulkAction);
@@ -42,3 +44,5 @@ router.route('/:id')
   .delete(softDeleteUser);
 
 export default router;
+
+

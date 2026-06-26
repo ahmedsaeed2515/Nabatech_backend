@@ -2,7 +2,6 @@ import { PostRepository } from '../repositories/PostRepository';
 import { CommentV2Repository } from '../repositories/CommentV2Repository';
 import { LikeV2Repository } from '../repositories/LikeV2Repository';
 import { NotificationService } from './NotificationService';
-import { NotificationService as CommunityNotificationService } from './notification_service';
 import { UserRepository } from '../repositories/UserRepository';
 import mongoose from 'mongoose';
 import { logger } from '../utils/logger';
@@ -45,7 +44,7 @@ export class CommunityService {
       const Follow = mongoose.model('Follow');
       const followers = await Follow.find({ following: new mongoose.Types.ObjectId(userId) });
       for (const follow of followers) {
-        await CommunityNotificationService.sendNotification({
+        await NotificationService.sendNotification({
           userId: follow.follower.toString(),
           actorId: userId,
           type: 'NEW_POST_FROM_FOLLOWING',
@@ -106,7 +105,7 @@ export class CommunityService {
           const post = await this.postRepo.findById(postId);
           const user = await this.userRepo.findById(userId);
           if (post && user && post.author.toString() !== userId) {
-            await CommunityNotificationService.sendNotification({
+            await NotificationService.sendNotification({
               userId: post.author.toString(),
               actorId: userId,
               type: 'LIKE_POST',
@@ -148,7 +147,7 @@ export class CommunityService {
           const commenterName = commenter?.name || commenter?.email?.split('@')[0] || 'Someone';
 
           // 1. Send In-App Notification
-          await CommunityNotificationService.sendNotification({
+          await NotificationService.sendNotification({
             userId: postOwner._id.toString(),
             actorId: userId,
             type: 'COMMENT_POST',
@@ -197,3 +196,5 @@ export class CommunityService {
     return true;
   }
 }
+
+

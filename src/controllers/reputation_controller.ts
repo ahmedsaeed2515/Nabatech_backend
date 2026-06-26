@@ -51,7 +51,7 @@ export const getLeaderboard = async (req: Request, res: Response) => {
   }
 };
 
-import { NotificationService } from '../services/notification_service';
+import { NotificationService } from '../services/NotificationService';
 
 // Internal service method for awarding points (to be used by other controllers like community_controller when post is created/liked)
 export const awardReputationPoints = async (userId: string | mongoose.Types.ObjectId, pointsToAdd: number, reason: string) => {
@@ -111,3 +111,5 @@ export const awardReputationPoints = async (userId: string | mongoose.Types.Obje
     console.error('Failed to award reputation points:', error);
   }
 };
+
+

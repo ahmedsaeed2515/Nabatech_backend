@@ -8,3 +8,5 @@ router.get('/', getArticles);
 router.get('/:id', getArticleById);
 
 export default router;
+
+

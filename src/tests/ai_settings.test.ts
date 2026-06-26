@@ -170,3 +170,5 @@ describe("AI Settings admin endpoints", () => {
     expect(res.body.data[0].feature).toBe("chat");
   });
 });
+
+

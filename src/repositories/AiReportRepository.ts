@@ -10,3 +10,5 @@ export class AiReportRepository extends BaseRepository<AiReport> {
     return this.model.find({ user: userId }).sort({ createdAt: -1 }).exec();
   }
 }
+
+

@@ -24,3 +24,5 @@ export const arScanListSchema = z.object({
     mode: z.enum(['identify', 'measure', 'placement', 'diagnosis_overlay']).optional(),
   })
 });
+
+

@@ -71,3 +71,5 @@ export class AnalyticsService {
     return { status: 'queued', message: 'AI analysis has been queued' };
   }
 }
+
+

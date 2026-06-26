@@ -8,3 +8,5 @@ router.get("/", protect, admin, getAdminReminders);
 router.get("/stats", protect, admin, getAdminStats);
 
 export default router;
+
+

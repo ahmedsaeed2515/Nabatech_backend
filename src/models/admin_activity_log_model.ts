@@ -24,3 +24,5 @@ const adminActivityLogSchema = new Schema<IAdminActivityLog>(
 adminActivityLogSchema.index({ action: 1, createdAt: -1 });
 
 export default mongoose.model<IAdminActivityLog>('AdminActivityLog', adminActivityLogSchema);
+
+

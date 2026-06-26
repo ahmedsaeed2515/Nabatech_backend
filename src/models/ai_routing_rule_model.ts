@@ -26,3 +26,5 @@ const aiRoutingRuleSchema = new Schema<IAiRoutingRule>(
 );
 
 export default model<IAiRoutingRule>("AiRoutingRule", aiRoutingRuleSchema);
+
+

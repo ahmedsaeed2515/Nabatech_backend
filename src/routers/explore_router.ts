@@ -93,3 +93,5 @@ router.put("/outbreaks/:id", protect, admin, updateOutbreak);
 router.delete("/outbreaks/:id", protect, admin, deleteOutbreak);
 
 export default router;
+
+

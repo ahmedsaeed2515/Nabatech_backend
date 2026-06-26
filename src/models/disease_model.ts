@@ -43,3 +43,5 @@ const diseaseSchema = new Schema<IDisease>(
 diseaseSchema.index({ type: 1, normalizedNameEn: 1 });
 
 export default mongoose.model<IDisease>("Disease", diseaseSchema);
+
+

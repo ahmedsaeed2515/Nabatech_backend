@@ -16,3 +16,5 @@ const aiPolicyVersionSchema = new Schema<IAiPolicyVersion>({
 }, { timestamps: true });
 
 export default model<IAiPolicyVersion>("AiPolicyVersion", aiPolicyVersionSchema);
+
+

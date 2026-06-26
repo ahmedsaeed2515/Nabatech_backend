@@ -38,3 +38,5 @@ router.get("/:id", protect, getUserTicketById);
 router.post("/:id/reply", protect, replyToOwnTicket);
 
 export default router;
+
+

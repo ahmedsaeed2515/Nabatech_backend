@@ -22,3 +22,5 @@ const aiPromptTemplateSchema = new Schema<IAiPromptTemplate>(
 );
 
 export default model<IAiPromptTemplate>("AiPromptTemplate", aiPromptTemplateSchema);
+
+

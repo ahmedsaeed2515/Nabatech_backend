@@ -30,3 +30,5 @@ savedPostSchema.index({ user: 1, post: 1 }, { unique: true });
 const SavedPost = mongoose.model<ISavedPost>('SavedPost', savedPostSchema);
 
 export default SavedPost;
+
+

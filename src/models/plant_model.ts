@@ -117,3 +117,5 @@ plantSchema.pre(/^find/, function(next) {
 });
 
 export default mongoose.model<Plant>('Plant', plantSchema);
+
+

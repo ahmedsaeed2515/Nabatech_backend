@@ -26,3 +26,5 @@ aiMemorySchema.index({ userId: 1, type: 1, key: 1 }, { unique: true });
 aiMemorySchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 export default mongoose.model<IAiMemory>("AiMemory", aiMemorySchema);
+
+

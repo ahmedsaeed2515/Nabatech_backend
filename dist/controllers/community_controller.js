@@ -259,7 +259,7 @@ const createPost = async (req, res) => {
     try {
         const userId = req.user.id;
         const username = req.user.name;
-        const { title, content, plantTag, clientOperationId, linkedDiagnosisId } = req.body;
+        const { title, content, plantTag, clientOperationId, linkedDiagnosisId, pollQuestion, pollOptions } = req.body;
         // Validation is mostly handled by Zod now, but idempotency check happens here
         if (clientOperationId) {
             const existing = await community_post_model_1.default.findOne({ author: userId, clientOperationId })
@@ -294,6 +294,26 @@ const createPost = async (req, res) => {
             imageUrls.push(imageUrl);
             uploadedImagePublicIds.push(imagePublicId);
         }
+        let linkedPollId = undefined;
+        if (pollQuestion && pollOptions) {
+            const optionsArray = Array.isArray(pollOptions) ? pollOptions : [pollOptions];
+            if (optionsArray.length >= 2) {
+                const poll = await community_poll_model_1.default.create({
+                    question: pollQuestion.trim(),
+                    totalVotes: 0,
+                });
+                linkedPollId = poll._id;
+                let sortOrder = 0;
+                for (const opt of optionsArray) {
+                    await community_poll_option_model_1.default.create({
+                        poll: poll._id,
+                        text: opt.trim(),
+                        votes: 0,
+                        sortOrder: sortOrder++,
+                    });
+                }
+            }
+        }
         const post = await community_post_model_1.default.create({
             author: userId,
             authorName: username,
@@ -305,6 +325,7 @@ const createPost = async (req, res) => {
             imageUrls,
             clientOperationId,
             linkedDiagnosis: linkedDiagnosisId || undefined,
+            poll: linkedPollId,
         });
         try {
             await community_audit_service_1.CommunityAuditService.logAction(userId, 'CREATE_POST', 'CommunityPost', post._id.toString(), { title: post.title.substring(0, 50), plantTag });

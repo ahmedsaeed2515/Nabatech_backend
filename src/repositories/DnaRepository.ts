@@ -10,3 +10,5 @@ export class DnaRepository extends BaseRepository<PlantDna> {
     return this.model.findOne({ species }).exec();
   }
 }
+
+

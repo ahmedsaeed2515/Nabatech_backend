@@ -22,3 +22,5 @@ export class PlantRepository extends BaseRepository<Plant> {
     return this.model.find({ name: { $regex: query, $options: 'i' } }).limit(limit).exec();
   }
 }
+
+

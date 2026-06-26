@@ -33,3 +33,5 @@ router.post("/assets/bulk-delete", authorizeRoles("super_admin"), bulkDeleteAsse
 router.post("/orphans/cleanup", authorizeRoles("super_admin"), cleanupOrphans);
 
 export default router;
+
+

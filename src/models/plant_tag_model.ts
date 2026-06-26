@@ -27,3 +27,5 @@ plantTagSchema.pre(/^find/, function(next) {
 });
 
 export default mongoose.model<PlantTag>('PlantTag', plantTagSchema);
+
+

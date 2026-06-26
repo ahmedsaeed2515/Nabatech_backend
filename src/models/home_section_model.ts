@@ -19,3 +19,5 @@ const homeSectionSchema = new Schema<IHomeSection>({
 }, { timestamps: true });
 
 export default model<IHomeSection>("HomeSection", homeSectionSchema);
+
+

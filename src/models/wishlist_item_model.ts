@@ -23,3 +23,5 @@ wishlistItemSchema.pre(/^find/, function(next) {
 });
 
 export default mongoose.model<WishlistItem>('WishlistItem', wishlistItemSchema);
+
+

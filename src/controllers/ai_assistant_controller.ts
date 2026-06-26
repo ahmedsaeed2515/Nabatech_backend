@@ -366,3 +366,5 @@ Maximum 2 short lines. Output STRICTLY as a JSON object with this exact structur
     return res.status(500).json({ success: false, message: "Greeting failed" });
   }
 };
+
+

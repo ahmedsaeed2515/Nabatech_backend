@@ -40,3 +40,5 @@ router.put("/diseases/:id", protect, admin, updateDisease);
 router.delete("/diseases/:id", protect, admin, deleteDisease);
 
 export default router;
+
+

@@ -39,3 +39,5 @@ const exploreClickEventSchema = new Schema<IExploreClickEvent>(
 );
 
 export default mongoose.model<IExploreClickEvent>("ExploreClickEvent", exploreClickEventSchema);
+
+

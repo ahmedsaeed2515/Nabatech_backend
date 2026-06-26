@@ -10,3 +10,5 @@ export class AnalyticsSnapshotRepository extends BaseRepository<AnalyticsSnapsho
     return this.model.find({ user: userId }).sort({ createdAt: -1 }).exec();
   }
 }
+
+

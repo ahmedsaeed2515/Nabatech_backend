@@ -29,3 +29,5 @@ const aiAgentProfileSchema = new Schema<IAiAgentProfile>({
 }, { timestamps: true });
 
 export default model<IAiAgentProfile>("AiAgentProfile", aiAgentProfileSchema);
+
+

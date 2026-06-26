@@ -23,3 +23,5 @@ export const hashToken = (token: string): string => {
 };
 
 export default generateAccessToken;
+
+

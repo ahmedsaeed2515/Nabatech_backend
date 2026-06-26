@@ -36,3 +36,5 @@ router.post("/watering/history", protect, validateRequest(wateringHistorySchema)
 router.get("/watering/recommendations", protect, validateRequest(wateringRecommendationSchema), getWateringRecommendation);
 
 export default router;
+
+

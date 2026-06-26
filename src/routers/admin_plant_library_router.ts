@@ -11,3 +11,5 @@ router.get("/search", protect, admin, adminSearchPlants);
 router.post("/imports", protect, admin, bulkImport);
 
 export default router;
+
+

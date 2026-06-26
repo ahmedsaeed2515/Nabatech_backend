@@ -1,11 +1,12 @@
 import { Request, Response } from "express";
+
 import CommunityPost from "../models/community_post_model";
 import Comment from "../models/comment_model";
 import cloudinary from "../config/cloudinary";
 import { logger } from "../utils/logger";
 import { AppError } from "../utils/app_error";
 import { NextFunction } from "express";
-import { NotificationService } from "../services/notification_service";
+import { NotificationService } from '../services/NotificationService';
 import { CommunityAuditService } from "../services/community_audit_service";
 import CommunityPoll from "../models/community_poll_model";
 import CommunityPollOption from "../models/community_poll_option_model";
@@ -1068,4 +1069,6 @@ export const getActivityCenter = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to get activity center data" });
   }
 };
+
+
 

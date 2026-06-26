@@ -28,3 +28,5 @@ RefreshSessionSchema.index({ user: 1, deviceId: 1 });
 RefreshSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 export default mongoose.model<IRefreshSession>('RefreshSession', RefreshSessionSchema);
+
+

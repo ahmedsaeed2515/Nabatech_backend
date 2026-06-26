@@ -78,3 +78,5 @@ describe('[INTEGRATION] AgentTool — add_plant_to_garden', () => {
     expect(plantCount).toBe(0);
   });
 });
+
+

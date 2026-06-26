@@ -150,3 +150,5 @@ export const deleteDiaryEntry = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to delete diary entry", error });
   }
 };
+
+

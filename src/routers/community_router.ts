@@ -13,7 +13,7 @@ import { getUserReputation, getLeaderboard } from "../controllers/reputation_con
 import { protect, authorizeRoles } from "../middlewares/auth_middleware";
 import upload from "../middlewares/upload_middleware";
 import { communityPostLimiter, communityCommentLimiter, communitySearchLimiter, communityFollowLimiter } from "../middlewares/rate_limit_middleware";
-import { CommunityNotificationController } from "../controllers/community_notification_controller";
+import { getNotifications, markAllAsRead, markAsRead } from "../controllers/notification_controller";
 import { voteOnPoll } from "../controllers/poll_controller";
 import { bookConsultation, getMyConsultations } from "../controllers/consultation_controller";
 
@@ -61,9 +61,9 @@ router.get('/reputation/leaderboard', protect, getLeaderboard);
 router.get('/reputation/:userId', protect, getUserReputation);
 
 // Notifications System
-router.get('/notifications', protect, CommunityNotificationController.getNotifications);
-router.patch('/notifications/read-all', protect, CommunityNotificationController.markAllAsRead);
-router.patch('/notifications/:id/read', protect, CommunityNotificationController.markAsRead);
+router.get('/notifications', protect, getNotifications);
+router.patch('/notifications/read-all', protect, markAllAsRead);
+router.patch('/notifications/:id/read', protect, markAsRead);
 
 // Polls
 router.post('/polls/:pollId/vote', protect, voteOnPoll);
@@ -73,3 +73,5 @@ router.post('/consultations', protect, bookConsultation);
 router.get('/consultations/me', protect, getMyConsultations);
 
 export default router;
+
+
