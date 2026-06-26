@@ -351,6 +351,15 @@ export const orchestrateChat = async (args: {
     console.log("[FINAL_RESPONSE_SOURCE] llm");
   }
 
+  let finalMessage = sanitizeLlmResponse(chatResult.message);
+  if (!finalMessage) {
+    const isArabic = /[\\u0600-\\u06FF]/.test(args.question || "") || args.language === "ar";
+    finalMessage = isArabic 
+      ? "أواجه حاليًا ضغطًا كبيرًا ولا يمكنني إنشاء رد مفصل. يرجى المحاولة مرة أخرى لاحقًا."
+      : "I am currently experiencing high traffic and cannot generate a detailed response. Please try again later.";
+    chatResult.source = "fallback";
+  }
+
   await logAiCall({
     userId: args.userId,
     requestId: reqId,
@@ -359,12 +368,12 @@ export const orchestrateChat = async (args: {
     status: chatResult.source === "fallback" ? "failure" : "success",
     latencyMs: Date.now() - started,
     inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
-    outputMeta: { responseLength: chatResult.message.length, source: chatResult.source },
-    errorMessage: chatResult.source === "fallback" ? "No AI provider succeeded" : undefined,
+    outputMeta: { responseLength: finalMessage.length, source: chatResult.source },
+    errorMessage: chatResult.source === "fallback" ? "No AI provider succeeded or response was empty" : undefined,
     toolCalls: chatResult.toolCalls,
   });
 
-  return { message: sanitizeLlmResponse(chatResult.message), source: chatResult.source, provider: chatResult.provider, ragContext, communityContext, pendingToolCall: (chatResult as any).pendingToolCall };
+  return { message: finalMessage, source: chatResult.source, provider: chatResult.provider, ragContext, communityContext, pendingToolCall: (chatResult as any).pendingToolCall };
 };
 
 export const orchestrateAssistantRequest = async (args: {
@@ -690,6 +699,14 @@ Output valid JSON in this exact format:
     source = chatResult.source;
     provider = chatResult.provider;
     toolCalls = chatResult.toolCalls;
+  }
+
+  if (!message) {
+    const isArabic = /[\\u0600-\\u06FF]/.test(args.question || "") || args.language === "ar";
+    message = isArabic 
+      ? "أواجه حاليًا ضغطًا كبيرًا ولا يمكنني إنشاء رد مفصل. يرجى المحاولة مرة أخرى لاحقًا."
+      : "I am currently experiencing high traffic and cannot generate a detailed response. Please try again later.";
+    source = "fallback";
   }
 
   if (isLowConfidence && settings.pipeline.lowConfidenceBehavior === "ask_for_new_image") {
