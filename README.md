@@ -2,7 +2,7 @@
 
 ## Run Locally
 1. `cd backend`
-2. `npm install`
+2. `npm install` 
 3. Create `.env` from `.env.example`
 4. Start dev server: 
    - `npm run dev`
