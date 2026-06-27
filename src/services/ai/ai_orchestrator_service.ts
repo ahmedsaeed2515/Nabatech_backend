@@ -252,17 +252,6 @@ export const orchestrateChat = async (args: {
       (async () => {
         if (shouldSkipRag || !settings.rag.enabled || !settings.rag.endpointUrl) return undefined;
         let optimizedQuery = args.question;
-        try {
-          const sanitizedQuestion = args.question.replace(/"/g, '\\"');
-          const searchPrompt = `Generate a precise agricultural search query to find the best treatment or information in a database for the following question. Output ONLY the search query text, without quotes or extra explanation.\n\nUser Question: ${sanitizedQuestion}`;
-          const searchRes = await Promise.race([
-            askLlm(settings, searchPrompt, "llm", [], "search"),
-            new Promise<any>((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 3000))
-          ]);
-          optimizedQuery = sanitizeModelOutput(searchRes.message);
-        } catch (searchErr) {
-          console.warn("[SEARCH_LLM_FAILED] Search LLM failed, using raw question.");
-        }
 
         try {
           const tRagStart = performance.now();
@@ -284,7 +273,7 @@ export const orchestrateChat = async (args: {
           const result = await retrieveCommunityContext(undefined, args.question);
           const tCommEnd = performance.now();
           console.log(`[PERF] Community Context Retrieval: ${(tCommEnd - tCommStart).toFixed(2)}ms`);
-          return result.hasData ? result.text : undefined;
+          return result.hasData ? { text: result.text, meta: result.meta } : undefined;
         } catch (error) {
           console.warn("Community context retrieval failed:", sanitizeErrorMessage(error));
           return undefined;
@@ -327,7 +316,7 @@ export const orchestrateChat = async (args: {
     userQuestion: args.question,
     history: sanitizedHistory,
     ragContext,
-    communityContext,
+    communityContext: communityContext ? (communityContext as any).text : undefined,
     language: args.language,
   }) + systemPromptAddition;
 
@@ -590,20 +579,6 @@ Output valid JSON in this exact format:
     let ragRetrievedContext: string | undefined;
     if (settings.rag.enabled && settings.rag.endpointUrl && cnnResult?.prediction) {
       let optimizedQuery = question || cnnResult.prediction.replace(/_/g, " ");
-      if (question) {
-        try {
-          const escapedQuestion = question.replace(/"/g, '\\"');
-          const escapedPrediction = (cnnResult.prediction || "unknown").replace(/"/g, '\\"');
-          const searchPrompt = `Generate a precise agricultural search query to find the best treatment or information in a database for the following question and detected disease. Output ONLY the search query text, without quotes or extra explanation.\n\nDetected Disease: ${escapedPrediction}\nUser Question: ${escapedQuestion}`;
-          const searchRes = await Promise.race([
-            askLlm(settings, searchPrompt, "llm", [], "search"),
-            new Promise<any>((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 5000))
-          ]);
-          optimizedQuery = searchRes.message;
-        } catch (searchErr) {
-          console.warn("[SEARCH_LLM_FAILED] Search LLM failed or not configured, using raw question.");
-        }
-      }
 
       try {
         const ragResult = await retrieveRagChunks(
@@ -643,10 +618,12 @@ Output valid JSON in this exact format:
        }
     }
 
+    let communityContextObj: any = undefined;
     try {
       const commResult = await retrieveCommunityContext(cnnResult?.prediction, question);
       if (commResult.hasData) {
         communityContext = commResult.text;
+        communityContextObj = { text: commResult.text, meta: commResult.meta };
       }
     } catch (error) {
       console.warn("Community context retrieval failed for image chat:", sanitizeErrorMessage(error));
@@ -832,7 +809,7 @@ Output valid JSON in this exact format:
       : "upload_clearer_image",
     providerChain,
     ragContext,
-    communityContext,
+    communityContext: communityContextObj,
     kbAdvice,
     kbSeverity,
     toolCalls,

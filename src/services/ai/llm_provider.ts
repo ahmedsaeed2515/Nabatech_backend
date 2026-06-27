@@ -333,7 +333,7 @@ export const askRagFallback = async (
   const response = await axios.post(
     endpointUrl,
     {
-      question: (message || "Please analyze this context and diagnosis.").substring(0, 950),
+      question: (message || "Please analyze this context and diagnosis.").substring(0, 4000),
       history: ragHistory,
       top_k: 5,
     },

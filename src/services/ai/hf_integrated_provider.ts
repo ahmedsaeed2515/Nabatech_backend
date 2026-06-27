@@ -128,8 +128,8 @@ export const askHuggingFaceIntegrated = async (
       timeout: timeoutMs,
       headers: { "Content-Type": "application/json" },
       httpsAgent: keepAliveAgent, // Connection reuse
-      validateStatus: (status) => status < 500, // نعالج 4xx بأنفسنا
-    });
+      validateStatus: (status: number) => status < 500, // نعالج 4xx بأنفسنا
+    } as any);
 
     const latencyMs = Date.now() - t0;
 

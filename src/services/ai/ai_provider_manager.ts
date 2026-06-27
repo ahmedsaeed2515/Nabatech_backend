@@ -116,7 +116,7 @@ class AiProviderManager {
               endpointUrl: provider.baseUrl,
               model: provider.llmModel,
               apiKey,
-              timeoutMs: options.timeoutMs || 30000,
+              timeoutMs: options.timeoutMs || 8000,
               systemPrompt,
               message,
               history,
