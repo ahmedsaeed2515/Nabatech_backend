@@ -211,13 +211,12 @@ const envDefaults = (): AiSettingsShape => ({
     cnnApiKey: "",
   },
   // ── AI Mode Switching defaults ─────────────────────────────────────────────
-  // Priority: Grok first (hf_grok) due to safety and speed, then hf_v8, then others
-  // AgentRouter is removed due to WAF/rate-limit issues
-  aiModePriority: ["hf_grok", "hf_v8", "rag_openai", "hf_v62"],
+  // Priority: The new fast LLM-and-RAG first (hf_v8), then others
+  aiModePriority: ["hf_v8", "hf_grok", "hf_v62", "rag_openai"],
   hfIntegrated: {
-    grokEndpointUrl: "https://abdulrhmanhelmy-llm-grok.hf.space/query",
-    v8EndpointUrl:   "https://ahmedsaeed111-rag-only.hf.space/ask",
-    v62EndpointUrl:  "https://ahmedsaeed111-agrirag-pro.hf.space/ask",
+    grokEndpointUrl: process.env.HF_GROK_URL || "https://abdulrhmanhelmy-llm-grok.hf.space/query",
+    v8EndpointUrl:   process.env.NEW_RAG_URL || "https://ahmedsaeed2515-llm-and-rag.hf.space/ask",
+    v62EndpointUrl:  process.env.CHAT_API_URL || "https://ahmedsaeed111-agrirag-pro.hf.space/ask",
     timeoutMs: 40_000,
     autoFallback: true,
   },
@@ -278,9 +277,9 @@ const mergeSettings = (defaults: AiSettingsShape, db: Partial<IAiSettings> | nul
       return dbModes.length > 0 ? dbModes : defaults.aiModePriority;
     })(),
     hfIntegrated: {
-      grokEndpointUrl: String(plain?.hfIntegrated?.grokEndpointUrl || "https://abdulrhmanhelmy-llm-grok.hf.space/query").trim(),
-      v8EndpointUrl:   String(plain?.hfIntegrated?.v8EndpointUrl   || "https://ahmedsaeed111-rag-only.hf.space/ask").trim(),
-      v62EndpointUrl:  String(plain?.hfIntegrated?.v62EndpointUrl  || "https://ahmedsaeed111-agrirag-pro.hf.space/ask").trim(),
+      grokEndpointUrl: String(plain?.hfIntegrated?.grokEndpointUrl || process.env.HF_GROK_URL || "https://abdulrhmanhelmy-llm-grok.hf.space/query").trim(),
+      v8EndpointUrl:   String(plain?.hfIntegrated?.v8EndpointUrl   || process.env.NEW_RAG_URL || "https://ahmedsaeed2515-llm-and-rag.hf.space/ask").trim(),
+      v62EndpointUrl:  String(plain?.hfIntegrated?.v62EndpointUrl  || process.env.CHAT_API_URL || "https://ahmedsaeed111-agrirag-pro.hf.space/ask").trim(),
       timeoutMs:       Number.isFinite(Number(plain?.hfIntegrated?.timeoutMs)) ? Number(plain.hfIntegrated.timeoutMs) : 40000,
       autoFallback:    plain?.hfIntegrated?.autoFallback !== false,
     },
