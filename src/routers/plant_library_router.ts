@@ -21,12 +21,14 @@ import {
 const router = Router();
 
 // Plants Routes
-router.get("/plants/search", searchPlants);
+import { cacheResponse } from '../middlewares/cache_middleware';
+
+router.get("/plants/search", cacheResponse(300), searchPlants);
 router.get("/plants/stats", protect, admin, getPlantStats);
-router.get("/plants/categories/stats", getCategoryStats);
+router.get("/plants/categories/stats", cacheResponse(3600), getCategoryStats);
 router.get("/plants/export", protect, admin, exportPlants);
-router.get("/plants", getPlants);
-router.get("/plants/:id", getPlantById);
+router.get("/plants", cacheResponse(300), getPlants);
+router.get("/plants/:id", cacheResponse(300), getPlantById);
 router.post("/plants", protect, admin, addPlant);
 router.put("/plants/:id", protect, admin, updatePlant);
 router.delete("/plants/:id", protect, admin, deletePlant);

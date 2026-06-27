@@ -139,8 +139,14 @@ export const chatWithAI = async (req: Request, res: Response) => {
           if (isSSE) {
             res.write(`data: ${JSON.stringify({ type: "progress", phase })}\n\n`);
           }
-        }
+        },
+        onToken: isSSE
+          ? (token: string) => {
+              res.write(`data: ${JSON.stringify({ type: "token", token })}\n\n`);
+            }
+          : undefined,
       });
+
       const tOrchEnd = performance.now();
       console.log(`[PERF] Orchestrator: ${(tOrchEnd - tOrchStart).toFixed(2)}ms`);
     } catch (aiError) {

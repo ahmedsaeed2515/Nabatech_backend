@@ -2,7 +2,7 @@ import axios from "axios";
 import AiProviderSettings, { IAiProviderSettings } from "../../models/ai_provider_settings_model";
 import { decryptSecret } from "./secret_crypto";
 import { logger } from "../../utils/logger";
-import { callProvider, HistoryTurn, LlmResult } from "./llm_provider";
+import { callProvider, callProviderStreaming, HistoryTurn, LlmResult } from "./llm_provider";
 import { AiProviderError } from "./ai_errors";
 import { getAiSettings } from "./ai_config_service";
 
@@ -47,7 +47,8 @@ class AiProviderManager {
     systemPrompt: string,
     message: string,
     history: HistoryTurn[],
-    options: { timeoutMs?: number } = {}
+    options: { timeoutMs?: number } = {},
+    onToken?: (token: string) => void  // ── NEW: optional streaming callback
   ): Promise<LlmResult> {
     // Always reload if cache is empty or stale (TTL expired)
     const now = Date.now();
@@ -108,16 +109,29 @@ class AiProviderManager {
 
       try {
         const startTime = Date.now();
-        const content = await callProvider({
-          providerType,
-          endpointUrl: provider.baseUrl,
-          model: provider.llmModel,
-          apiKey,
-          timeoutMs: options.timeoutMs || 8000, // Reduced to 8s for fast failover
-          systemPrompt,
-          message,
-          history,
-        });
+        // Use streaming when onToken callback is provided AND provider supports it
+        const isStreamingCapable = providerType === 'generic_llm' || providerType === 'openai_compatible';
+        const content = (onToken && isStreamingCapable)
+          ? await callProviderStreaming({
+              endpointUrl: provider.baseUrl,
+              model: provider.llmModel,
+              apiKey,
+              timeoutMs: options.timeoutMs || 30000,
+              systemPrompt,
+              message,
+              history,
+              onToken,
+            })
+          : await callProvider({
+              providerType,
+              endpointUrl: provider.baseUrl,
+              model: provider.llmModel,
+              apiKey,
+              timeoutMs: options.timeoutMs || 8000,
+              systemPrompt,
+              message,
+              history,
+            });
 
         // On success, reset circuit breaker and consecutive errors
         (this as any).consecutiveErrors = (this as any).consecutiveErrors || {};

@@ -58,7 +58,8 @@ export const getPlants = async (req: Request, res: Response) => {
   }
   const plants = await Plant.find({ ...query, ...cursorQuery })
     .sort({ _id: 1 })
-    .limit(limitNumber + 1); // fetch one extra to determine hasNextPage
+    .limit(limitNumber + 1)
+    .lean(); // fetch one extra to determine hasNextPage
 
   const hasNextPage = plants.length > limitNumber;
   const items = hasNextPage ? plants.slice(0, -1) : plants;
@@ -105,7 +106,8 @@ export const adminSearchPlants = async (req: Request, res: Response) => {
 
     const plants = await Plant.find({ ...query, ...cursorQuery })
       .sort({ _id: 1 })
-      .limit(limitNumber + 1);
+      .limit(limitNumber + 1)
+      .lean();
 
     const hasNextPage = plants.length > limitNumber;
     const items = hasNextPage ? plants.slice(0, -1) : plants;
@@ -258,7 +260,7 @@ export const deletePlant = async (req: Request, res: Response) => {
 export const getPlantById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const plant = await Plant.findById(id).populate('tags diseases seasons');
+    const plant = await Plant.findById(id).populate('tags diseases seasons').lean();
     if (!plant) {
       return res.status(404).json({ success: false, message: "Plant not found" });
     }
@@ -323,7 +325,7 @@ export const searchPlants = async (req: Request, res: Response) => {
       ]
     };
     
-    const plants = await Plant.find(query).limit(limitNumber).select('nameAr nameEn imageUrl category slug');
+    const plants = await Plant.find(query).limit(limitNumber).select('nameAr nameEn imageUrl category slug').lean();
     res.status(200).json({ success: true, data: plants });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || "Failed to search plants" });
@@ -422,7 +424,8 @@ export const getDiseases = async (req: Request, res: Response) => {
   }
   const diseases = await Disease.find({ ...query, ...cursorQuery })
     .sort({ _id: 1 })
-    .limit(limitNumber + 1);
+    .limit(limitNumber + 1)
+    .lean();
 
   const hasNextPage = diseases.length > limitNumber;
   const items = hasNextPage ? diseases.slice(0, -1) : diseases;

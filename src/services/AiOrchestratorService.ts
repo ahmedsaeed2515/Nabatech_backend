@@ -3,6 +3,7 @@ import { PlantRepository } from '../repositories/PlantRepository';
 import MyPlant from '../models/my_plant_model';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
+import { getOrSetCache } from '../utils/redis_cache';
 
 export class AiOrchestratorService {
   private ai: GoogleGenAI;
@@ -37,40 +38,44 @@ export class AiOrchestratorService {
     const contextStr = JSON.stringify(minifiedPlants);
     const systemInstruction = `You are Nabatech AI. User's plants: ${contextStr}. Answer questions using this context.`;
 
-    try {
-      const response = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: message,
-        config: {
-          systemInstruction: systemInstruction,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              reply: { type: Type.STRING },
-              detectedPlant: {
-                type: Type.OBJECT,
-                nullable: true,
-                properties: {
-                  name: { type: Type.STRING },
-                  species: { type: Type.STRING }
+    const cacheKey = `ai:chat:${userId}:${Buffer.from(message).toString('base64').substring(0, 50)}`;
+    
+    return getOrSetCache(cacheKey, 300, async () => {
+      try {
+        const response = await this.ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: message,
+          config: {
+            systemInstruction: systemInstruction,
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                reply: { type: Type.STRING },
+                detectedPlant: {
+                  type: Type.OBJECT,
+                  nullable: true,
+                  properties: {
+                    name: { type: Type.STRING },
+                    species: { type: Type.STRING }
+                  }
                 }
-              }
-            },
-            required: ['reply']
+              },
+              required: ['reply']
+            }
           }
+        });
+
+        if (!response.text) {
+          throw new Error('No response from AI');
         }
-      });
 
-      if (!response.text) {
-        throw new Error('No response from AI');
+        return JSON.parse(response.text);
+      } catch (err) {
+        logger.error('Error generating AI response:', err);
+        throw new Error('Failed to generate AI response');
       }
-
-      return JSON.parse(response.text);
-    } catch (err) {
-      logger.error('Error generating AI response:', err);
-      throw new Error('Failed to generate AI response');
-    }
+    });
   }
 
   async analyzeGarden(userId: string) {
@@ -85,38 +90,44 @@ export class AiOrchestratorService {
     const contextStr = JSON.stringify(minifiedPlants);
     const systemInstruction = `You are Nabatech AI Garden Manager. Analyze the user's garden and provide a report. Here are the plants: ${contextStr}`;
 
-    try {
-      const response = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: 'Generate a garden report.',
-        config: {
-          systemInstruction: systemInstruction,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              score: { type: Type.INTEGER, description: 'Overall garden score from 0 to 100' },
-              urgentActions: { 
-                type: Type.ARRAY, 
-                items: { type: Type.STRING },
-                description: 'List of urgent actions needed (e.g. "Water the Ficus")'
+    // Hash the context string to use as a cache key so we know if the garden changed
+    const contextHash = Buffer.from(contextStr).toString('base64').substring(0, 32);
+    const cacheKey = `ai:garden_analysis:${userId}:${contextHash}`;
+
+    return getOrSetCache(cacheKey, 3600, async () => {
+      try {
+        const response = await this.ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: 'Generate a garden report.',
+          config: {
+            systemInstruction: systemInstruction,
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                score: { type: Type.INTEGER, description: 'Overall garden score from 0 to 100' },
+                urgentActions: { 
+                  type: Type.ARRAY, 
+                  items: { type: Type.STRING },
+                  description: 'List of urgent actions needed (e.g. "Water the Ficus")'
+                },
+                summary: { type: Type.STRING, description: 'A short summary of the garden health' }
               },
-              summary: { type: Type.STRING, description: 'A short summary of the garden health' }
-            },
-            required: ['score', 'urgentActions', 'summary']
+              required: ['score', 'urgentActions', 'summary']
+            }
           }
+        });
+
+        if (!response.text) {
+          throw new Error('No response from AI');
         }
-      });
 
-      if (!response.text) {
-        throw new Error('No response from AI');
+        return JSON.parse(response.text);
+      } catch (err) {
+        logger.error('Error generating garden analysis:', err);
+        throw new Error('Failed to analyze garden');
       }
-
-      return JSON.parse(response.text);
-    } catch (err) {
-      logger.error('Error generating garden analysis:', err);
-      throw new Error('Failed to analyze garden');
-    }
+    });
   }
 }
 

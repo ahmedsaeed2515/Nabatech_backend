@@ -127,6 +127,7 @@ export const orchestrateChat = async (args: {
   topK?: number;
   language?: string;
   onProgress?: (phase: string) => void;
+  onToken?: (token: string) => void; // ── NEW: streaming token callback
 }) => {
   const settings = await getAiSettings();
   const started = Date.now();
@@ -325,7 +326,7 @@ export const orchestrateChat = async (args: {
     // ✅ FAST PATH: Direct LLM call — no Agent Loop overhead
     if (args.onProgress) args.onProgress("SIMPLE_LLM_GENERATING");
     const tLlmStart = performance.now();
-    chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory);
+    chatResult = await askLlm(settings, prompt, "llm", sanitizedHistory, "chat", args.onToken);
     const tLlmEnd = performance.now();
     console.log(`[PERF] askLlm Execution: ${(tLlmEnd - tLlmStart).toFixed(2)}ms`);
   }

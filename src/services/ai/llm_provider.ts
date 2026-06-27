@@ -68,6 +68,73 @@ const formatHistoryAsText = (history: HistoryTurn[]): string => {
   );
 };
 
+// ── Streaming helper for OpenAI-compatible APIs ────────────────────────────
+/**
+ * Calls an OpenAI-compatible endpoint with stream:true and invokes
+ * `onToken` for every SSE chunk, returning the full assembled string.
+ */
+export const callProviderStreaming = async (args: {
+  endpointUrl: string;
+  model: string;
+  apiKey: string;
+  timeoutMs: number;
+  systemPrompt: string;
+  message: string;
+  history: HistoryTurn[];
+  onToken: (token: string) => void;
+}): Promise<string> => {
+  const bounded = boundHistory(args.history);
+  const messages = [
+    { role: "system", content: args.systemPrompt },
+    ...toOpenAiMessages(bounded),
+    { role: "user", content: args.message },
+  ];
+
+  const isOpenRouter = args.endpointUrl.includes("openrouter.ai");
+  const response = await axios.post(
+    args.endpointUrl,
+    { model: args.model, messages, stream: true },
+    {
+      timeout: args.timeoutMs,
+      responseType: "stream",
+      headers: {
+        ...(args.apiKey ? { Authorization: `Bearer ${args.apiKey}` } : {}),
+        "Content-Type": "application/json",
+        ...(isOpenRouter
+          ? { "HTTP-Referer": "https://nabatech.com", "X-Title": "Nabatech AI Platform" }
+          : {}),
+      },
+    }
+  );
+
+  return new Promise<string>((resolve, reject) => {
+    let fullText = "";
+    const stream = response.data as NodeJS.ReadableStream;
+
+    stream.on("data", (chunk: Buffer) => {
+      const raw = chunk.toString("utf8");
+      const lines = raw.split("\n").filter((l) => l.trim().startsWith("data:"));
+      for (const line of lines) {
+        const jsonStr = line.replace(/^data:\s*/, "").trim();
+        if (jsonStr === "[DONE]") return;
+        try {
+          const parsed = JSON.parse(jsonStr);
+          const token: string = parsed?.choices?.[0]?.delta?.content ?? "";
+          if (token) {
+            fullText += token;
+            args.onToken(token);
+          }
+        } catch (_) {
+          // partial chunk — skip
+        }
+      }
+    });
+
+    stream.on("end", () => resolve(fullText.trim()));
+    stream.on("error", (err: Error) => reject(err));
+  });
+};
+
 export const callProvider = async (args: {
   providerType: "generic_llm" | "openai_compatible" | "anthropic" | "gemini" | "cohere" | "huggingface_inference" | "ollama";
   endpointUrl: string;
@@ -292,14 +359,21 @@ export const askLlm = async (
   message: string,
   source: "llm" | "fallback" = "llm",
   history: HistoryTurn[] = [], // ✅ FIX #1: history parameter added
-  taskRole: "search" | "chat" = "chat"
+  taskRole: "search" | "chat" = "chat",
+  onToken?: (token: string) => void // ── NEW: streaming callback
 ): Promise<LlmResult> => {
   console.log("[RUNTIME_TRACE] INSIDE askLlm. Delegating to ProviderManager...");
   
   try {
     const { getProviderManager } = await import("./ai_provider_manager");
     const manager = getProviderManager();
-    const result = await manager.executeWithFailover(settings.llm.systemPrompt || "You are an expert AI.", message, history);
+    const result = await manager.executeWithFailover(
+      settings.llm.systemPrompt || "You are an expert AI.",
+      message,
+      history,
+      {},
+      onToken // pass streaming callback through
+    );
     return result;
   } catch (err: any) {
     console.warn("LLM providers failed. Last error:", err.message);
@@ -328,5 +402,4 @@ export const askLlm = async (
     provider: "local_fallback" 
   };
 };
-
 

@@ -3,6 +3,7 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './docs/swagger';
 import helmet from 'helmet';
 import mongoSanitize from 'express-mongo-sanitize';
+import compression from 'compression';
 import { protect } from "./middlewares/auth_middleware";
 import { requestContextMiddleware } from "./middlewares/request_context_middleware";
 import { errorHandler } from "./middlewares/error_middleware";
@@ -86,8 +87,14 @@ app.use((req, res, next) => {
   next();
 });
 
+import { apiLimiter } from "./middlewares/rate_limit_middleware";
+import { performanceMonitor } from "./middlewares/performance_middleware";
+
+app.use(performanceMonitor);
+app.use(compression());
 app.use(express.json());
 app.use(helmet());
+app.use(apiLimiter);
 // Sanitize data against NoSQL query injection
 // In Express 5, req.query is a getter, so express-mongo-sanitize crashes if used as a generic middleware.
 // We manually sanitize the objects in-place.
