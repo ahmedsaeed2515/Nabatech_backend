@@ -69,10 +69,14 @@ export const getMyPlants = async (req: Request, res: Response, next: NextFunctio
         garden: p.garden,
         zone: p.zone,
         room: p.room,
+        notes: p.notes,
         waterFrequencyDays: p.waterFrequencyDays,
         lastWatered: p.lastWatered,
         nextWaterInDays: calculateNextWaterInDays(p.lastWatered, p.waterFrequencyDays),
         healthStatus: p.healthStatus,
+        confidenceScore: p.confidenceScore,
+        aiVerified: p.aiVerified,
+        userApproved: p.userApproved,
         createdAt: p.createdAt,
       })),
     });
@@ -104,10 +108,14 @@ export const getPlantById = async (req: Request, res: Response, next: NextFuncti
         garden: plant.garden,
         zone: plant.zone,
         room: plant.room,
+        notes: plant.notes,
         waterFrequencyDays: plant.waterFrequencyDays,
         lastWatered: plant.lastWatered,
         nextWaterInDays: calculateNextWaterInDays(plant.lastWatered, plant.waterFrequencyDays),
         healthStatus: plant.healthStatus,
+        confidenceScore: plant.confidenceScore,
+        aiVerified: plant.aiVerified,
+        userApproved: plant.userApproved,
         createdAt: plant.createdAt,
       }
     });
@@ -316,7 +324,7 @@ export const addPlant = async (req: Request, res: Response, next: NextFunction) 
 export const updatePlant = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = (req as any).user.id;
-    const { name, species, imageUrl, location, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications } = req.body;
+    const { name, species, imageUrl, location, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications, notes, confidenceScore, aiVerified, userApproved } = req.body;
 
     if (waterFrequencyDays !== undefined && Number(waterFrequencyDays) < 1) {
       return res.status(400).json({ success: false, message: "waterFrequencyDays must be at least 1" });
@@ -340,6 +348,11 @@ export const updatePlant = async (req: Request, res: Response, next: NextFunctio
     if (lastWatered !== undefined) plant.lastWatered = new Date(lastWatered);
     if (healthStatus !== undefined) plant.healthStatus = healthStatus;
     if (plantLibraryId !== undefined) plant.plantLibraryId = plantLibraryId;
+    
+    if (notes !== undefined) plant.notes = notes;
+    if (confidenceScore !== undefined) plant.confidenceScore = confidenceScore;
+    if (aiVerified !== undefined) plant.aiVerified = aiVerified;
+    if (userApproved !== undefined) plant.userApproved = userApproved;
     
     const oldEnableNotifications = plant.enableNotifications;
     if (enableNotifications !== undefined) plant.enableNotifications = enableNotifications;
@@ -381,10 +394,14 @@ export const updatePlant = async (req: Request, res: Response, next: NextFunctio
         garden: plant.garden,
         zone: plant.zone,
         room: plant.room,
+        notes: plant.notes,
         waterFrequencyDays: plant.waterFrequencyDays,
         lastWatered: plant.lastWatered,
         nextWaterInDays: calculateNextWaterInDays(plant.lastWatered, plant.waterFrequencyDays),
         healthStatus: plant.healthStatus,
+        confidenceScore: plant.confidenceScore,
+        aiVerified: plant.aiVerified,
+        userApproved: plant.userApproved,
         createdAt: plant.createdAt,
       }
     });
