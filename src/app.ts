@@ -107,6 +107,10 @@ app.use((req, res, next) => {
 app.use(requestContextMiddleware);
 
 // Health Checks
+app.get("/health", (req: Request, res: Response) => {
+  res.status(200).json({ status: "ok" });
+});
+
 app.get("/health/live", (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: { status: 'live' } });
 });

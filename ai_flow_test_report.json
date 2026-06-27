@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-06-26T13:30:56.244Z",
+  "timestamp": "2026-06-27T15:06:27.013Z",
   "baseUrl": "http://localhost:10000",
   "imagePath": "D:\\Graduation-Project\\Nabatech\\backend\\tomato.jpg",
-  "totalTimeMs": 59,
+  "totalTimeMs": 154,
   "summary": {
     "total": 1,
     "passed": 0,

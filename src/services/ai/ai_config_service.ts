@@ -211,9 +211,9 @@ const envDefaults = (): AiSettingsShape => ({
     cnnApiKey: "",
   },
   // ── AI Mode Switching defaults ─────────────────────────────────────────────
-  // Priority: Hardcoded to RAG+OpenAI first, then Groq, then others as requested
+  // Priority: Grok first (hf_grok) due to safety and speed, then hf_v8, then others
   // AgentRouter is removed due to WAF/rate-limit issues
-  aiModePriority: ["rag_openai", "hf_grok", "hf_v8", "hf_v62"],
+  aiModePriority: ["hf_grok", "hf_v8", "rag_openai", "hf_v62"],
   hfIntegrated: {
     grokEndpointUrl: "https://abdulrhmanhelmy-llm-grok.hf.space/query",
     v8EndpointUrl:   "https://ahmedsaeed111-rag-only.hf.space/ask",

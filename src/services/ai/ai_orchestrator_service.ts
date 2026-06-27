@@ -76,6 +76,23 @@ const validateProviderOutput = (result: any) => {
   return result;
 };
 
+// --- Text Caching (Phase 4) ---
+interface CacheEntry {
+  response: any;
+  expiresAt: number;
+}
+const textCache = new Map<string, CacheEntry>();
+
+function getCacheKey(question: string): string {
+  // Remove punctuation, keep alphanumeric and Arabic characters, and collapse spaces
+  return question
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s\u0600-\u06FF]/g, "")
+    .replace(/\s+/g, " ");
+}
+// ------------------------------
+
 export const orchestrateDiagnosis = async (args: {
   userId?: string;
   requestId?: string;
@@ -134,6 +151,19 @@ export const orchestrateChat = async (args: {
   const reqId = args.requestId || crypto.randomUUID();
   const sanitizedHistory = args.history.filter(msg => msg.role !== "system");
 
+  // --- Check Cache First (Phase 4) ---
+  const cacheKey = getCacheKey(args.question);
+  if (cacheKey.length > 5) {
+    const cached = textCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      const latency = Date.now() - started;
+      console.log(`[CACHE HIT] Found cached response for text question. Latency: ${latency}ms`);
+      return cached.response;
+    }
+    console.log(`[CACHE MISS] No valid cache found for text question.`);
+  }
+  // -----------------------------------
+
   // ── AI Priority Routing ───────────────────────────────────────────────────────────
   const priorityList = Array.isArray((settings as any).aiModePriority) && (settings as any).aiModePriority.length > 0
     ? (settings as any).aiModePriority
@@ -178,13 +208,21 @@ export const orchestrateChat = async (args: {
         inputMeta: { mode: hfMode, questionLength: args.question.length },
         outputMeta: { responseLength: hfResult.answer.length },
       });
-      return {
+      const finalResponse = {
         message: sanitizeLlmResponse(hfResult.answer),
         source: hfMode as any,
         provider: hfMode,
         ragContext: undefined,
         communityContext: undefined,
       };
+      
+      if (cacheKey.length > 5) {
+        textCache.set(cacheKey, {
+          response: finalResponse,
+          expiresAt: Date.now() + 24 * 60 * 60 * 1000 // 24 hours TTL
+        });
+      }
+      return finalResponse;
     }
 
     console.warn(`[MODE_ROUTING] ${hfMode} failed: ${hfResult.error}. Moving to next priority...`);
@@ -374,7 +412,16 @@ export const orchestrateChat = async (args: {
     toolCalls: chatResult.toolCalls,
   });
 
-  return { message: finalMessage, source: chatResult.source, provider: chatResult.provider, ragContext, communityContext, pendingToolCall: (chatResult as any).pendingToolCall };
+  const finalResponse = { message: finalMessage, source: chatResult.source, provider: chatResult.provider, ragContext, communityContext, pendingToolCall: (chatResult as any).pendingToolCall };
+
+  if (cacheKey.length > 5 && chatResult.source !== "fallback") {
+    textCache.set(cacheKey, {
+      response: finalResponse,
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000
+    });
+  }
+
+  return finalResponse;
 };
 
 export const orchestrateAssistantRequest = async (args: {
@@ -588,7 +635,7 @@ Output valid JSON in this exact format:
               { diseaseNameEn: cnnResult.prediction },
               { diseaseNameEn: cnnResult.prediction.replace(/_/g, " ") }
             ]
-         });
+         }).lean();
          kbAdvice = kbRecord?.advice;
          kbSeverity = kbRecord?.severity;
        } catch (err) {

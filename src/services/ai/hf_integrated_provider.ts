@@ -1,4 +1,12 @@
 import axios from "axios";
+import https from "https";
+
+// ─── Connection Reuse / KeepAlive ─────────────────────────────────────────────
+const keepAliveAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 50,
+});
+console.log("[HF_INTEGRATED] ✅ KeepAlive HTTPS Agent activated successfully with maxSockets=50");
 
 /**
  * HuggingFace Integrated Provider
@@ -119,6 +127,7 @@ export const askHuggingFaceIntegrated = async (
     const res = await axios.post(endpointUrl, body, {
       timeout: timeoutMs,
       headers: { "Content-Type": "application/json" },
+      httpsAgent: keepAliveAgent, // Connection reuse
       validateStatus: (status) => status < 500, // نعالج 4xx بأنفسنا
     });
 

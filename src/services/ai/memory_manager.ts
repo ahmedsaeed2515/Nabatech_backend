@@ -3,7 +3,7 @@ import AiMemory from "../../models/ai_memory_model";
 export class MemoryManager {
   static async saveShortTermMemory(userId: string, key: string, value: any, ttlMinutes: number = 60) {
     const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
-    const existing = await AiMemory.findOne({ userId, type: "short_term", key });
+    const existing = await AiMemory.findOne({ userId, type: "short_term", key }).lean();
     if (existing) {
       console.log(`[MEMORY_MANAGER] Overwriting short_term memory for user ${userId}: key=${key}`);
     }
@@ -15,7 +15,7 @@ export class MemoryManager {
   }
 
   static async getShortTermMemory(userId: string, key: string) {
-    const record = await AiMemory.findOne({ userId, type: "short_term", key });
+    const record = await AiMemory.findOne({ userId, type: "short_term", key }).lean();
     if (!record || (record.expiresAt && record.expiresAt < new Date())) {
       return null;
     }
@@ -31,12 +31,12 @@ export class MemoryManager {
   }
 
   static async getLongTermMemory(userId: string, key: string) {
-    const record = await AiMemory.findOne({ userId, type: "long_term", key });
+    const record = await AiMemory.findOne({ userId, type: "long_term", key }).lean();
     return record?.value;
   }
 
   static async getAllContext(userId: string) {
-    const records = await AiMemory.find({ userId });
+    const records = await AiMemory.find({ userId }).lean();
     const now = new Date();
     
     const context = {

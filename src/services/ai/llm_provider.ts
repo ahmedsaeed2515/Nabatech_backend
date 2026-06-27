@@ -362,8 +362,54 @@ export const askLlm = async (
   taskRole: "search" | "chat" = "chat",
   onToken?: (token: string) => void // ── NEW: streaming callback
 ): Promise<LlmResult> => {
-  console.log("[RUNTIME_TRACE] INSIDE askLlm. Delegating to ProviderManager...");
+  console.log(`[RUNTIME_TRACE] INSIDE askLlm for taskRole: ${taskRole}. Evaluating aiModePriority...`);
   
+  // ── 1. AI Priority Routing (hf_grok, hf_v8, etc.) ──
+  const priorityList = Array.isArray((settings as any).aiModePriority) && (settings as any).aiModePriority.length > 0
+    ? (settings as any).aiModePriority
+    : ["rag_openai"];
+    
+  let shouldRunRagOpenai = false;
+
+  for (const mode of priorityList) {
+    if (mode === "rag_openai") {
+      shouldRunRagOpenai = true;
+      break;
+    }
+    
+    const hfMode = mode as any;
+    const hf = (settings as any).hfIntegrated || {};
+    const endpointMap: Record<string, string> = {
+      hf_grok: hf.grokEndpointUrl || "",
+      hf_v8:   hf.v8EndpointUrl   || "",
+      hf_v62:  hf.v62EndpointUrl  || "",
+    };
+    
+    console.log(`[ASK_LLM_ROUTING] Attempting HF mode: ${hfMode}`);
+    try {
+      const { askHuggingFaceIntegrated } = await import("./hf_integrated_provider");
+      const hfResult = await askHuggingFaceIntegrated(
+        hfMode,
+        endpointMap[hfMode],
+        message,
+        history as any,
+        hf.timeoutMs || 40000
+      );
+      
+      if (hfResult.success) {
+        return {
+          message: hfResult.answer,
+          source: "llm",
+          provider: hfMode,
+        };
+      }
+    } catch (e: any) {
+      console.warn(`[ASK_LLM_ROUTING] Mode ${hfMode} failed: ${e.message}`);
+    }
+  }
+
+  // ── 2. Fallback to ProviderManager (rag_openai pool) ──
+  console.log("[RUNTIME_TRACE] Priority HF models skipped or failed. Delegating to ProviderManager...");
   try {
     const { getProviderManager } = await import("./ai_provider_manager");
     const manager = getProviderManager();

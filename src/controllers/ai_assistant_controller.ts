@@ -87,7 +87,7 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
     const requestId = crypto.randomUUID();
 
     if (clientOperationId) {
-      const existing = await DiagnosisHistory.findOne({ user: userId, clientOperationId });
+      const existing = await DiagnosisHistory.findOne({ user: userId, clientOperationId }).lean();
       if (existing) {
          return res.status(200).json({ 
            success: true, 
@@ -112,8 +112,23 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
       res.flushHeaders();
     }
 
-    // 1. Run inference
-    const result = await orchestrateAssistantRequest({
+    // 1. Start Image Upload (if any)
+    let uploadPromise: Promise<{ secure_url: string; public_id: string }> | null = null;
+    if (file) {
+      uploadPromise = new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream({ folder: "diagnoses" }, (error, uploadResult) => {
+          if (error) return reject(error);
+          resolve({ secure_url: uploadResult!.secure_url, public_id: uploadResult!.public_id });
+        });
+        stream.end(file.buffer);
+      }).catch(error => {
+        console.warn("Assistant image upload skipped:", sanitizeErrorMessage(error));
+        return { secure_url: "", public_id: "" };
+      });
+    }
+
+    // 2. Run inference in parallel
+    const inferencePromise = orchestrateAssistantRequest({
       userId,
       fileBuffer: file?.buffer,
       originalName: file?.originalname,
@@ -128,22 +143,13 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
       }
     });
 
-    let imageUrl = "";
-    if (file) {
-      try {
-        const uploadResult = await new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
-          const stream = cloudinary.uploader.upload_stream({ folder: "diagnoses" }, (error, uploadResult) => {
-            if (error) return reject(error);
-            resolve({ secure_url: uploadResult!.secure_url, public_id: uploadResult!.public_id });
-          });
-          stream.end(file.buffer);
-        });
-        imageUrl = uploadResult.secure_url;
-        uploadedImagePublicId = uploadResult.public_id;
-      } catch (error) {
-        console.warn("Assistant image upload skipped:", sanitizeErrorMessage(error));
-      }
+    // Wait for both to complete
+    const [result, uploadResult] = await Promise.all([inferencePromise, uploadPromise]);
+    
+    let imageUrl = uploadResult?.secure_url || "";
+    uploadedImagePublicId = uploadResult?.public_id || null;
 
+    if (file) {
       if (imageUrl) {
         if ((result as any)?.diagnosis?.prediction) {
           try {
@@ -153,7 +159,7 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
               { diseaseNameEn: prediction },
               { diseaseNameEn: prediction.replace(/_/g, " ") }
             ]
-          });
+          }).lean();
           const confidence = typeof (result as any).diagnosis.confidence === "number" ? (result as any).diagnosis.confidence : 0.5;
           const severity = kbRecord?.severity || (confidence > 0.6 ? "medium" : "low");
           const diseaseNameAr = kbRecord?.diseaseNameAr || prediction;
