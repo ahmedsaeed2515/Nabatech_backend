@@ -36,9 +36,8 @@ export const cacheResponse = (durationInSeconds: number) => {
       const originalJson = res.json.bind(res);
       
       res.json = (body: any) => {
-        // Only cache successful responses (2xx)
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          redisClient.setex(key, durationInSeconds, JSON.stringify(body)).catch(err => {
+          redisClient?.setex(key, durationInSeconds, JSON.stringify(body)).catch(err => {
             logger.warn(`Failed to cache response for ${key}:`, err);
           });
         }

@@ -90,7 +90,7 @@ Do NOT use underscores in disease names (use "Apple Scab", not "Apple_Scab").`;
         ctx.lowConfidenceWarning ? `Warning: ${ctx.lowConfidenceWarning}` : "",
         ctx.ragContext ? `\nRetrieved Knowledge Context:\n${ctx.ragContext}` : "",
         ctx.communityContext ? `\nRetrieved Community Context:\n${ctx.communityContext}` : "",
-        `\n[CRITICAL INSTRUCTION]: You MUST write your final response entirely in the SAME LANGUAGE as the user's question (e.g., if the user asks in Arabic, you MUST reply in Arabic). If the user's language is unclear, default to ${languageName}. Never use Hindi, Chinese, or any other unrelated language unless explicitly requested. Do NOT include any source metadata, document IDs, relevance scores, or raw chunk text in your response.`,
+        `\n[CRITICAL INSTRUCTION]: You MUST write your final response entirely in the SAME LANGUAGE as the user's question. If the user's language is unclear or the input is just an image, you MUST strictly write the response in ${languageName} and NO OTHER LANGUAGE. Do NOT include any source metadata, document IDs, relevance scores, or raw chunk text in your response.`,
         diagnosisFormatInstruction,
         `\n[GARDEN EXTRACTION REQUIREMENT]
 If the user's query or the uploaded image indicates they are interacting with a plant (and NOT a disease), you MUST extract the plant's parameters into a JSON block at the very end of your response. Use the exact format below, ensuring the block is wrapped in \`\`\`json ... \`\`\`

@@ -97,6 +97,16 @@ const validateProviderOutput = (result) => {
     }
     return result;
 };
+const textCache = new Map();
+function getCacheKey(question) {
+    // Remove punctuation, keep alphanumeric and Arabic characters, and collapse spaces
+    return question
+        .trim()
+        .toLowerCase()
+        .replace(/[^\w\s\u0600-\u06FF]/g, "")
+        .replace(/\s+/g, " ");
+}
+// ------------------------------
 const orchestrateDiagnosis = async (args) => {
     const started = Date.now();
     const settings = await (0, ai_config_service_1.getAiSettings)();
@@ -138,6 +148,18 @@ const orchestrateChat = async (args) => {
     const started = Date.now();
     const reqId = args.requestId || crypto_1.default.randomUUID();
     const sanitizedHistory = args.history.filter(msg => msg.role !== "system");
+    // --- Check Cache First (Phase 4) ---
+    const cacheKey = getCacheKey(args.question);
+    if (cacheKey.length > 5) {
+        const cached = textCache.get(cacheKey);
+        if (cached && cached.expiresAt > Date.now()) {
+            const latency = Date.now() - started;
+            console.log(`[CACHE HIT] Found cached response for text question. Latency: ${latency}ms`);
+            return cached.response;
+        }
+        console.log(`[CACHE MISS] No valid cache found for text question.`);
+    }
+    // -----------------------------------
     // ── AI Priority Routing ───────────────────────────────────────────────────────────
     const priorityList = Array.isArray(settings.aiModePriority) && settings.aiModePriority.length > 0
         ? settings.aiModePriority
@@ -170,13 +192,20 @@ const orchestrateChat = async (args) => {
                 inputMeta: { mode: hfMode, questionLength: args.question.length },
                 outputMeta: { responseLength: hfResult.answer.length },
             });
-            return {
+            const finalResponse = {
                 message: sanitizeLlmResponse(hfResult.answer),
                 source: hfMode,
                 provider: hfMode,
                 ragContext: undefined,
                 communityContext: undefined,
             };
+            if (cacheKey.length > 5) {
+                textCache.set(cacheKey, {
+                    response: finalResponse,
+                    expiresAt: Date.now() + 24 * 60 * 60 * 1000 // 24 hours TTL
+                });
+            }
+            return finalResponse;
         }
         console.warn(`[MODE_ROUTING] ${hfMode} failed: ${hfResult.error}. Moving to next priority...`);
     }
@@ -204,18 +233,6 @@ const orchestrateChat = async (args) => {
                 return undefined;
             let optimizedQuery = args.question;
             try {
-                const sanitizedQuestion = args.question.replace(/"/g, '\\"');
-                const searchPrompt = `Generate a precise agricultural search query to find the best treatment or information in a database for the following question. Output ONLY the search query text, without quotes or extra explanation.\n\nUser Question: ${sanitizedQuestion}`;
-                const searchRes = await Promise.race([
-                    (0, llm_provider_1.askLlm)(settings, searchPrompt, "llm", [], "search"),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 3000))
-                ]);
-                optimizedQuery = (0, ai_sanitizer_1.sanitizeModelOutput)(searchRes.message);
-            }
-            catch (searchErr) {
-                console.warn("[SEARCH_LLM_FAILED] Search LLM failed, using raw question.");
-            }
-            try {
                 const tRagStart = performance.now();
                 const result = await (0, rag_provider_1.retrieveRagChunks)(settings, "", optimizedQuery, args.topK || 4, args.language);
                 const tRagEnd = performance.now();
@@ -235,7 +252,7 @@ const orchestrateChat = async (args) => {
                 const result = await (0, community_knowledge_retriever_1.retrieveCommunityContext)(undefined, args.question);
                 const tCommEnd = performance.now();
                 console.log(`[PERF] Community Context Retrieval: ${(tCommEnd - tCommStart).toFixed(2)}ms`);
-                return result.hasData ? result.text : undefined;
+                return result.hasData ? { text: result.text, meta: result.meta } : undefined;
             }
             catch (error) {
                 console.warn("Community context retrieval failed:", (0, ai_errors_1.sanitizeErrorMessage)(error));
@@ -280,7 +297,7 @@ const orchestrateChat = async (args) => {
         userQuestion: args.question,
         history: sanitizedHistory,
         ragContext,
-        communityContext,
+        communityContext: communityContext ? communityContext.text : undefined,
         language: args.language,
     }) + systemPromptAddition;
     // ✅ PERFORMANCE FIX: Skip the slow multi-step Agent Loop for regular chat.
@@ -311,7 +328,7 @@ const orchestrateChat = async (args) => {
         if (args.onProgress)
             args.onProgress("SIMPLE_LLM_GENERATING");
         const tLlmStart = performance.now();
-        chatResult = await (0, llm_provider_1.askLlm)(settings, prompt, "llm", sanitizedHistory);
+        chatResult = await (0, llm_provider_1.askLlm)(settings, prompt, "llm", sanitizedHistory, "chat", args.onToken);
         const tLlmEnd = performance.now();
         console.log(`[PERF] askLlm Execution: ${(tLlmEnd - tLlmStart).toFixed(2)}ms`);
     }
@@ -333,6 +350,14 @@ const orchestrateChat = async (args) => {
     else {
         console.log("[FINAL_RESPONSE_SOURCE] llm");
     }
+    let finalMessage = sanitizeLlmResponse(chatResult.message);
+    if (!finalMessage) {
+        const isArabic = /[\\u0600-\\u06FF]/.test(args.question || "") || args.language === "ar";
+        finalMessage = isArabic
+            ? "أواجه حاليًا ضغطًا كبيرًا ولا يمكنني إنشاء رد مفصل. يرجى المحاولة مرة أخرى لاحقًا."
+            : "I am currently experiencing high traffic and cannot generate a detailed response. Please try again later.";
+        chatResult.source = "fallback";
+    }
     await logAiCall({
         userId: args.userId,
         requestId: reqId,
@@ -341,11 +366,18 @@ const orchestrateChat = async (args) => {
         status: chatResult.source === "fallback" ? "failure" : "success",
         latencyMs: Date.now() - started,
         inputMeta: { questionLength: args.question.length, historyCount: args.history.length },
-        outputMeta: { responseLength: chatResult.message.length, source: chatResult.source },
-        errorMessage: chatResult.source === "fallback" ? "No AI provider succeeded" : undefined,
+        outputMeta: { responseLength: finalMessage.length, source: chatResult.source },
+        errorMessage: chatResult.source === "fallback" ? "No AI provider succeeded or response was empty" : undefined,
         toolCalls: chatResult.toolCalls,
     });
-    return { message: sanitizeLlmResponse(chatResult.message), source: chatResult.source, provider: chatResult.provider, ragContext, communityContext, pendingToolCall: chatResult.pendingToolCall };
+    const finalResponse = { message: finalMessage, source: chatResult.source, provider: chatResult.provider, ragContext, communityContext, pendingToolCall: chatResult.pendingToolCall };
+    if (cacheKey.length > 5 && chatResult.source !== "fallback") {
+        textCache.set(cacheKey, {
+            response: finalResponse,
+            expiresAt: Date.now() + 24 * 60 * 60 * 1000
+        });
+    }
+    return finalResponse;
 };
 exports.orchestrateChat = orchestrateChat;
 const orchestrateAssistantRequest = async (args) => {
@@ -432,17 +464,9 @@ const orchestrateAssistantRequest = async (args) => {
         // [CRITICAL FIX] HARD ABORT ON LOW CONFIDENCE
         let abortMessage = "";
         const isArabic = /[\\u0600-\\u06FF]/.test(args.question || "") || args.language === "ar";
-        if (isHealthy) {
-            abortMessage = isArabic
-                ? `النتيجة:\nغير حاسمة\n\nالتوصية:\nتحليل الصورة غير مؤكد. يرجى رفع صورة أوضح للأجزاء المصابة من النبات.`
-                : `Result:\nInconclusive\n\nRecommendation:\nThe image analysis is uncertain. Please upload a clearer image of the affected plant parts.`;
-        }
-        else {
-            const formattedDisease = cnnResult.prediction.replace(/___/g, " - ").replace(/_/g, " ");
-            abortMessage = isArabic
-                ? `المرض:\n${formattedDisease}\n\nنسبة الثقة:\n${(conf * 100).toFixed(0)}%\n\nالنتيجة:\nتشخيص بنسبة ثقة منخفضة\n\nالتوصية:\nيرجى رفع صورة أوضح تظهر الأوراق المصابة.`
-                : `Disease:\n${formattedDisease}\n\nConfidence:\n${(conf * 100).toFixed(0)}%\n\nResult:\nLow confidence diagnosis\n\nRecommendation:\nPlease upload a clearer image showing affected leaves.`;
-        }
+        abortMessage = isArabic
+            ? "عذرًا، لم نتمكن من تحديد حالة النبات بثقة من هذه الصورة. يرجى رفع صورة أوضح للأوراق أو الأجزاء المصابة."
+            : "We couldn't confidently identify the condition from this image. Please upload a clearer photo showing the affected leaves.";
         let communityDraft = null;
         if (args.userId && args.originalName) {
             try {
@@ -493,26 +517,12 @@ Output valid JSON in this exact format:
     let kbAdvice;
     let kbSeverity;
     let toolCalls;
+    let communityContextObj = undefined;
     if (shouldGenerateAnswer) {
         // ── RAG Stage: Pure Knowledge Retrieval ──────────────────────────────────
         let ragRetrievedContext;
         if (settings.rag.enabled && settings.rag.endpointUrl && cnnResult?.prediction) {
             let optimizedQuery = question || cnnResult.prediction.replace(/_/g, " ");
-            if (question) {
-                try {
-                    const escapedQuestion = question.replace(/"/g, '\\"');
-                    const escapedPrediction = (cnnResult.prediction || "unknown").replace(/"/g, '\\"');
-                    const searchPrompt = `Generate a precise agricultural search query to find the best treatment or information in a database for the following question and detected disease. Output ONLY the search query text, without quotes or extra explanation.\n\nDetected Disease: ${escapedPrediction}\nUser Question: ${escapedQuestion}`;
-                    const searchRes = await Promise.race([
-                        (0, llm_provider_1.askLlm)(settings, searchPrompt, "llm", [], "search"),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error("Search LLM timeout")), 5000))
-                    ]);
-                    optimizedQuery = searchRes.message;
-                }
-                catch (searchErr) {
-                    console.warn("[SEARCH_LLM_FAILED] Search LLM failed or not configured, using raw question.");
-                }
-            }
             try {
                 const ragResult = await (0, rag_provider_1.retrieveRagChunks)(settings, predictedDisease, args.question || "", args.topK, args.language, predictedCrop);
                 ragRetrievedContext = ragResult.contextText;
@@ -533,7 +543,7 @@ Output valid JSON in this exact format:
                         { diseaseNameEn: cnnResult.prediction },
                         { diseaseNameEn: cnnResult.prediction.replace(/_/g, " ") }
                     ]
-                });
+                }).lean();
                 kbAdvice = kbRecord?.advice;
                 kbSeverity = kbRecord?.severity;
             }
@@ -545,6 +555,7 @@ Output valid JSON in this exact format:
             const commResult = await (0, community_knowledge_retriever_1.retrieveCommunityContext)(cnnResult?.prediction, question);
             if (commResult.hasData) {
                 communityContext = commResult.text;
+                communityContextObj = { text: commResult.text, meta: commResult.meta };
             }
         }
         catch (error) {
@@ -642,6 +653,13 @@ Output valid JSON in this exact format:
         provider = chatResult.provider;
         toolCalls = chatResult.toolCalls;
     }
+    if (!message) {
+        const isArabic = /[\\u0600-\\u06FF]/.test(args.question || "") || args.language === "ar";
+        message = isArabic
+            ? "أواجه حاليًا ضغطًا كبيرًا ولا يمكنني إنشاء رد مفصل. يرجى المحاولة مرة أخرى لاحقًا."
+            : "I am currently experiencing high traffic and cannot generate a detailed response. Please try again later.";
+        source = "fallback";
+    }
     if (isLowConfidence && settings.pipeline.lowConfidenceBehavior === "ask_for_new_image") {
         const isArabic = /[\\u0600-\\u06FF]/.test(args.question || "") || args.language === "ar";
         const suffix = isArabic
@@ -716,7 +734,7 @@ Output valid JSON in this exact format:
                 : "upload_clearer_image",
         providerChain,
         ragContext,
-        communityContext,
+        communityContext: communityContextObj,
         kbAdvice,
         kbSeverity,
         toolCalls,

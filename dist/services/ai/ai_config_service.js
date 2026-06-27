@@ -86,6 +86,21 @@ const validateHttpUrl = (value, field) => {
 const dedupe = (arr) => {
     return Array.from(new Set(arr));
 };
+const formatHfUrl = (url) => {
+    if (typeof url !== "string" || !url.trim())
+        return "";
+    let formatted = url.trim();
+    // Convert https://huggingface.co/spaces/USER/SPACE to https://USER-SPACE.hf.space
+    const match = formatted.match(/^https?:\/\/huggingface\.co\/spaces\/([^\/]+)\/([^\/]+)/i);
+    if (match) {
+        formatted = `https://${match[1]}-${match[2]}.hf.space`;
+    }
+    // Ensure it ends with /ask for these specific endpoints
+    if (!formatted.endsWith("/ask") && !formatted.endsWith("/query")) {
+        formatted = formatted.replace(/\/$/, "") + "/ask";
+    }
+    return formatted;
+};
 const normalizeStringArray = (raw, allowed, field) => {
     const allowedSet = new Set(allowed);
     const normalizedRaw = raw.map((x) => String(x).trim().toLowerCase());
@@ -148,13 +163,12 @@ const envDefaults = () => ({
         cnnApiKey: "",
     },
     // ── AI Mode Switching defaults ─────────────────────────────────────────────
-    // Priority: HuggingFace Spaces first (fast, reliable), then rag_openai as last resort
-    // AgentRouter and Groq are removed due to WAF/rate-limit issues
-    aiModePriority: ["hf_v62", "hf_v8", "rag_openai"],
+    // Priority: The new fast LLM-and-RAG first (hf_v8), then others
+    aiModePriority: ["hf_v8", "hf_grok", "hf_v62", "rag_openai"],
     hfIntegrated: {
-        grokEndpointUrl: "https://abdulrhmanhelmy-llm-grok.hf.space/query",
-        v8EndpointUrl: "https://ahmedsaeed111-rag-only.hf.space/ask",
-        v62EndpointUrl: "https://ahmedsaeed111-agrirag-pro.hf.space/ask",
+        grokEndpointUrl: process.env.HF_GROK_URL || "https://abdulrhmanhelmy-llm-grok.hf.space/query",
+        v8EndpointUrl: formatHfUrl(process.env.NEW_RAG_URL) || "https://ahmedsaeed2515-llm-and-rag.hf.space/ask",
+        v62EndpointUrl: formatHfUrl(process.env.CHAT_API_URL) || "https://ahmedsaeed111-agrirag-pro.hf.space/ask",
         timeoutMs: 40000,
         autoFallback: true,
     },
@@ -207,20 +221,17 @@ const mergeSettings = (defaults, db) => {
             ragApiKey: (0, secret_crypto_1.decryptSecret)(plain?.secrets?.ragApiKeyEnc || ""),
             cnnApiKey: (0, secret_crypto_1.decryptSecret)(plain?.secrets?.cnnApiKeyEnc || ""),
         },
-        // ── AI Mode Switching ───────────────────────────────────────────────────────────
         // Only use DB aiModePriority if it contains HF modes; otherwise fall back to defaults
         aiModePriority: (() => {
             const dbModes = Array.isArray(plain?.aiModePriority)
                 ? plain.aiModePriority.filter((m) => ["rag_openai", "hf_grok", "hf_v8", "hf_v62"].includes(m))
                 : [];
-            // If DB has no HF modes configured, use the code defaults (HF-first)
-            const hasHfMode = dbModes.some((m) => m.startsWith("hf_"));
-            return hasHfMode ? dbModes : defaults.aiModePriority;
+            return dbModes.length > 0 ? dbModes : defaults.aiModePriority;
         })(),
         hfIntegrated: {
-            grokEndpointUrl: String(plain?.hfIntegrated?.grokEndpointUrl || "https://abdulrhmanhelmy-llm-grok.hf.space/query").trim(),
-            v8EndpointUrl: String(plain?.hfIntegrated?.v8EndpointUrl || "https://ahmedsaeed111-rag-only.hf.space/ask").trim(),
-            v62EndpointUrl: String(plain?.hfIntegrated?.v62EndpointUrl || "https://ahmedsaeed111-agrirag-pro.hf.space/ask").trim(),
+            grokEndpointUrl: String(plain?.hfIntegrated?.grokEndpointUrl || process.env.HF_GROK_URL || "https://abdulrhmanhelmy-llm-grok.hf.space/query").trim(),
+            v8EndpointUrl: formatHfUrl(plain?.hfIntegrated?.v8EndpointUrl || process.env.NEW_RAG_URL) || "https://ahmedsaeed2515-llm-and-rag.hf.space/ask",
+            v62EndpointUrl: formatHfUrl(plain?.hfIntegrated?.v62EndpointUrl || process.env.CHAT_API_URL) || "https://ahmedsaeed111-agrirag-pro.hf.space/ask",
             timeoutMs: Number.isFinite(Number(plain?.hfIntegrated?.timeoutMs)) ? Number(plain.hfIntegrated.timeoutMs) : 40000,
             autoFallback: plain?.hfIntegrated?.autoFallback !== false,
         },
@@ -607,6 +618,16 @@ const sanitizePayload = (payload, current) => {
         if (!hasPool && !merged.llm.model.trim())
             throw new Error("llm.model is required when llm is enabled");
     }
+    if (payload.aiModePriority !== undefined) {
+        if (!Array.isArray(payload.aiModePriority))
+            throw new Error("aiModePriority must be an array");
+        const allowedModes = new Set(["rag_openai", "hf_grok", "hf_v8", "hf_v62"]);
+        const modes = payload.aiModePriority.map(m => String(m).trim());
+        const invalid = modes.filter(m => !allowedModes.has(m));
+        if (invalid.length)
+            throw new Error(`Invalid aiModePriority values: ${invalid.join(", ")}`);
+        out.aiModePriority = dedupe(modes);
+    }
     return out;
 };
 const updateAiSettings = async (payload, updatedBy) => {
@@ -621,6 +642,7 @@ const updateAiSettings = async (payload, updatedBy) => {
         features: { ...current.features, ...(sanitized.features || {}) },
         pipeline: { ...current.pipeline, ...(sanitized.pipeline || {}) },
         secrets: { ...current.secrets, ...(sanitized.secrets || {}) },
+        aiModePriority: sanitized.aiModePriority ?? current.aiModePriority,
         updatedBy,
     };
     await ai_settings_model_1.default.findOneAndUpdate({ key: "default" }, {

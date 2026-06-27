@@ -5,6 +5,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.askHuggingFaceWithFallback = exports.askHuggingFaceIntegrated = void 0;
 const axios_1 = __importDefault(require("axios"));
+const https_1 = __importDefault(require("https"));
+// ─── Connection Reuse / KeepAlive ─────────────────────────────────────────────
+const keepAliveAgent = new https_1.default.Agent({
+    keepAlive: true,
+    maxSockets: 50,
+});
+console.log("[HF_INTEGRATED] ✅ KeepAlive HTTPS Agent activated successfully with maxSockets=50");
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 /**
  * يبني الـ request body بناءً على نوع الـ endpoint
@@ -69,6 +76,7 @@ const askHuggingFaceIntegrated = async (mode, endpointUrl, question, history = [
         const res = await axios_1.default.post(endpointUrl, body, {
             timeout: timeoutMs,
             headers: { "Content-Type": "application/json" },
+            httpsAgent: keepAliveAgent, // Connection reuse
             validateStatus: (status) => status < 500, // نعالج 4xx بأنفسنا
         });
         const latencyMs = Date.now() - t0;

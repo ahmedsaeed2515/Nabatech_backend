@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.askLlm = exports.askRagFallback = exports.callProvider = void 0;
+exports.askLlm = exports.askRagFallback = exports.callProvider = exports.callProviderStreaming = void 0;
 const axios_1 = __importDefault(require("axios"));
 /**
  * Bounds conversation history to last N exchanges (2*N messages).
@@ -72,6 +72,58 @@ const formatHistoryAsText = (history) => {
     })
         .join("\n") + "\n");
 };
+// ── Streaming helper for OpenAI-compatible APIs ────────────────────────────
+/**
+ * Calls an OpenAI-compatible endpoint with stream:true and invokes
+ * `onToken` for every SSE chunk, returning the full assembled string.
+ */
+const callProviderStreaming = async (args) => {
+    const bounded = boundHistory(args.history);
+    const messages = [
+        { role: "system", content: args.systemPrompt },
+        ...toOpenAiMessages(bounded),
+        { role: "user", content: args.message },
+    ];
+    const isOpenRouter = args.endpointUrl.includes("openrouter.ai");
+    const response = await axios_1.default.post(args.endpointUrl, { model: args.model, messages, stream: true }, {
+        timeout: args.timeoutMs,
+        responseType: "stream",
+        headers: {
+            ...(args.apiKey ? { Authorization: `Bearer ${args.apiKey}` } : {}),
+            "Content-Type": "application/json",
+            ...(isOpenRouter
+                ? { "HTTP-Referer": "https://nabatech.com", "X-Title": "Nabatech AI Platform" }
+                : {}),
+        },
+    });
+    return new Promise((resolve, reject) => {
+        let fullText = "";
+        const stream = response.data;
+        stream.on("data", (chunk) => {
+            const raw = chunk.toString("utf8");
+            const lines = raw.split("\n").filter((l) => l.trim().startsWith("data:"));
+            for (const line of lines) {
+                const jsonStr = line.replace(/^data:\s*/, "").trim();
+                if (jsonStr === "[DONE]")
+                    return;
+                try {
+                    const parsed = JSON.parse(jsonStr);
+                    const token = parsed?.choices?.[0]?.delta?.content ?? "";
+                    if (token) {
+                        fullText += token;
+                        args.onToken(token);
+                    }
+                }
+                catch (_) {
+                    // partial chunk — skip
+                }
+            }
+        });
+        stream.on("end", () => resolve(fullText.trim()));
+        stream.on("error", (err) => reject(err));
+    });
+};
+exports.callProviderStreaming = callProviderStreaming;
 const callProvider = async (args) => {
     const bounded = boundHistory(args.history);
     if (args.providerType === "generic_llm" || args.providerType === "openai_compatible") {
@@ -216,7 +268,7 @@ const askRagFallback = async (endpointUrl, message, history = [], timeoutMs = 25
         content: h.content,
     }));
     const response = await axios_1.default.post(endpointUrl, {
-        question: (message || "Please analyze this context and diagnosis.").substring(0, 950),
+        question: (message || "Please analyze this context and diagnosis.").substring(0, 4000),
         history: ragHistory,
         top_k: 5,
     }, {
@@ -232,12 +284,49 @@ const askRagFallback = async (endpointUrl, message, history = [], timeoutMs = 25
 };
 exports.askRagFallback = askRagFallback;
 const askLlm = async (settings, message, source = "llm", history = [], // ✅ FIX #1: history parameter added
-taskRole = "chat") => {
-    console.log("[RUNTIME_TRACE] INSIDE askLlm. Delegating to ProviderManager...");
+taskRole = "chat", onToken // ── NEW: streaming callback
+) => {
+    console.log(`[RUNTIME_TRACE] INSIDE askLlm for taskRole: ${taskRole}. Evaluating aiModePriority...`);
+    // ── 1. AI Priority Routing (hf_grok, hf_v8, etc.) ──
+    const priorityList = Array.isArray(settings.aiModePriority) && settings.aiModePriority.length > 0
+        ? settings.aiModePriority
+        : ["rag_openai"];
+    let shouldRunRagOpenai = false;
+    for (const mode of priorityList) {
+        if (mode === "rag_openai") {
+            shouldRunRagOpenai = true;
+            break;
+        }
+        const hfMode = mode;
+        const hf = settings.hfIntegrated || {};
+        const endpointMap = {
+            hf_grok: hf.grokEndpointUrl || "",
+            hf_v8: hf.v8EndpointUrl || "",
+            hf_v62: hf.v62EndpointUrl || "",
+        };
+        console.log(`[ASK_LLM_ROUTING] Attempting HF mode: ${hfMode}`);
+        try {
+            const { askHuggingFaceIntegrated } = await Promise.resolve().then(() => __importStar(require("./hf_integrated_provider")));
+            const hfResult = await askHuggingFaceIntegrated(hfMode, endpointMap[hfMode], message, history, hf.timeoutMs || 40000);
+            if (hfResult.success) {
+                return {
+                    message: hfResult.answer,
+                    source: "llm",
+                    provider: hfMode,
+                };
+            }
+        }
+        catch (e) {
+            console.warn(`[ASK_LLM_ROUTING] Mode ${hfMode} failed: ${e.message}`);
+        }
+    }
+    // ── 2. Fallback to ProviderManager (rag_openai pool) ──
+    console.log("[RUNTIME_TRACE] Priority HF models skipped or failed. Delegating to ProviderManager...");
     try {
         const { getProviderManager } = await Promise.resolve().then(() => __importStar(require("./ai_provider_manager")));
         const manager = getProviderManager();
-        const result = await manager.executeWithFailover(settings.llm.systemPrompt || "You are an expert AI.", message, history);
+        const result = await manager.executeWithFailover(settings.llm.systemPrompt || "You are an expert AI.", message, history, {}, onToken // pass streaming callback through
+        );
         return result;
     }
     catch (err) {

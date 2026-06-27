@@ -8,6 +8,7 @@ const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
 const swagger_1 = __importDefault(require("./docs/swagger"));
 const helmet_1 = __importDefault(require("helmet"));
 const express_mongo_sanitize_1 = __importDefault(require("express-mongo-sanitize"));
+const compression_1 = __importDefault(require("compression"));
 const auth_middleware_1 = require("./middlewares/auth_middleware");
 const request_context_middleware_1 = require("./middlewares/request_context_middleware");
 const error_middleware_1 = require("./middlewares/error_middleware");
@@ -84,8 +85,13 @@ app.use((req, res, next) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     next();
 });
+const rate_limit_middleware_1 = require("./middlewares/rate_limit_middleware");
+const performance_middleware_1 = require("./middlewares/performance_middleware");
+app.use(performance_middleware_1.performanceMonitor);
+app.use((0, compression_1.default)());
 app.use(express_1.default.json());
 app.use((0, helmet_1.default)());
+app.use(rate_limit_middleware_1.apiLimiter);
 // Sanitize data against NoSQL query injection
 // In Express 5, req.query is a getter, so express-mongo-sanitize crashes if used as a generic middleware.
 // We manually sanitize the objects in-place.
@@ -100,6 +106,9 @@ app.use((req, res, next) => {
 });
 app.use(request_context_middleware_1.requestContextMiddleware);
 // Health Checks
+app.get("/health", (req, res) => {
+    res.status(200).json({ status: "ok" });
+});
 app.get("/health/live", (req, res) => {
     res.status(200).json({ success: true, data: { status: 'live' } });
 });

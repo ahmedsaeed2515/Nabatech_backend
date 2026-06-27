@@ -42,6 +42,7 @@ const secret_crypto_1 = require("./secret_crypto");
 const logger_1 = require("../../utils/logger");
 const llm_provider_1 = require("./llm_provider");
 const ai_errors_1 = require("./ai_errors");
+const ai_config_service_1 = require("./ai_config_service");
 // Note: AgentRouter and Groq providers have been removed from the system
 // due to WAF content blocking and rate limiting issues.
 class AiProviderManager {
@@ -61,11 +62,11 @@ class AiProviderManager {
     }
     determineProviderType(url, providerName) {
         const p = providerName.toLowerCase();
-        // AgentRouter and Groq are disabled — skip their type detection to avoid routing to them
+        // AgentRouter is disabled — skip its type detection to avoid routing to it
         if (p.includes('agentrouter') || url.includes('agentrouter.org'))
             return null;
         if (p.includes('groq') || url.includes('api.groq.com'))
-            return null;
+            return 'generic_llm';
         if (p.includes('gemini') || url.includes('generativelanguage.googleapis'))
             return 'gemini';
         if (p.includes('anthropic'))
@@ -83,7 +84,8 @@ class AiProviderManager {
             return 'huggingface_inference';
         return 'generic_llm';
     }
-    async executeWithFailover(systemPrompt, message, history, options = {}) {
+    async executeWithFailover(systemPrompt, message, history, options = {}, onToken // ── NEW: optional streaming callback
+    ) {
         // Always reload if cache is empty or stale (TTL expired)
         const now = Date.now();
         if (this.providers.length === 0 || (now - this.lastReloadAt) > this.RELOAD_TTL_MS) {
@@ -93,8 +95,20 @@ class AiProviderManager {
             throw new ai_errors_1.AiProviderError("No active AI providers configured in the database.");
         }
         const errors = [];
-        // Sort providers: prefer fewer consecutive errors, then by priority
+        // Sort providers: enforce RAG+OpenAI first, Groq second, others next
         const sortedProviders = [...this.providers].sort((a, b) => {
+            const getWeight = (name) => {
+                const n = name.toLowerCase();
+                if (n.includes('openai') || n.includes('openrouter'))
+                    return 1;
+                if (n.includes('groq'))
+                    return 2;
+                return 3;
+            };
+            const wA = getWeight(a.providerName);
+            const wB = getWeight(b.providerName);
+            if (wA !== wB)
+                return wA - wB;
             const errA = this.consecutiveErrors?.[a.providerName] || 0;
             const errB = this.consecutiveErrors?.[b.providerName] || 0;
             if (errA !== errB)
@@ -116,24 +130,37 @@ class AiProviderManager {
         for (const provider of targetProviders) {
             const apiKey = (0, secret_crypto_1.decryptSecret)(provider.apiKeyEncrypted);
             const providerType = this.determineProviderType(provider.baseUrl, provider.providerName);
-            // Skip disabled provider types (AgentRouter, Groq)
+            // AgentRouter is disabled
             if (providerType === null) {
-                logger_1.logger.warn(`[SKIP] Provider ${provider.providerName} is blocked (AgentRouter/Groq). Skipping.`);
+                logger_1.logger.warn(`[SKIP] Provider ${provider.providerName} is blocked (AgentRouter). Skipping.`);
                 continue;
             }
             logger_1.logger.info(`Attempting LLM call via ${provider.providerName} (${provider.llmModel})`);
             try {
                 const startTime = Date.now();
-                const content = await (0, llm_provider_1.callProvider)({
-                    providerType,
-                    endpointUrl: provider.baseUrl,
-                    model: provider.llmModel,
-                    apiKey,
-                    timeoutMs: options.timeoutMs || 8000, // Reduced to 8s for fast failover
-                    systemPrompt,
-                    message,
-                    history,
-                });
+                // Use streaming when onToken callback is provided AND provider supports it
+                const isStreamingCapable = providerType === 'generic_llm' || providerType === 'openai_compatible';
+                const content = (onToken && isStreamingCapable)
+                    ? await (0, llm_provider_1.callProviderStreaming)({
+                        endpointUrl: provider.baseUrl,
+                        model: provider.llmModel,
+                        apiKey,
+                        timeoutMs: options.timeoutMs || 8000,
+                        systemPrompt,
+                        message,
+                        history,
+                        onToken,
+                    })
+                    : await (0, llm_provider_1.callProvider)({
+                        providerType,
+                        endpointUrl: provider.baseUrl,
+                        model: provider.llmModel,
+                        apiKey,
+                        timeoutMs: options.timeoutMs || 8000,
+                        systemPrompt,
+                        message,
+                        history,
+                    });
                 // On success, reset circuit breaker and consecutive errors
                 this.consecutiveErrors = this.consecutiveErrors || {};
                 this.consecutiveErrors[provider.providerName] = 0;
@@ -166,8 +193,10 @@ class AiProviderManager {
         // If all DB providers failed, try emergency fallback if configured
         try {
             const { askRagFallback } = await Promise.resolve().then(() => __importStar(require("./llm_provider")));
-            // Use the fallback HF space endpoint
-            const fallbackResult = await askRagFallback("https://ahmedsaeed111-rag-only.hf.space/ask", message, history);
+            const settings = await (0, ai_config_service_1.getAiSettings)();
+            // Use the fallback HF space endpoint from settings
+            const fallbackUrl = settings.ragFallback?.endpointUrl || "https://ahmedsaeed2515-llm-and-rag.hf.space/ask";
+            const fallbackResult = await askRagFallback(fallbackUrl, message, history);
             return { message: fallbackResult, source: "hf-rag-fallback", provider: "hf-rag-fallback", model: "Qwen/Qwen2.5-72B-Instruct" };
         }
         catch (fallbackErr) {

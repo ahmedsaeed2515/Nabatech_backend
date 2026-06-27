@@ -101,7 +101,8 @@ const getPlants = async (req, res) => {
         }
         const plants = await plant_model_1.default.find({ ...query, ...cursorQuery })
             .sort({ _id: 1 })
-            .limit(limitNumber + 1); // fetch one extra to determine hasNextPage
+            .limit(limitNumber + 1)
+            .lean(); // fetch one extra to determine hasNextPage
         const hasNextPage = plants.length > limitNumber;
         const items = hasNextPage ? plants.slice(0, -1) : plants;
         const nextCursor = hasNextPage ? items[items.length - 1]._id : null;
@@ -143,7 +144,8 @@ const adminSearchPlants = async (req, res) => {
         }
         const plants = await plant_model_1.default.find({ ...query, ...cursorQuery })
             .sort({ _id: 1 })
-            .limit(limitNumber + 1);
+            .limit(limitNumber + 1)
+            .lean();
         const hasNextPage = plants.length > limitNumber;
         const items = hasNextPage ? plants.slice(0, -1) : plants;
         const nextCursor = hasNextPage ? items[items.length - 1]._id : null;
@@ -310,7 +312,7 @@ exports.deletePlant = deletePlant;
 const getPlantById = async (req, res) => {
     try {
         const { id } = req.params;
-        const plant = await plant_model_1.default.findById(id).populate('tags diseases seasons');
+        const plant = await plant_model_1.default.findById(id).populate('tags diseases seasons').lean();
         if (!plant) {
             return res.status(404).json({ success: false, message: "Plant not found" });
         }
@@ -376,7 +378,7 @@ const searchPlants = async (req, res) => {
                 { nameAr: { $regex: q, $options: "i" } },
             ]
         };
-        const plants = await plant_model_1.default.find(query).limit(limitNumber).select('nameAr nameEn imageUrl category slug');
+        const plants = await plant_model_1.default.find(query).limit(limitNumber).select('nameAr nameEn imageUrl category slug').lean();
         res.status(200).json({ success: true, data: plants });
     }
     catch (error) {
@@ -472,7 +474,8 @@ const getDiseases = async (req, res) => {
         }
         const diseases = await disease_model_1.default.find({ ...query, ...cursorQuery })
             .sort({ _id: 1 })
-            .limit(limitNumber + 1);
+            .limit(limitNumber + 1)
+            .lean();
         const hasNextPage = diseases.length > limitNumber;
         const items = hasNextPage ? diseases.slice(0, -1) : diseases;
         const nextCursor = hasNextPage ? items[items.length - 1]._id : null;

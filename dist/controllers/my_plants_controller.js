@@ -15,6 +15,13 @@ const idempotency_record_model_1 = __importDefault(require("../models/idempotenc
 const crypto_1 = __importDefault(require("crypto"));
 const app_error_1 = require("../utils/app_error");
 const api_response_1 = require("../utils/api_response");
+const calculateNextWaterInDays = (lastWatered, frequency) => {
+    if (!lastWatered || frequency <= 0)
+        return frequency || 0;
+    const diffTime = Date.now() - new Date(lastWatered).getTime();
+    const daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return Math.max(0, frequency - daysElapsed);
+};
 // @desc    Get all plants of the user
 // @route   GET /api/my-plants
 // @access  Private
@@ -67,9 +74,14 @@ const getMyPlants = async (req, res, next) => {
                 garden: p.garden,
                 zone: p.zone,
                 room: p.room,
+                notes: p.notes,
                 waterFrequencyDays: p.waterFrequencyDays,
                 lastWatered: p.lastWatered,
+                nextWaterInDays: calculateNextWaterInDays(p.lastWatered, p.waterFrequencyDays),
                 healthStatus: p.healthStatus,
+                confidenceScore: p.confidenceScore,
+                aiVerified: p.aiVerified,
+                userApproved: p.userApproved,
                 createdAt: p.createdAt,
             })),
         });
@@ -100,9 +112,14 @@ const getPlantById = async (req, res, next) => {
                 garden: plant.garden,
                 zone: plant.zone,
                 room: plant.room,
+                notes: plant.notes,
                 waterFrequencyDays: plant.waterFrequencyDays,
                 lastWatered: plant.lastWatered,
+                nextWaterInDays: calculateNextWaterInDays(plant.lastWatered, plant.waterFrequencyDays),
                 healthStatus: plant.healthStatus,
+                confidenceScore: plant.confidenceScore,
+                aiVerified: plant.aiVerified,
+                userApproved: plant.userApproved,
                 createdAt: plant.createdAt,
             }
         });
@@ -152,6 +169,7 @@ const addPlant = async (req, res, next) => {
                                 notes: plant.notes,
                                 waterFrequencyDays: plant.waterFrequencyDays,
                                 lastWatered: plant.lastWatered,
+                                nextWaterInDays: calculateNextWaterInDays(plant.lastWatered, plant.waterFrequencyDays),
                                 plantLibraryId: plant.plantLibraryId,
                                 confidenceScore: plant.confidenceScore,
                                 aiVerified: plant.aiVerified,
@@ -268,6 +286,7 @@ const addPlant = async (req, res, next) => {
                 notes: plant.notes,
                 waterFrequencyDays: plant.waterFrequencyDays,
                 lastWatered: plant.lastWatered,
+                nextWaterInDays: calculateNextWaterInDays(plant.lastWatered, plant.waterFrequencyDays),
                 plantLibraryId: plant.plantLibraryId,
                 confidenceScore: plant.confidenceScore,
                 aiVerified: plant.aiVerified,
@@ -301,7 +320,7 @@ exports.addPlant = addPlant;
 const updatePlant = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const { name, species, imageUrl, location, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications } = req.body;
+        const { name, species, imageUrl, location, waterFrequencyDays, lastWatered, healthStatus, plantLibraryId, enableNotifications, notes, confidenceScore, aiVerified, userApproved } = req.body;
         if (waterFrequencyDays !== undefined && Number(waterFrequencyDays) < 1) {
             return res.status(400).json({ success: false, message: "waterFrequencyDays must be at least 1" });
         }
@@ -329,6 +348,14 @@ const updatePlant = async (req, res, next) => {
             plant.healthStatus = healthStatus;
         if (plantLibraryId !== undefined)
             plant.plantLibraryId = plantLibraryId;
+        if (notes !== undefined)
+            plant.notes = notes;
+        if (confidenceScore !== undefined)
+            plant.confidenceScore = confidenceScore;
+        if (aiVerified !== undefined)
+            plant.aiVerified = aiVerified;
+        if (userApproved !== undefined)
+            plant.userApproved = userApproved;
         const oldEnableNotifications = plant.enableNotifications;
         if (enableNotifications !== undefined)
             plant.enableNotifications = enableNotifications;
@@ -368,9 +395,14 @@ const updatePlant = async (req, res, next) => {
                 garden: plant.garden,
                 zone: plant.zone,
                 room: plant.room,
+                notes: plant.notes,
                 waterFrequencyDays: plant.waterFrequencyDays,
                 lastWatered: plant.lastWatered,
+                nextWaterInDays: calculateNextWaterInDays(plant.lastWatered, plant.waterFrequencyDays),
                 healthStatus: plant.healthStatus,
+                confidenceScore: plant.confidenceScore,
+                aiVerified: plant.aiVerified,
+                userApproved: plant.userApproved,
                 createdAt: plant.createdAt,
             }
         });

@@ -574,6 +574,8 @@ Output valid JSON in this exact format:
   let kbAdvice: string | undefined;
   let kbSeverity: string | undefined;
   let toolCalls: any[] | undefined;
+  let communityContextObj: any = undefined;
+
   if (shouldGenerateAnswer) {
     // ── RAG Stage: Pure Knowledge Retrieval ──────────────────────────────────
     let ragRetrievedContext: string | undefined;
@@ -618,7 +620,6 @@ Output valid JSON in this exact format:
        }
     }
 
-    let communityContextObj: any = undefined;
     try {
       const commResult = await retrieveCommunityContext(cnnResult?.prediction, question);
       if (commResult.hasData) {

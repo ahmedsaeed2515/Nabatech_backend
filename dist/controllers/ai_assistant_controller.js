@@ -98,6 +98,22 @@ const parseHistory = (raw) => {
 const postAssistantRequest = async (req, res) => {
     let uploadedImagePublicId = null;
     try {
+        // ── PHASE 4: Backend request diagnostic logging ──────────────────────────
+        console.log('═══════════════ BACKEND RECEIVED REQUEST ═════════════════');
+        console.log('[DIAG] Timestamp   :', new Date().toISOString());
+        console.log('[DIAG] Method      :', req.method);
+        console.log('[DIAG] Path        :', req.path);
+        console.log('[DIAG] Auth header :', req.headers.authorization ? `Bearer ${req.headers.authorization.split(' ')[1]?.substring(0, 20)}...` : 'MISSING');
+        console.log('[DIAG] Content-Type:', req.headers['content-type']);
+        console.log('[DIAG] Accept      :', req.headers.accept);
+        console.log('[DIAG] User-Agent  :', req.headers['user-agent']);
+        console.log('[DIAG] User ID     :', req?.user?.id ?? 'NOT SET — auth may have failed');
+        console.log('[DIAG] File present:', req.file ? `YES (${req.file.originalname}, ${(req.file.size / 1024).toFixed(1)} KB, ${req.file.mimetype})` : 'NO');
+        console.log('[DIAG] Body.text   :', (req.body?.text || req.body?.question || '').toString().substring(0, 100));
+        console.log('[DIAG] History len :', Array.isArray(req.body?.history) ? req.body.history.length : (typeof req.body?.history === 'string' ? 'JSON string' : 'missing'));
+        console.log('[DIAG] top_k       :', req.body?.top_k ?? req.body?.topK ?? 'not set');
+        console.log('══════════════════════════════════════════════════════════');
+        // ─────────────────────────────────────────────────────────────────────────
         const text = (req.body?.text || req.body?.question || "").toString().trim();
         const history = parseHistory(req.body?.history);
         const topK = Number(req.body?.top_k || req.body?.topK) || undefined;
@@ -119,7 +135,7 @@ const postAssistantRequest = async (req, res) => {
         const userId = req?.user?.id;
         const requestId = crypto_1.default.randomUUID();
         if (clientOperationId) {
-            const existing = await diagnosis_history_model_1.default.findOne({ user: userId, clientOperationId });
+            const existing = await diagnosis_history_model_1.default.findOne({ user: userId, clientOperationId }).lean();
             if (existing) {
                 return res.status(200).json({
                     success: true,
@@ -142,8 +158,23 @@ const postAssistantRequest = async (req, res) => {
             res.setHeader("Connection", "keep-alive");
             res.flushHeaders();
         }
-        // 1. Run inference
-        const result = await (0, ai_orchestrator_service_1.orchestrateAssistantRequest)({
+        // 1. Start Image Upload (if any)
+        let uploadPromise = null;
+        if (file) {
+            uploadPromise = new Promise((resolve, reject) => {
+                const stream = cloudinary_1.default.uploader.upload_stream({ folder: "diagnoses" }, (error, uploadResult) => {
+                    if (error)
+                        return reject(error);
+                    resolve({ secure_url: uploadResult.secure_url, public_id: uploadResult.public_id });
+                });
+                stream.end(file.buffer);
+            }).catch(error => {
+                console.warn("Assistant image upload skipped:", (0, ai_errors_1.sanitizeErrorMessage)(error));
+                return { secure_url: "", public_id: "" };
+            });
+        }
+        // 2. Run inference in parallel
+        const inferencePromise = (0, ai_orchestrator_service_1.orchestrateAssistantRequest)({
             userId,
             fileBuffer: file?.buffer,
             originalName: file?.originalname,
@@ -157,23 +188,11 @@ const postAssistantRequest = async (req, res) => {
                 }
             }
         });
-        let imageUrl = "";
+        // Wait for both to complete
+        const [result, uploadResult] = await Promise.all([inferencePromise, uploadPromise]);
+        let imageUrl = uploadResult?.secure_url || "";
+        uploadedImagePublicId = uploadResult?.public_id || null;
         if (file) {
-            try {
-                const uploadResult = await new Promise((resolve, reject) => {
-                    const stream = cloudinary_1.default.uploader.upload_stream({ folder: "diagnoses" }, (error, uploadResult) => {
-                        if (error)
-                            return reject(error);
-                        resolve({ secure_url: uploadResult.secure_url, public_id: uploadResult.public_id });
-                    });
-                    stream.end(file.buffer);
-                });
-                imageUrl = uploadResult.secure_url;
-                uploadedImagePublicId = uploadResult.public_id;
-            }
-            catch (error) {
-                console.warn("Assistant image upload skipped:", (0, ai_errors_1.sanitizeErrorMessage)(error));
-            }
             if (imageUrl) {
                 if (result?.diagnosis?.prediction) {
                     try {
@@ -183,7 +202,7 @@ const postAssistantRequest = async (req, res) => {
                                 { diseaseNameEn: prediction },
                                 { diseaseNameEn: prediction.replace(/_/g, " ") }
                             ]
-                        });
+                        }).lean();
                         const confidence = typeof result.diagnosis.confidence === "number" ? result.diagnosis.confidence : 0.5;
                         const severity = kbRecord?.severity || (confidence > 0.6 ? "medium" : "low");
                         const diseaseNameAr = kbRecord?.diseaseNameAr || prediction;
@@ -271,15 +290,33 @@ const postAssistantRequest = async (req, res) => {
             }
         }
         const finalResponse = { success: true, ...result, imageUrl: imageUrl || undefined, uncertain: Boolean(result.lowConfidenceWarning) };
+        // Clean up internal AI implementation details from the client response
         delete finalResponse.ragContext;
+        delete finalResponse.communityContext;
+        delete finalResponse.providerChain;
+        delete finalResponse.lowConfidenceWarning;
+        delete finalResponse.provider;
+        delete finalResponse.source;
+        delete finalResponse.toolCalls;
+        if (finalResponse.diagnosis) {
+            // Only expose the condition to the frontend
+            finalResponse.diagnosis = {
+                prediction: finalResponse.diagnosis.prediction,
+            };
+        }
         if (isSSE) {
+            // ── PHASE 4: Log final response summary ─────────────────────────────
+            console.log('[DIAG] Sending SSE result. diagnosis:', JSON.stringify(finalResponse.diagnosis), '| message length:', finalResponse.message?.length ?? 0);
+            console.log('══════════════ BACKEND RESPONSE SENT (SSE) ═══════════════');
             res.write(`data: ${JSON.stringify({ type: "result", data: finalResponse })}\n\n`);
             return res.end();
         }
+        console.log('[DIAG] Sending JSON result. diagnosis:', JSON.stringify(finalResponse.diagnosis), '| message length:', finalResponse.message?.length ?? 0);
         return res.status(200).json(finalResponse);
     }
     catch (error) {
-        console.error("Assistant pipeline failed:", (0, ai_errors_1.sanitizeErrorMessage)(error));
+        const errMsg = (0, ai_errors_1.sanitizeErrorMessage)(error);
+        console.error("Assistant pipeline failed:", errMsg);
         if (uploadedImagePublicId) {
             try {
                 await cloudinary_1.default.uploader.destroy(uploadedImagePublicId);
@@ -289,10 +326,11 @@ const postAssistantRequest = async (req, res) => {
             }
         }
         if (req.headers.accept === "text/event-stream") {
-            res.write(`data: ${JSON.stringify({ type: "error", message: "Assistant request failed" })}\n\n`);
+            // ── PHASE 4: Send the real error in SSE so Flutter can display it ─────
+            res.write(`data: ${JSON.stringify({ type: "error", message: `Assistant request failed: ${errMsg}` })}\n\n`);
             return res.end();
         }
-        return res.status(502).json({ success: false, message: "Assistant request failed" });
+        return res.status(502).json({ success: false, message: `Assistant request failed: ${errMsg}` });
     }
 };
 exports.postAssistantRequest = postAssistantRequest;

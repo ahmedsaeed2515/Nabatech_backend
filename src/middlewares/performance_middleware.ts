@@ -15,20 +15,14 @@ export const performanceMonitor = (req: Request, res: Response, next: NextFuncti
     
     // Log slow requests (e.g., > 2000ms)
     if (timeMs > 2000) {
-      logger.warn({
-        message: 'Slow API Response Detected',
-        method: req.method,
-        url: req.originalUrl || req.url,
-        timeMs: timeMs.toFixed(2),
-        statusCode: res.statusCode,
-      });
+      logger.warn(
+        `Slow API Response Detected - method: ${req.method}, url: ${req.originalUrl || req.url}, timeMs: ${timeMs.toFixed(2)}, statusCode: ${res.statusCode}`
+      );
     } else {
       // Trace log for normal requests
-      logger.debug({
-        method: req.method,
-        url: req.originalUrl || req.url,
-        timeMs: timeMs.toFixed(2),
-      });
+      logger.debug(
+        `API trace - method: ${req.method}, url: ${req.originalUrl || req.url}, timeMs: ${timeMs.toFixed(2)}`
+      );
     }
   });
 
