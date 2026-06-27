@@ -62,6 +62,23 @@ const parseHistory = (raw: unknown): Array<{ role: string; content: string }> =>
 export const postAssistantRequest = async (req: Request, res: Response) => {
   let uploadedImagePublicId: string | null = null;
   try {
+    // ── PHASE 4: Backend request diagnostic logging ──────────────────────────
+    console.log('═══════════════ BACKEND RECEIVED REQUEST ═════════════════');
+    console.log('[DIAG] Timestamp   :', new Date().toISOString());
+    console.log('[DIAG] Method      :', req.method);
+    console.log('[DIAG] Path        :', req.path);
+    console.log('[DIAG] Auth header :', req.headers.authorization ? `Bearer ${req.headers.authorization.split(' ')[1]?.substring(0, 20)}...` : 'MISSING');
+    console.log('[DIAG] Content-Type:', req.headers['content-type']);
+    console.log('[DIAG] Accept      :', req.headers.accept);
+    console.log('[DIAG] User-Agent  :', req.headers['user-agent']);
+    console.log('[DIAG] User ID     :', (req as any)?.user?.id ?? 'NOT SET — auth may have failed');
+    console.log('[DIAG] File present:', req.file ? `YES (${req.file.originalname}, ${(req.file.size / 1024).toFixed(1)} KB, ${req.file.mimetype})` : 'NO');
+    console.log('[DIAG] Body.text   :', (req.body?.text || req.body?.question || '').toString().substring(0, 100));
+    console.log('[DIAG] History len :', Array.isArray(req.body?.history) ? req.body.history.length : (typeof req.body?.history === 'string' ? 'JSON string' : 'missing'));
+    console.log('[DIAG] top_k       :', req.body?.top_k ?? req.body?.topK ?? 'not set');
+    console.log('══════════════════════════════════════════════════════════');
+    // ─────────────────────────────────────────────────────────────────────────
+
     const text = (req.body?.text || req.body?.question || "").toString().trim();
     const history = parseHistory(req.body?.history);
     const topK = Number(req.body?.top_k || req.body?.topK) || undefined;
@@ -267,12 +284,17 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
     }
 
     if (isSSE) {
+      // ── PHASE 4: Log final response summary ─────────────────────────────
+      console.log('[DIAG] Sending SSE result. diagnosis:', JSON.stringify(finalResponse.diagnosis), '| message length:', finalResponse.message?.length ?? 0);
+      console.log('══════════════ BACKEND RESPONSE SENT (SSE) ═══════════════');
       res.write(`data: ${JSON.stringify({ type: "result", data: finalResponse })}\n\n`);
       return res.end();
     }
+    console.log('[DIAG] Sending JSON result. diagnosis:', JSON.stringify(finalResponse.diagnosis), '| message length:', finalResponse.message?.length ?? 0);
     return res.status(200).json(finalResponse);
   } catch (error) {
-    console.error("Assistant pipeline failed:", sanitizeErrorMessage(error));
+    const errMsg = sanitizeErrorMessage(error);
+    console.error("Assistant pipeline failed:", errMsg);
     if (uploadedImagePublicId) {
       try {
         await cloudinary.uploader.destroy(uploadedImagePublicId);
@@ -281,10 +303,11 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
       }
     }
     if (req.headers.accept === "text/event-stream") {
-      res.write(`data: ${JSON.stringify({ type: "error", message: "Assistant request failed" })}\n\n`);
+      // ── PHASE 4: Send the real error in SSE so Flutter can display it ─────
+      res.write(`data: ${JSON.stringify({ type: "error", message: `Assistant request failed: ${errMsg}` })}\n\n`);
       return res.end();
     }
-    return res.status(502).json({ success: false, message: "Assistant request failed" });
+    return res.status(502).json({ success: false, message: `Assistant request failed: ${errMsg}` });
   }
 };
 
