@@ -171,8 +171,10 @@ class AiProviderManager {
     // If all DB providers failed, try emergency fallback if configured
     try {
       const { askRagFallback } = await import("./llm_provider");
-      // Use the fallback HF space endpoint
-      const fallbackResult = await askRagFallback("https://ahmedsaeed111-rag-only.hf.space/ask", message, history);
+      const settings = await getAiSettings();
+      // Use the fallback HF space endpoint from settings
+      const fallbackUrl = settings.ragFallback?.endpointUrl || "https://ahmedsaeed2515-llm-and-rag.hf.space/ask";
+      const fallbackResult = await askRagFallback(fallbackUrl, message, history);
       return { message: fallbackResult, source: "hf-rag-fallback", provider: "hf-rag-fallback", model: "Qwen/Qwen2.5-72B-Instruct" };
     } catch (fallbackErr: any) {
       logger.error("Emergency fallback also failed: " + (fallbackErr?.message || String(fallbackErr)));

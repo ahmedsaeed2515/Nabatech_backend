@@ -141,6 +141,21 @@ const dedupe = <T extends string>(arr: T[]): T[] => {
   return Array.from(new Set(arr));
 };
 
+const formatHfUrl = (url: unknown): string => {
+  if (typeof url !== "string" || !url.trim()) return "";
+  let formatted = url.trim();
+  // Convert https://huggingface.co/spaces/USER/SPACE to https://USER-SPACE.hf.space
+  const match = formatted.match(/^https?:\/\/huggingface\.co\/spaces\/([^\/]+)\/([^\/]+)/i);
+  if (match) {
+    formatted = `https://${match[1]}-${match[2]}.hf.space`;
+  }
+  // Ensure it ends with /ask for these specific endpoints
+  if (!formatted.endsWith("/ask") && !formatted.endsWith("/query")) {
+    formatted = formatted.replace(/\/$/, "") + "/ask";
+  }
+  return formatted;
+};
+
 const normalizeStringArray = <T extends string>(
   raw: unknown[],
   allowed: readonly T[],
@@ -215,8 +230,8 @@ const envDefaults = (): AiSettingsShape => ({
   aiModePriority: ["hf_v8", "hf_grok", "hf_v62", "rag_openai"],
   hfIntegrated: {
     grokEndpointUrl: process.env.HF_GROK_URL || "https://abdulrhmanhelmy-llm-grok.hf.space/query",
-    v8EndpointUrl:   process.env.NEW_RAG_URL || "https://ahmedsaeed2515-llm-and-rag.hf.space/ask",
-    v62EndpointUrl:  process.env.CHAT_API_URL || "https://ahmedsaeed111-agrirag-pro.hf.space/ask",
+    v8EndpointUrl:   formatHfUrl(process.env.NEW_RAG_URL) || "https://ahmedsaeed2515-llm-and-rag.hf.space/ask",
+    v62EndpointUrl:  formatHfUrl(process.env.CHAT_API_URL) || "https://ahmedsaeed111-agrirag-pro.hf.space/ask",
     timeoutMs: 40_000,
     autoFallback: true,
   },
@@ -278,8 +293,8 @@ const mergeSettings = (defaults: AiSettingsShape, db: Partial<IAiSettings> | nul
     })(),
     hfIntegrated: {
       grokEndpointUrl: String(plain?.hfIntegrated?.grokEndpointUrl || process.env.HF_GROK_URL || "https://abdulrhmanhelmy-llm-grok.hf.space/query").trim(),
-      v8EndpointUrl:   String(plain?.hfIntegrated?.v8EndpointUrl   || process.env.NEW_RAG_URL || "https://ahmedsaeed2515-llm-and-rag.hf.space/ask").trim(),
-      v62EndpointUrl:  String(plain?.hfIntegrated?.v62EndpointUrl  || process.env.CHAT_API_URL || "https://ahmedsaeed111-agrirag-pro.hf.space/ask").trim(),
+      v8EndpointUrl:   formatHfUrl(plain?.hfIntegrated?.v8EndpointUrl || process.env.NEW_RAG_URL) || "https://ahmedsaeed2515-llm-and-rag.hf.space/ask",
+      v62EndpointUrl:  formatHfUrl(plain?.hfIntegrated?.v62EndpointUrl || process.env.CHAT_API_URL) || "https://ahmedsaeed111-agrirag-pro.hf.space/ask",
       timeoutMs:       Number.isFinite(Number(plain?.hfIntegrated?.timeoutMs)) ? Number(plain.hfIntegrated.timeoutMs) : 40000,
       autoFallback:    plain?.hfIntegrated?.autoFallback !== false,
     },
