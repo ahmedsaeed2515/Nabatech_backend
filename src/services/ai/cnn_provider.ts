@@ -58,7 +58,21 @@ export const runCnnDiagnosis = async (
         });
 
         const data = (response.data || {}) as any;
-        const prediction = (data.prediction || data.label || data.class || "").toString().trim();
+        let prediction = (data.prediction || data.label || data.class || "").toString().trim();
+        let confidence = normalizeConfidence(data.confidence ?? data.score ?? data.probability);
+        let rawCandidates = Array.isArray(data.candidates) ? data.candidates : [];
+
+        // Support new API format from abdulrhmanHelmy's space
+        if (!prediction && data.diagnosis) {
+          prediction = (data.diagnosis.disease || data.diagnosis.name || "").toString().trim();
+          confidence = normalizeConfidence(data.diagnosis.confidence ?? confidence);
+        }
+        if (!prediction && Array.isArray(data.predictions) && data.predictions.length > 0) {
+          prediction = (data.predictions[0].class_name || data.predictions[0].display_name || "").toString().trim();
+          confidence = normalizeConfidence(data.predictions[0].confidence ?? confidence);
+          rawCandidates = data.predictions;
+        }
+
         if (!prediction) {
           lastError = new AiProviderError(`No prediction label returned from ${candidate.name}`, {
             code: "CNN_EMPTY_PREDICTION",
@@ -66,10 +80,8 @@ export const runCnnDiagnosis = async (
           break; // Don't retry if the endpoint responded but payload is bad
         }
 
-        const confidence = normalizeConfidence(data.confidence ?? data.score ?? data.probability);
-        const rawCandidates = Array.isArray(data.candidates) ? data.candidates : [];
         const outCandidates = rawCandidates
-          .map((x: any) => ({ label: String(x.label || x.class || x.prediction || "").trim(), confidence: normalizeConfidence(x.confidence ?? x.score ?? x.probability) }))
+          .map((x: any) => ({ label: String(x.label || x.class_name || x.class || x.prediction || "").trim(), confidence: normalizeConfidence(x.confidence ?? x.score ?? x.probability) }))
           .filter((x: any) => x.label);
 
         return {
