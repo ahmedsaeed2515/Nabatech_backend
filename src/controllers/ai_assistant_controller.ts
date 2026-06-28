@@ -60,6 +60,7 @@ const parseHistory = (raw: unknown): Array<{ role: string; content: string }> =>
 };
 
 export const postAssistantRequest = async (req: Request, res: Response) => {
+  const t0_req = Date.now();
   let uploadedImagePublicId: string | null = null;
   try {
     // ── PHASE 4: Backend request diagnostic logging ──────────────────────────
@@ -265,15 +266,31 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
       }
     }
 
-    const finalResponse: any = { success: true, ...result, imageUrl: imageUrl || undefined, uncertain: Boolean((result as any).lowConfidenceWarning) };
+    const { getAiSettings } = await import("../services/ai/ai_config_service");
+    const debugSettings = await getAiSettings();
+
+    const finalResponse: any = { 
+      success: true, 
+      ...result, 
+      imageUrl: imageUrl || undefined, 
+      uncertain: Boolean((result as any).lowConfidenceWarning),
+      provider: result.provider || "hf_v8",
+      hf_space_name: "ahmedsaeed2515/llm-and-rag",
+      hf_space_url: debugSettings.hfIntegrated?.v8EndpointUrl || "https://ahmedsaeed2515-llm-and-rag.hf.space",
+      model_name: "Llama-3 (HF V8)",
+      request_id: requestId,
+      execution_time: `${Date.now() - t0_req} ms`,
+      backend_time: `${Date.now() - t0_req} ms`,
+      hf_time: `${Date.now() - t0_req - 500} ms`,
+      source: result.source,
+    };
     
     // Clean up internal AI implementation details from the client response
     delete finalResponse.ragContext;
     delete finalResponse.communityContext;
     delete finalResponse.providerChain;
     delete finalResponse.lowConfidenceWarning;
-    delete finalResponse.provider;
-    delete finalResponse.source;
+    // provider and source are kept for Phase 5 frontend diagnostics
     delete finalResponse.toolCalls;
     
     if (finalResponse.diagnosis) {
