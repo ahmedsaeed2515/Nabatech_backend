@@ -184,7 +184,7 @@ const envDefaults = (): AiSettingsShape => ({
   },
   rag: {
     enabled: true,
-    endpointUrl: process.env.NEW_RAG_URL || process.env.CHAT_API_URL || process.env.RAG_ENDPOINT_URL || "",
+    endpointUrl: "https://ahmedsaeed2515-llm-and-rag.hf.space" || process.env.CHAT_API_URL || process.env.RAG_ENDPOINT_URL || "",
     timeoutMs: toNum(process.env.AI_RAG_TIMEOUT_MS, 20000),
     topK: toNum(process.env.AI_CHAT_TOP_K, 8),
   },
@@ -199,7 +199,7 @@ const envDefaults = (): AiSettingsShape => ({
   ragFallback: {
     enabled: (process.env.RAG_FALLBACK_ENABLED || "true").toLowerCase() === "true",
     endpointUrl: (
-      process.env.NEW_RAG_URL || process.env.CHAT_API_URL || process.env.RAG_ENDPOINT_URL || ""
+      "https://ahmedsaeed2515-llm-and-rag.hf.space" || process.env.CHAT_API_URL || process.env.RAG_ENDPOINT_URL || ""
     ).replace(/\/retrieve$/, "").replace(/\/$/, "") + "/ask",
     timeoutMs: toNum(process.env.RAG_FALLBACK_TIMEOUT_MS, 60000),
   },
@@ -230,7 +230,7 @@ const envDefaults = (): AiSettingsShape => ({
   aiModePriority: ["hf_v8", "hf_grok", "hf_v62", "rag_openai"],
   hfIntegrated: {
     grokEndpointUrl: process.env.HF_GROK_URL || "https://abdulrhmanhelmy-llm-grok.hf.space/query",
-    v8EndpointUrl:   formatHfUrl(process.env.NEW_RAG_URL) || "https://ahmedsaeed2515-llm-and-rag.hf.space/ask",
+    v8EndpointUrl:   "https://ahmedsaeed2515-llm-and-rag.hf.space/ask",
     v62EndpointUrl:  formatHfUrl(process.env.CHAT_API_URL) || "https://ahmedsaeed111-agrirag-pro.hf.space/ask",
     timeoutMs: 40_000,
     autoFallback: true,
