@@ -54,19 +54,22 @@ export type HfHistoryItem = {
 const buildRequestBody = (
   mode: HfMode,
   question: string,
-  history: HfHistoryItem[]
+  history: HfHistoryItem[],
+  language: string
 ): Record<string, unknown> => {
-  const trimmedHistory = history.slice(-6); // آخر 6 رسائل فقط
+  const trimmedHistory = history.slice(-5); // آخر 5 رسائل فقط لتجنب حجم زائد
   if (mode === "hf_grok") {
     return {
       question: question,
       history: trimmedHistory.map((h) => ({ role: h.role, content: h.content })),
+      language: language,
     };
   }
   // hf_v8 و hf_v62 كلاهما يستخدمان agrirag /ask format
   return {
     question: question,
     history: trimmedHistory.map((h) => ({ role: h.role, content: h.content })),
+    language: language,
   };
 };
 
@@ -103,10 +106,11 @@ const extractAnswer = (data: unknown, mode: HfMode): string | null => {
  */
 export const askHuggingFaceIntegrated = async (
   mode: HfMode,
-  endpointUrl: string,
+  endpointUrl: string | undefined,
   question: string,
   history: HfHistoryItem[] = [],
-  timeoutMs = 40_000
+  timeoutMs: number = 30000,
+  language: string = "ar"
 ): Promise<HfIntegratedResponse> => {
   const t0 = Date.now();
 
@@ -119,7 +123,7 @@ export const askHuggingFaceIntegrated = async (
     };
   }
 
-  const body = buildRequestBody(mode, question.trim(), history);
+  const body = buildRequestBody(mode, question.trim(), history, language);
 
   try {
     console.log(`[HF_INTEGRATED] mode=${mode} | url=${endpointUrl} | q="${question.slice(0, 60)}..."`);

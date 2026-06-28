@@ -194,7 +194,8 @@ export const orchestrateChat = async (args: {
       endpointMap[hfMode],
       args.question,
       sanitizedHistory as any,
-      hfTimeout
+      hfTimeout,
+      args.language
     );
 
     if (hfResult.success) {
