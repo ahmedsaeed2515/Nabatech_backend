@@ -294,9 +294,10 @@ export const postAssistantRequest = async (req: Request, res: Response) => {
     delete finalResponse.toolCalls;
     
     if (finalResponse.diagnosis) {
-       // Only expose the condition to the frontend
+       // Expose the condition and confidence to the frontend
        finalResponse.diagnosis = {
          prediction: finalResponse.diagnosis.prediction,
+         confidence: finalResponse.diagnosis.confidence,
        };
     }
 
